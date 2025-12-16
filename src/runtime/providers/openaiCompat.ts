@@ -1,0 +1,383 @@
+import { readSSEDataLines } from "./sse.js";
+import { OpenAIMessage, OpenAIToolSchema, Provider, ProviderStreamEvent, ToolCall } from "./types.js";
+
+function normalizeBaseUrl(baseUrl: string, appendV1: boolean): string {
+  const trimmed = baseUrl.replace(/\/+$/, "");
+  if (!appendV1) return trimmed;
+  if (trimmed.endsWith("/v1")) return trimmed;
+  return `${trimmed}/v1`;
+}
+
+function authHeader(apiKey: string): Record<string, string> {
+  // Most OpenAI-compatible gateways accept Authorization Bearer.
+  return { Authorization: `Bearer ${apiKey}` };
+}
+
+function safeJsonParse(raw: string): unknown {
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+function extractTextContent(content: unknown): string {
+  if (typeof content === "string") return content;
+  if (Array.isArray(content)) {
+    const parts: string[] = [];
+    for (const block of content) {
+      if (!block) continue;
+      if (typeof block === "string") {
+        parts.push(block);
+        continue;
+      }
+      if (typeof block === "object") {
+        const b: any = block;
+        if (typeof b.text === "string") parts.push(b.text);
+        else if (typeof b.content === "string") parts.push(b.content);
+      }
+    }
+    return parts.join("");
+  }
+  if (content && typeof content === "object") {
+    const c: any = content;
+    if (typeof c.text === "string") return c.text;
+  }
+  return "";
+}
+
+function toolCallsFromMessage(message: any): ToolCall[] {
+  const tc = Array.isArray(message?.tool_calls) ? message.tool_calls : [];
+  return tc
+    .filter((t: any) => t && (t.type === "function" || t.function))
+    .map((t: any, idx: number) => ({
+      id: String(t.id || `tool_${idx}`),
+      name: String(t.function?.name || t.name || ""),
+      arguments: safeJsonParse(String(t.function?.arguments || "")) ?? t.function?.arguments ?? {}
+    }));
+}
+
+function toolCallsFromDeltas(toolCallDeltas: any[]): ToolCall[] {
+  const byIndex = new Map<number, { id?: string; name?: string; args: string }>();
+  for (const d of toolCallDeltas) {
+    const idx = typeof d?.index === "number" ? d.index : 0;
+    const prev = byIndex.get(idx) ?? { args: "" };
+    const id = typeof d?.id === "string" ? d.id : prev.id;
+    const name = typeof d?.function?.name === "string" ? d.function.name : prev.name;
+    const argDelta = typeof d?.function?.arguments === "string" ? d.function.arguments : "";
+    byIndex.set(idx, { id, name, args: prev.args + argDelta });
+  }
+
+  const out: ToolCall[] = [];
+  for (const [idx, v] of [...byIndex.entries()].sort((a, b) => a[0] - b[0])) {
+    const id = v.id || `tool_${idx}`;
+    const name = v.name || "";
+    const parsedArgs = safeJsonParse(v.args) ?? v.args;
+    out.push({ id, name, arguments: parsedArgs });
+  }
+  return out;
+}
+
+function toolCallsFromAnthropicContentBlocks(blocks: any[]): ToolCall[] {
+  const out: ToolCall[] = [];
+  for (const b of blocks) {
+    if (!b || typeof b !== "object") continue;
+    if (b.type !== "tool_use") continue;
+    out.push({
+      id: String(b.id || `tool_${out.length}`),
+      name: String(b.name || ""),
+      arguments: b.input ?? {}
+    });
+  }
+  return out;
+}
+
+function extractFromJsonResponse(obj: any): { content: string; toolCalls: ToolCall[]; rawModel?: string } | null {
+  if (!obj || typeof obj !== "object") return null;
+
+  // OpenAI-style: { model, choices: [{ message: { content, tool_calls } }] }
+  const choice = obj.choices?.[0];
+  if (choice) {
+    const msg = choice.message ?? choice.delta ?? {};
+    const content = extractTextContent(msg?.content);
+    const toolCalls = toolCallsFromMessage(msg);
+    return { content, toolCalls, rawModel: typeof obj.model === "string" ? obj.model : undefined };
+  }
+
+  // Anthropic-style: { model, content: [{type:"text", text:"..."}, {type:"tool_use", ...}] }
+  if (Array.isArray(obj.content)) {
+    const content = extractTextContent(obj.content);
+    const toolCalls = toolCallsFromAnthropicContentBlocks(obj.content);
+    return { content, toolCalls, rawModel: typeof obj.model === "string" ? obj.model : undefined };
+  }
+
+  // Some gateways nest message under `message`.
+  if (obj.message && typeof obj.message === "object") {
+    const content = extractTextContent((obj.message as any).content);
+    const toolCalls = toolCallsFromMessage(obj.message);
+    return { content, toolCalls, rawModel: typeof obj.model === "string" ? obj.model : undefined };
+  }
+
+  return null;
+}
+
+export function openAICompatProvider(params: {
+  name: Provider["name"];
+  baseUrl: string;
+  apiKey: string;
+  extraHeaders?: Record<string, string>;
+  mapModel?: (requested: string) => string;
+  appendV1?: boolean;
+}): Provider {
+  const baseUrl = normalizeBaseUrl(params.baseUrl, params.appendV1 ?? true);
+  const extraHeaders = params.extraHeaders ?? {};
+  const mapModel = params.mapModel ?? ((m: string) => m);
+
+  return {
+    name: params.name,
+    async *streamChat({ model, messages, tools, temperature, maxTokens, signal }): AsyncGenerator<ProviderStreamEvent> {
+      const url = `${baseUrl}/chat/completions`;
+      const debug = ["1", "true", "yes", "on"].includes(String(process.env.FF_DEBUG_PROVIDER || "").trim().toLowerCase());
+      const debugLog = (...args: any[]) => {
+        if (!debug) return;
+        // eslint-disable-next-line no-console
+        console.error(`[ff-terminal][provider:${params.name}]`, ...args);
+      };
+
+      const payload = {
+        model: mapModel(model),
+        messages,
+        tools: tools?.length ? tools : undefined,
+        temperature,
+        max_tokens: maxTokens,
+        stream: true
+      };
+
+      const res = await fetch(url, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          ...authHeader(params.apiKey),
+          ...extraHeaders
+        },
+        body: JSON.stringify(payload),
+        signal
+      });
+
+      if (!res.ok) {
+        const text = await res.text().catch(() => "");
+        yield {
+          type: "error",
+          message: `Provider error (${res.status}) at ${url}: ${text || res.statusText}`
+        };
+        return;
+      }
+
+      if (!res.body) {
+        yield { type: "error", message: "Provider response had no body" };
+        return;
+      }
+
+      const contentType = res.headers.get("content-type") || "";
+      const isEventStream = contentType.toLowerCase().includes("text/event-stream");
+      debugLog("HTTP 200", { url, contentType });
+
+      // Some “OpenAI-compatible” gateways ignore `stream:true` and return a normal JSON response.
+      if (!isEventStream) {
+        const raw = await new Response(res.body).text().catch(() => "");
+        const obj: any = safeJsonParse(raw.trim());
+        const extracted = extractFromJsonResponse(obj);
+        if (!extracted) {
+          yield { type: "error", message: `Non-stream response was not recognized JSON at ${url}: ${raw.slice(0, 200)}` };
+          return;
+        }
+        if (extracted.content) yield { type: "content", delta: extracted.content };
+        yield { type: "final", ...extracted };
+        return;
+      }
+
+      // Peek the first chunk to detect gateways that claim SSE but actually return JSON.
+      const reader = res.body.getReader();
+      const first = await reader.read();
+      const firstChunk = first.value;
+      const decoder = new TextDecoder("utf-8");
+      const firstText = firstChunk ? decoder.decode(firstChunk, { stream: true }) : "";
+      const looksLikeJson = firstText.trimStart().startsWith("{");
+      debugLog("first chunk", { sample: firstText.slice(0, 200), looksLikeJson });
+
+      if (looksLikeJson) {
+        let raw = firstText;
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          if (value) raw += decoder.decode(value, { stream: true });
+        }
+        raw += decoder.decode();
+        raw = raw.trim();
+
+        const obj: any = safeJsonParse(raw);
+        const extracted = extractFromJsonResponse(obj);
+        if (!extracted) {
+          yield { type: "error", message: `Non-stream response was not recognized JSON at ${url}: ${raw.slice(0, 200)}` };
+          return;
+        }
+        if (extracted.content) yield { type: "content", delta: extracted.content };
+        yield { type: "final", ...extracted };
+        return;
+      }
+
+      const sseStream = new ReadableStream<Uint8Array>({
+        start(controller) {
+          if (firstChunk && firstChunk.length) controller.enqueue(firstChunk);
+          const pump = async () => {
+            while (true) {
+              const { value, done } = await reader.read();
+              if (done) {
+                controller.close();
+                return;
+              }
+              if (value) controller.enqueue(value);
+            }
+          };
+          void pump();
+        }
+      });
+
+      let content = "";
+      const toolCallDeltas: any[] = [];
+      let rawModel: string | undefined;
+      const anthropicToolByIndex = new Map<number, { id?: string; name?: string; args: string }>();
+
+      let sawAnyEvent = false;
+      for await (const data of readSSEDataLines(sseStream)) {
+        if (data === "[DONE]") break;
+        const obj: any = safeJsonParse(data);
+        if (!obj) continue;
+        sawAnyEvent = true;
+
+        rawModel = typeof obj.model === "string" ? obj.model : rawModel;
+
+        // Some gateways stream errors inside the SSE channel.
+        if (obj.error) {
+          const msg =
+            typeof obj.error?.message === "string"
+              ? obj.error.message
+              : typeof obj.error === "string"
+                ? obj.error
+                : JSON.stringify(obj.error);
+          yield { type: "error", message: `Provider error (stream) at ${url}: ${msg}` };
+          continue;
+        }
+
+        // OpenAI-style SSE: { choices: [{ delta: { content, tool_calls }, finish_reason }] }
+        const choice = obj.choices?.[0];
+        const delta = choice?.delta;
+        const finishReason = choice?.finish_reason;
+
+        const deltaContentText = extractTextContent(delta?.content);
+        if (deltaContentText) {
+          content += deltaContentText;
+          yield { type: "content", delta: deltaContentText };
+        } else {
+          // Some gateways emit full message objects in SSE chunks.
+          const full = extractTextContent(choice?.message?.content);
+          if (full) {
+            if (full.startsWith(content)) {
+              const d = full.slice(content.length);
+              if (d) {
+                content = full;
+                yield { type: "content", delta: d };
+              }
+            } else if (full !== content) {
+              content = full;
+              yield { type: "content", delta: full };
+            }
+          }
+        }
+
+        const reasoningDelta =
+          typeof delta?.reasoning === "string"
+            ? delta.reasoning
+            : typeof delta?.thinking === "string"
+              ? delta.thinking
+              : "";
+        if (reasoningDelta) yield { type: "thinking", delta: reasoningDelta };
+
+        const tc = Array.isArray(delta?.tool_calls) ? delta.tool_calls : null;
+        if (tc && tc.length) toolCallDeltas.push(...tc);
+
+        // Anthropic-style SSE (some “anthropic gateways” stream these events even for chat-completions).
+        const t = typeof obj.type === "string" ? obj.type : "";
+        if (t === "error" && obj.message) {
+          yield { type: "error", message: `Provider error (stream) at ${url}: ${String(obj.message)}` };
+        }
+        if (t === "content_block_delta") {
+          const text = typeof obj.delta?.text === "string" ? obj.delta.text : "";
+          if (text) {
+            content += text;
+            yield { type: "content", delta: text };
+          }
+
+          // Tool input JSON deltas.
+          const partial = typeof obj.delta?.partial_json === "string" ? obj.delta.partial_json : "";
+          if (partial) {
+            const idx = typeof obj.index === "number" ? obj.index : 0;
+            const prev = anthropicToolByIndex.get(idx) ?? { args: "" };
+            anthropicToolByIndex.set(idx, { ...prev, args: prev.args + partial });
+          }
+        }
+
+        if (t === "content_block_start") {
+          const block = obj.content_block;
+          if (block?.type === "text" && typeof block.text === "string" && block.text) {
+            content += block.text;
+            yield { type: "content", delta: block.text };
+          }
+          if (block?.type === "tool_use") {
+            const idx = typeof obj.index === "number" ? obj.index : 0;
+            const id = typeof block.id === "string" ? block.id : undefined;
+            const name = typeof block.name === "string" ? block.name : undefined;
+            const input = block.input;
+            const prev = anthropicToolByIndex.get(idx) ?? { args: "" };
+            if (input && typeof input === "object") {
+              anthropicToolByIndex.set(idx, { id: id ?? prev.id, name: name ?? prev.name, args: JSON.stringify(input) });
+            } else {
+              anthropicToolByIndex.set(idx, { id: id ?? prev.id, name: name ?? prev.name, args: prev.args });
+            }
+          }
+        }
+
+        if (t === "message_stop") break;
+
+        if (finishReason === "tool_calls") {
+          // Continue consuming until DONE, then emit final with tool calls.
+        }
+      }
+
+      const toolCalls = [
+        ...toolCallsFromDeltas(toolCallDeltas),
+        ...(() => {
+          const out: ToolCall[] = [];
+          for (const [idx, v] of [...anthropicToolByIndex.entries()].sort((a, b) => a[0] - b[0])) {
+            const id = v.id || `tool_${idx}`;
+            const name = v.name || "";
+            const parsedArgs = safeJsonParse(v.args) ?? v.args;
+            if (name) out.push({ id, name, arguments: parsedArgs });
+          }
+          return out;
+        })()
+      ];
+
+      if (!sawAnyEvent && !content && toolCalls.length === 0) {
+        yield { type: "error", message: `No streaming events received from ${url} (content-type: ${contentType || "unknown"})` };
+      }
+      if (sawAnyEvent && !content && toolCalls.length === 0) {
+        yield {
+          type: "error",
+          message: `Empty response from ${url} (no content/tool calls). Try a different base URL or set FF_DEBUG_PROVIDER=1.`
+        };
+      }
+      yield { type: "final", content, toolCalls, rawModel };
+    }
+  };
+}

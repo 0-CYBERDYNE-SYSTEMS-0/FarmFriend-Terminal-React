@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>FF-Terminal UI Styleguide (Ink/ANSI)</title>
+    <style>
+      :root {
+        --bg: #0b0f14;
+        --panel: #0f1620;
+        --text: #e6edf3;
+        --muted: #8b949e;
+        --border: #223042;
+
+        /* Approximate ANSI 16-color palette (theme-dependent in real terminals). */
+        --ansi-black: #0b0f14;
+        --ansi-red: #ff5c57;
+        --ansi-green: #5af78e;
+        --ansi-yellow: #f3f99d;
+        --ansi-blue: #57c7ff;
+        --ansi-magenta: #ff6ac1;
+        --ansi-cyan: #9aedfe;
+        --ansi-white: #e6edf3;
+
+        --ansi-bright-black: #8b949e; /* "gray"/"blackBright" */
+        --ansi-bright-red: #ff8a84;
+        --ansi-bright-green: #7ee787;
+        --ansi-bright-yellow: #f2cc60;
+        --ansi-bright-blue: #79c0ff;
+        --ansi-bright-magenta: #d2a8ff;
+        --ansi-bright-cyan: #a5d6ff;
+        --ansi-bright-white: #ffffff;
+      }
+
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font: 14px/1.45 ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji",
+          "Segoe UI Emoji";
+      }
+      main { max-width: 980px; margin: 32px auto; padding: 0 16px 48px; }
+      h1 { font-size: 22px; margin: 0 0 8px; }
+      p { margin: 8px 0; color: var(--muted); }
+      code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+      .grid { display: grid; grid-template-columns: 1fr; gap: 16px; }
+      @media (min-width: 900px) { .grid { grid-template-columns: 1fr 1fr; } }
+      .card {
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 14px;
+      }
+      table { width: 100%; border-collapse: collapse; }
+      th, td { padding: 8px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+      th { text-align: left; font-weight: 600; color: var(--text); }
+      td { color: var(--muted); }
+      .swatch { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 8px; vertical-align: -1px; border: 1px solid rgba(255,255,255,.1); }
+      .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+
+      .term {
+        background: #0a0f16;
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 12px;
+        overflow: auto;
+        white-space: pre-wrap;
+      }
+      .line { display: block; }
+
+      /* Semantic role → CSS color used in this preview. In Ink these map to ANSI names. */
+      .c-user { color: var(--ansi-cyan); }
+      .c-assistant { color: var(--ansi-green); }
+      .c-thinking { color: var(--ansi-magenta); }
+      .c-tool { color: var(--ansi-yellow); }
+      .c-error { color: var(--ansi-red); }
+      .c-system { color: var(--ansi-bright-black); }
+      .c-spinner { color: var(--ansi-bright-cyan); font-weight: 700; }
+      .c-title { color: var(--ansi-bright-cyan); font-weight: 800; }
+    </style>
+  </head>
+
+  <body>
+    <main>
+      <h1>FF-Terminal UI Color + Hierarchy Guide (Ink/ANSI)</h1>
+      <p>
+        This is a “semantic” styleguide for the Ink CLI. Ink uses ANSI color names (the terminal’s theme defines the actual RGB),
+        so we optimize for reliable <span class="mono">contrast hierarchy</span> rather than fixed hex values.
+      </p>
+      <p>
+        Reality check: across iTerm2/Terminal.app/Windows Terminal/themes, <span class="mono">cyan</span> may not match these swatches
+        exactly, but “bright vs normal” typically preserves relative prominence. Keep the palette small (ANSI 16 colors) to stay stable.
+      </p>
+
+      <div class="grid">
+        <section class="card">
+          <h2 style="margin: 0 0 8px;">Semantic Roles (what Ink uses)</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>Role</th>
+                <th>Ink Color Token</th>
+                <th>Notes</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><span class="swatch" style="background: var(--ansi-cyan);"></span>User input</td>
+                <td class="mono">cyan</td>
+                <td>Always user-authored; highest “non-error” emphasis.</td>
+              </tr>
+              <tr>
+                <td><span class="swatch" style="background: var(--ansi-green);"></span>Assistant response</td>
+                <td class="mono">green</td>
+                <td>Primary content output; readable and calm.</td>
+              </tr>
+              <tr>
+                <td><span class="swatch" style="background: var(--ansi-magenta);"></span>Thinking / scratch</td>
+                <td class="mono">magenta</td>
+                <td>Optional visibility; should not outshine assistant output.</td>
+              </tr>
+              <tr>
+                <td><span class="swatch" style="background: var(--ansi-yellow);"></span>Tool calls</td>
+                <td class="mono">yellow</td>
+                <td>“Activity” emphasis; short lines. Prefer symbols like <span class="mono">▶</span>/<span class="mono">■</span>.</td>
+              </tr>
+              <tr>
+                <td><span class="swatch" style="background: var(--ansi-red);"></span>Errors</td>
+                <td class="mono">red</td>
+                <td>Reserved for failures only. Don’t use for warnings.</td>
+              </tr>
+              <tr>
+                <td><span class="swatch" style="background: var(--ansi-bright-black);"></span>System / meta</td>
+                <td class="mono">gray</td>
+                <td>Low-priority status (“connected”, separators, hints).</td>
+              </tr>
+              <tr>
+                <td><span class="swatch" style="background: var(--ansi-bright-cyan);"></span>Spinner</td>
+                <td class="mono">cyanBright</td>
+                <td>Single glyph with brackets (e.g., <span class="mono">[|]</span>) to stay visible.</td>
+              </tr>
+            </tbody>
+          </table>
+        </section>
+
+        <section class="card">
+          <h2 style="margin: 0 0 8px;">Hierarchy Rules (portable across themes)</h2>
+          <p>
+            Use color to communicate <span class="mono">meaning</span>, and brightness to communicate <span class="mono">priority</span>.
+            If a theme is “weird”, the user can still parse the UI by role.
+          </p>
+          <ul style="margin: 8px 0 0; color: var(--muted); padding-left: 18px;">
+            <li><span class="mono">bright*</span> only for short, high-salience UI (spinner, banners), not for paragraphs.</li>
+            <li>Prefer <span class="mono">gray</span> (not dim) for meta so it stays readable on low-contrast themes.</li>
+            <li>Reserve <span class="mono">red</span> for real errors; avoid “red spam”.</li>
+            <li>Tool output should be mostly uncolored; color the tool boundary lines only.</li>
+          </ul>
+          <p style="margin-top: 10px;">
+            Source mapping currently lives in <span class="mono">ff-terminal-ts/src/cli/app.tsx</span> (Transcript + Spinner).
+          </p>
+        </section>
+      </div>
+
+      <section class="card" style="margin-top: 16px;">
+        <h2 style="margin: 0 0 8px;">Preview (simulated transcript)</h2>
+        <div class="term mono">
+          <span class="line c-system">connected (daemon 0.0.0)</span>
+          <span class="line c-title">╔═══════════════════════════════════════╗</span>
+          <span class="line c-title">║           FF-Terminal v3.0            ║</span>
+          <span class="line c-title">║     Ultra-Autonomous AI Terminal      ║</span>
+          <span class="line c-title">╚═══════════════════════════════════════╝</span>
+          <span class="line"> </span>
+          <span class="line c-user">› Summarize today’s headlines.</span>
+          <span class="line c-tool">▶ tavily_search</span>
+          <span class="line c-tool">■ tavily_search</span>
+          <span class="line c-assistant">Here are the top headlines…</span>
+          <span class="line c-thinking">thinking: next, verify sources</span>
+          <span class="line c-error">error: Provider error (401): missing key</span>
+          <span class="line"> </span>
+          <span class="line"><span class="c-spinner">[|]</span><span class="c-system"> Enter to send • Ctrl+C to cancel</span></span>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>
+
