@@ -1,0 +1,1379 @@
+[
+  {
+    "type": "function",
+    "function": {
+      "name": "analyze_data",
+      "description": "Analyze data using natural language",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "description": {
+            "type": "string",
+            "description": "Natural language description of the analysis to perform"
+          },
+          "data_source": {
+            "type": "string",
+            "description": "Path to data file or source description"
+          }
+        },
+        "required": [
+          "description"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "analyze_image_gemini",
+      "description": "Analyze images using Gemini 2.5 Flash Image vision capabilities. State-of-the-art OCR, object detection, scene understanding, visual Q&A, document analysis, and chart/graph interpretation.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "image_path": {
+            "type": "string",
+            "description": "Path to the image file to analyze. Supports PNG, JPG, JPEG, GIF, and WebP formats."
+          },
+          "analysis_type": {
+            "type": "string",
+            "description": "Type of analysis: 'general' (scene description), 'ocr' (text extraction), 'objects' (object detection), 'documents' (document analysis), 'qa' (visual question answering), or 'detailed' (comprehensive analysis)"
+          },
+          "question": {
+            "type": "string",
+            "description": "Specific question about the image (for 'qa' analysis type). What do you want to know about this image?"
+          },
+          "focus_areas": {
+            "type": "string",
+            "description": "Specific areas or objects to focus on in the analysis. Comma-separated list (e.g., 'text, charts, people, vehicles')"
+          }
+        },
+        "required": [
+          "image_path"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "analyze_video_gemini",
+      "description": "Analyze videos using Gemini 2.5 Flash with File Upload API. Supports local video files up to 2GB, YouTube URLs, and comprehensive video understanding including scene analysis, object detection, content summarization, and visual Q&A.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "video_source": {
+            "type": "string",
+            "description": "Path to local video file or YouTube URL to analyze"
+          },
+          "prompt": {
+            "type": "string",
+            "description": "Analysis prompt or question about the video (e.g., 'Summarize this video', 'What objects are visible?', 'Create a quiz based on this content')"
+          },
+          "wait_for_processing": {
+            "type": "boolean",
+            "description": "Whether to wait for video processing to complete (default: True)"
+          }
+        },
+        "required": [
+          "video_source"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "ask_oracle",
+      "description": "Escalate only when normal reasoning is exhausted or when a user explicitly requests it. Ask Oracle summons DeepSeek V3.2 via OpenRouter for ultra-hard problems, intricate code debugging, or Oracle-level insight, returning a deeply reasoned answer plus optional reasoning traces.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "question": {
+            "type": "string",
+            "description": "Direct question or task for the Oracle to analyze."
+          },
+          "context": {
+            "type": "string",
+            "description": "Summaries plus any explicit data the Oracle must know; avoid raw logs to control tokens."
+          },
+          "temperature": {
+            "type": "number",
+            "description": "Controls creativity (0.0-1.5). Lower stays precise, higher explores more ideas."
+          },
+          "max_output_tokens": {
+            "type": "integer",
+            "description": "Upper bound for Oracle's answer length (max 4000)."
+          },
+          "reasoning_effort": {
+            "type": "string",
+            "description": "Reasoning budget hint (auto/minimal/low/medium/high). Higher = more cost + richer traces."
+          },
+          "include_reasoning": {
+            "type": "boolean",
+            "description": "Return DeepSeek's reasoning traces when available."
+          }
+        },
+        "required": [
+          "question"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "ast_grep",
+      "description": "Semantic code search using AST patterns - finds code structure, not just text",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "pattern": {
+            "type": "string",
+            "description": "Code-like pattern to match (e.g. 'function $NAME($ARGS) { $BODY }')"
+          },
+          "language": {
+            "type": "string",
+            "description": "Programming language (python, javascript, typescript, rust, go, java, etc.)"
+          },
+          "path": {
+            "type": "string",
+            "description": "File or directory to search in (defaults to current directory)"
+          },
+          "mode": {
+            "type": "string",
+            "description": "Operation mode: 'search' (default), 'count', or 'rewrite'"
+          },
+          "replacement": {
+            "type": "string",
+            "description": "Replacement pattern for rewrite mode (e.g. 'async function $NAME($ARGS) { $BODY }')"
+          },
+          "include_context": {
+            "type": "boolean",
+            "description": "Include surrounding code context in results"
+          }
+        },
+        "required": [
+          "pattern",
+          "language"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "browse_web",
+      "description": "Browser automation for INTERACTIVE web tasks requiring clicks, form filling, navigation, login, purchases, or complex user interactions. NOT for simple information retrieval, news, or data gathering - use Tavily or Perplexity search tools instead for faster results.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "objective": {
+            "type": "string",
+            "description": "Natural language description of what to accomplish on the web"
+          }
+        },
+        "required": [
+          "objective"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "completion_validation",
+      "description": "Monitor and control the autonomous completion validation system that prevents agents from declaring tasks complete without fulfilling their commitments",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "description": "Action to perform: 'status', 'enable', 'disable', 'stats', 'sessions', 'force_complete', 'cleanup', 'feedback_stats'"
+          },
+          "agent_id": {
+            "type": "string",
+            "description": "Agent ID for agent-specific actions (optional)"
+          },
+          "session_id": {
+            "type": "string",
+            "description": "Validation session ID for session-specific actions (optional)"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "edit_file",
+      "description": "Edit files using exact string replacement - must use Read tool first",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "file_path": {
+            "type": "string",
+            "description": "Absolute path to the file to edit (must be absolute, not relative)"
+          },
+          "old_string": {
+            "type": "string",
+            "description": "Exact string to find and replace (must match file contents exactly)"
+          },
+          "new_string": {
+            "type": "string",
+            "description": "Replacement string (must be different from old_string)"
+          },
+          "replace_all": {
+            "type": "boolean",
+            "description": "Replace all occurrences of old_string (default: false)"
+          }
+        },
+        "required": [
+          "file_path",
+          "old_string",
+          "new_string"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "edit_image_gemini",
+      "description": "Edit existing images using Gemini 2.5 Flash Image. State-of-the-art targeted transformations, background blurring, stain removal, pose alteration, and colorization with natural language instructions.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "input_image_path": {
+            "type": "string",
+            "description": "Path to the existing image file to edit. Supports PNG, JPG, JPEG, GIF, and WebP formats."
+          },
+          "edit_instructions": {
+            "type": "string",
+            "description": "Natural language instructions for how to modify the image. Be specific about what changes you want (e.g., 'make the sky blue', 'add clouds', 'change the person's shirt to red')."
+          },
+          "context": {
+            "type": "string",
+            "description": "Additional context about the image or editing goals. This helps maintain consistency across edits."
+          },
+          "filename": {
+            "type": "string",
+            "description": "Optional custom filename for the edited image (without extension). If not provided, will auto-generate based on original filename."
+          }
+        },
+        "required": [
+          "input_image_path",
+          "edit_instructions"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "generate_image_gemini",
+      "description": "Generate images using Google's Gemini 2.5 Flash Image model (nano-banana). State-of-the-art image generation with character consistency, multi-image fusion, and enhanced world knowledge.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "description": "Creative description of the image to generate. Be as detailed and specific as you want - Gemini understands complex, conversational prompts and can incorporate world knowledge."
+          },
+          "additional_details": {
+            "type": "string",
+            "description": "Optional additional context, style preferences, or technical specifications. Will be combined with the main prompt."
+          },
+          "filename": {
+            "type": "string",
+            "description": "Optional custom filename (without extension). If not provided, will auto-generate based on prompt"
+          }
+        },
+        "required": [
+          "prompt"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "generate_image_openai",
+      "description": "Generate high-quality images using OpenAI's new GPT-image-1 model (not DALL-E). Supports various styles including coloring book pages, artistic images, and professional graphics. Cost-optimized for medium quality by default.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "description": "Detailed description of the image to generate. Be specific about style, composition, colors, and mood."
+          },
+          "style": {
+            "type": "string",
+            "description": "Style preset: 'realistic', 'artistic', 'coloring_book', 'cartoon', 'abstract', 'professional', or 'custom'"
+          },
+          "size": {
+            "type": "string",
+            "description": "Image size: '256x256', '512x512', '1024x1024', '1792x1024', '1024x1792'. Default is cost-effective 1024x1024"
+          },
+          "quality": {
+            "type": "string",
+            "description": "Image quality: 'low', 'medium', 'high', or 'auto'. Medium recommended for cost efficiency"
+          },
+          "moderation": {
+            "type": "string",
+            "description": "Moderation sensitivity: 'auto' (default, standard filtering) or 'low' (less restrictive filtering)"
+          },
+          "filename": {
+            "type": "string",
+            "description": "Optional custom filename (without extension). If not provided, will auto-generate based on prompt"
+          }
+        },
+        "required": [
+          "prompt"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "glob",
+      "description": "Fast file pattern matching with glob patterns",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "pattern": {
+            "type": "string",
+            "description": "Glob pattern to match files against (e.g. '**/*.py', 'src/**/*.js')"
+          },
+          "path": {
+            "type": "string",
+            "description": "Directory to search in (defaults to current directory)"
+          },
+          "sort_by_mtime": {
+            "type": "boolean",
+            "description": "Sort results by modification time (newest first)"
+          },
+          "include_dirs": {
+            "type": "boolean",
+            "description": "Include directories in results"
+          },
+          "head_limit": {
+            "type": "integer",
+            "description": "Limit output to first N files"
+          },
+          "show_details": {
+            "type": "boolean",
+            "description": "Show file details (size, modification time)"
+          }
+        },
+        "required": [
+          "pattern"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "grep",
+      "description": "Search files with regex patterns and advanced filtering",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "pattern": {
+            "type": "string",
+            "description": "Regular expression pattern to search for"
+          },
+          "path": {
+            "type": "string",
+            "description": "File or directory to search in (defaults to current directory)"
+          },
+          "glob": {
+            "type": "string",
+            "description": "Glob pattern to filter files (e.g. '*.py', '*.{js,ts}')"
+          },
+          "type": {
+            "type": "string",
+            "description": "File type to search (js, py, rust, go, java, etc.)"
+          },
+          "output_mode": {
+            "type": "string",
+            "description": "Output mode: 'content' (show lines), 'files_with_matches' (file paths), 'count' (match counts)"
+          },
+          "case_insensitive": {
+            "type": "boolean",
+            "description": "Case insensitive search"
+          },
+          "context_before": {
+            "type": "integer",
+            "description": "Lines to show before each match"
+          },
+          "context_after": {
+            "type": "integer",
+            "description": "Lines to show after each match"
+          },
+          "show_line_numbers": {
+            "type": "boolean",
+            "description": "Show line numbers in output"
+          },
+          "head_limit": {
+            "type": "integer",
+            "description": "Limit output to first N entries"
+          },
+          "multiline": {
+            "type": "boolean",
+            "description": "Enable multiline mode (pattern can span lines)"
+          }
+        },
+        "required": [
+          "pattern"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "list_templates",
+      "description": "List all available project templates with descriptions.",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "macos_control",
+      "description": "Control macOS applications and system functions using native automation. Can open apps, send keystrokes, click buttons, run AppleScript templates, and automate complex workflows with AppleScript skill integration.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "description": "Action to perform: 'open_app', 'send_keys', 'click', 'spotlight_search', 'applescript', 'template', 'workflow', or 'simple_task'"
+          },
+          "target": {
+            "type": "string",
+            "description": "Target for the action (app name, text to type, coordinates, search term, AppleScript code, or task description)"
+          },
+          "wait_time": {
+            "type": "number",
+            "description": "Time to wait after action in seconds (default: 1.0)"
+          }
+        },
+        "required": [
+          "action",
+          "target"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "manage_task",
+      "description": "Manage tasks with simple operations",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "description": "Action: create, update, complete, list"
+          },
+          "task_description": {
+            "type": "string",
+            "description": "Task description for create/update actions"
+          },
+          "task_id": {
+            "type": "string",
+            "description": "Task ID for update/complete actions"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "multi_edit_file",
+      "description": "Edit files with multiple exact string replacements - must use Read tool first",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "file_path": {
+            "type": "string",
+            "description": "Absolute path to the file to edit (must be absolute, not relative)"
+          },
+          "edits": {
+            "type": "array",
+            "description": "List of edit operations, each with old_string, new_string, and optional replace_all",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "file_path",
+          "edits"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "notebook_edit",
+      "description": "Edit Jupyter notebook cells - insert, delete, or modify cells by ID or index",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "notebook_path": {
+            "type": "string",
+            "description": "Absolute path to the Jupyter notebook file (.ipynb)"
+          },
+          "new_source": {
+            "type": "string",
+            "description": "New source content for the cell"
+          },
+          "cell_id": {
+            "type": "string",
+            "description": "ID of the cell to edit (when inserting, new cell goes after this ID)"
+          },
+          "cell_type": {
+            "type": "string",
+            "description": "Type of cell: 'code' or 'markdown'"
+          },
+          "edit_mode": {
+            "type": "string",
+            "description": "Edit mode: 'replace' (default), 'insert', or 'delete'"
+          }
+        },
+        "required": [
+          "notebook_path",
+          "new_source"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "perplexity_search",
+      "description": "AI-powered search with intelligent, curated answers. Best for research, complex questions, analysis, and when you need synthesized information rather than raw search results.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Research question or complex query requiring AI analysis"
+          },
+          "search_type": {
+            "type": "string",
+            "description": "Type: 'research' for detailed analysis, 'quick' for fast answers"
+          }
+        },
+        "required": [
+          "query"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "project_template",
+      "description": "Create a new project from predefined templates.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "template_type": {
+            "type": "string",
+            "description": "Type of template to use (web-app, research, automation)."
+          },
+          "project_name": {
+            "type": "string",
+            "description": "Name for the new project (kebab-case recommended)."
+          },
+          "workspace_path": {
+            "type": "string",
+            "description": "Custom workspace path (optional, uses default if not provided)."
+          }
+        },
+        "required": [
+          "template_type",
+          "project_name"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "quick_update",
+      "description": "Send brief progress updates to keep users informed during long operations",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string",
+            "description": "Brief 1-2 sentence status update (e.g., 'Analyzing files... 50% complete')"
+          },
+          "update_type": {
+            "type": "string",
+            "description": "Type of update: 'progress', 'status', 'milestone'"
+          },
+          "duration": {
+            "type": "number",
+            "description": "How long to display the update in seconds (default: 2.0)"
+          }
+        },
+        "required": [
+          "message"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "read_file",
+      "description": "Read file contents",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "File or directory path"
+          },
+          "lines": {
+            "type": "string",
+            "description": "Line range like '10-20' or 'first 50' or 'last 10'"
+          }
+        },
+        "required": [
+          "path"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "run_command",
+      "description": "Execute shell commands and code",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "command": {
+            "type": "string",
+            "description": "Shell command or code to execute"
+          },
+          "skill_directory": {
+            "type": "string",
+            "description": "Skill directory path for skill-specific .env file loading"
+          }
+        },
+        "required": [
+          "command"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "schedule_task",
+      "description": "Schedule recurring or one-time FFT tasks. Agent provides structured timing parameters (schedule_type, hour, minute, etc.) calculated from natural language. Supports one-time execution, daily, weekly, and interval schedules.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "description": "Action: 'add' (create task), 'list' (show all), 'remove' (delete), 'enable' (activate), 'disable' (pause), 'status' (check)"
+          },
+          "name": {
+            "type": "string",
+            "description": "Task identifier"
+          },
+          "prompt": {
+            "type": "string",
+            "description": "Task/prompt to execute"
+          },
+          "workflow": {
+            "type": "string",
+            "description": "Workflow name to replay instead of prompt"
+          },
+          "schedule_type": {
+            "type": "string",
+            "description": "'one_time', 'daily', 'weekly', or 'interval'"
+          },
+          "hour": {
+            "type": "integer",
+            "description": "Hour (0-23) for daily/weekly schedules"
+          },
+          "minute": {
+            "type": "integer",
+            "description": "Minute (0-59) for daily/weekly schedules"
+          },
+          "weekdays": {
+            "type": "array",
+            "description": "Days to run on: [1,2,3,4,5] for Mon-Fri (0=Sun, 6=Sat)",
+            "items": {
+              "type": "string"
+            }
+          },
+          "interval_seconds": {
+            "type": "integer",
+            "description": "Seconds between executions (must be >= 60)"
+          },
+          "execution_timestamp": {
+            "type": "integer",
+            "description": "Unix timestamp for one_time execution"
+          },
+          "time_string": {
+            "type": "string",
+            "description": "Natural language time like '21:12 tonight', 'in 5 minutes', '6:35 AM daily', 'weekdays at 9:00'. Parsed automatically into schedule parameters."
+          },
+          "auto_remove": {
+            "type": "boolean",
+            "description": "Auto-delete after one_time completes (default: True)"
+          },
+          "dry_run": {
+            "type": "boolean",
+            "description": "Preview without actually scheduling (default: False)"
+          },
+          "open_result": {
+            "type": "boolean",
+            "description": "Auto-open generated files (default: True)"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "search_code",
+      "description": "Search code using natural language",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Natural language search query"
+          },
+          "path": {
+            "type": "string",
+            "description": "Directory or file path to search (defaults to current directory)"
+          }
+        },
+        "required": [
+          "query"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "semantic_search",
+      "description": "Semantic CODE search using natural language and local embeddings (osgrep).\nBEST FOR: Codebase concept search in git repositories - 'where is authentication handled?', 'find rate limiting logic', 'how do we validate tools?'.\nNOT FOR: Project discovery in ff-terminal-workspace (use glob/grep instead - workspace is not a git repo).\nFinds meaning in CODE, not just keywords. Powered by tree-sitter code parsing.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Natural language query describing what you're looking for (e.g., 'where do we handle rate limiting?')"
+          },
+          "path": {
+            "type": "string",
+            "description": "Directory to search in (defaults to current directory)"
+          },
+          "max_results": {
+            "type": "integer",
+            "description": "Maximum number of results to return"
+          },
+          "show_content": {
+            "type": "boolean",
+            "description": "Show full code chunk content instead of snippets"
+          }
+        },
+        "required": [
+          "query"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "session_summary",
+      "description": "Create or update a session summary for cross-session continuity. Use at the end of work sessions to leave context for future sessions. Writes to ff-terminal-workspace/session_summary.md with accomplishments, decisions made, and recommended next steps.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "description": "Action to perform: 'write' (create/update summary), 'read' (get current summary), 'append' (add to existing)"
+          },
+          "accomplishments": {
+            "type": "string",
+            "description": "What was accomplished this session (for 'write' or 'append' actions)"
+          },
+          "decisions": {
+            "type": "string",
+            "description": "Key decisions made and their rationale (for 'write' or 'append' actions)"
+          },
+          "next_steps": {
+            "type": "string",
+            "description": "Recommended next steps for the following session (for 'write' or 'append' actions)"
+          },
+          "context": {
+            "type": "string",
+            "description": "Additional context or notes for the next session (for 'write' or 'append' actions)"
+          },
+          "project_name": {
+            "type": "string",
+            "description": "Optional project name to associate this summary with"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "skill_apply",
+      "description": "Write a drafted skill to disk and refresh the registry.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "draft_id": {
+            "type": "string",
+            "description": "The `draft_id` returned by skill_draft (typically the slug)."
+          },
+          "force_overwrite": {
+            "type": "boolean",
+            "description": "Set true to replace an existing skill folder."
+          },
+          "cleanup_draft": {
+            "type": "boolean",
+            "description": "Delete the draft after applying the skill."
+          }
+        },
+        "required": [
+          "draft_id"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "skill_documentation",
+      "description": "Generate documentation for existing skills or skill drafts.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "skill_slug": {
+            "type": "string",
+            "description": "Skill slug to generate documentation for (leave empty for all skills)."
+          },
+          "format": {
+            "type": "string",
+            "description": "Output format: markdown, html, or json."
+          },
+          "output_file": {
+            "type": "string",
+            "description": "Save documentation to file (optional)."
+          },
+          "include_examples": {
+            "type": "boolean",
+            "description": "Include usage examples in documentation."
+          }
+        },
+        "required": []
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "skill_draft",
+      "description": "Draft a skill manifest and instructions before writing files.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "skill_slug": {
+            "type": "string",
+            "description": "Unique slug for the skill (snake_case preferred)."
+          },
+          "name": {
+            "type": "string",
+            "description": "Human-friendly name for the skill. Defaults to a title-cased slug."
+          },
+          "summary": {
+            "type": "string",
+            "description": "Short summary that appears in skill hints."
+          },
+          "description": {
+            "type": "string",
+            "description": "Long-form description for the manifest. Defaults to the summary."
+          },
+          "instructions": {
+            "type": "string",
+            "description": "Complete instructions that should populate instructions.md."
+          },
+          "triggers": {
+            "type": "array",
+            "description": "Optional keywords for relevance scoring.",
+            "items": {
+              "type": "string"
+            }
+          },
+          "tags": {
+            "type": "array",
+            "description": "Optional tags for filtering/search.",
+            "items": {
+              "type": "string"
+            }
+          },
+          "assets": {
+            "type": "object",
+            "description": "Optional asset files mapped from relative path to file content."
+          },
+          "recommended_tools": {
+            "type": "array",
+            "description": "Tool slugs to suggest after the skill loads.",
+            "items": {
+              "type": "string"
+            }
+          },
+          "author": {
+            "type": "string",
+            "description": "Optional author metadata for the manifest."
+          },
+          "version": {
+            "type": "string",
+            "description": "Optional semantic version for the skill (default 0.1.0)."
+          }
+        },
+        "required": [
+          "skill_slug",
+          "summary",
+          "instructions"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "skill_import",
+      "description": "Import a skill from URL, Git repository, or local file.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "source": {
+            "type": "string",
+            "description": "Skill source: URL, Git repo (https://github.com/user/repo), or local file path."
+          },
+          "skill_name": {
+            "type": "string",
+            "description": "Name for imported skill (optional, auto-detected if not provided)."
+          },
+          "force_overwrite": {
+            "type": "boolean",
+            "description": "Replace existing skill if it exists."
+          }
+        },
+        "required": [
+          "source"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "skill_loader",
+      "description": "Load a skill's instructions and optional assets when a task needs them.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "skill_slug": {
+            "type": "string",
+            "description": "The slug from the skill manifest (e.g., 'rapid_research')."
+          },
+          "include_assets": {
+            "type": "boolean",
+            "description": "Set true to include linked templates/assets in the response."
+          }
+        },
+        "required": [
+          "skill_slug"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "skill_sequencer",
+      "description": "Execute multi-skill workflows with intelligent sequencing and compatibility checking.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "task": {
+            "type": "string",
+            "description": "The complex task requiring multiple skills."
+          },
+          "sequence_type": {
+            "type": "string",
+            "description": "Preferred execution approach: 'sequential', 'parallel', 'hybrid', or 'auto'"
+          },
+          "max_skills": {
+            "type": "integer",
+            "description": "Maximum number of skills to include in sequence."
+          },
+          "force_primary": {
+            "type": "string",
+            "description": "Force a specific skill as primary in the sequence."
+          }
+        },
+        "required": [
+          "task"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "smart_cleanup",
+      "description": "Clean workspace with intelligent rules (age, size, file type).",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "dry_run": {
+            "type": "boolean",
+            "description": "Show what would be deleted without actually deleting."
+          },
+          "age_days": {
+            "type": "integer",
+            "description": "Delete files older than this many days (0 to ignore age)."
+          },
+          "max_file_size_mb": {
+            "type": "integer",
+            "description": "Delete files larger than this many MB (0 to ignore size)."
+          },
+          "delete_temp": {
+            "type": "boolean",
+            "description": "Delete all files in temp/ directory."
+          },
+          "delete_logs": {
+            "type": "boolean",
+            "description": "Delete log files older than age_days."
+          },
+          "workspace_path": {
+            "type": "string",
+            "description": "Custom workspace path (optional)."
+          }
+        },
+        "required": []
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "subagent_tool",
+      "description": "Launch specialized AI subagents for parallel execution and task acceleration. Create multiple subagents simultaneously to handle different aspects of complex projects. Each subagent works autonomously with full tool access - perfect for breaking down large tasks into parallel workstreams for maximum efficiency.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "description": {
+            "type": "string",
+            "description": "A short, compelling description of the specialist AI (e.g., 'Code Reviewer', 'UI Designer', 'Data Analyst', 'Content Writer')"
+          },
+          "prompt": {
+            "type": "string",
+            "description": "Detailed task instructions for the AI specialist. Be specific about deliverables and requirements. The subagent has full tool access and will work autonomously."
+          },
+          "model_tier": {
+            "type": "string",
+            "description": "Model capability: 'full' (maximum capability, recommended), 'mini' (fast/economical), 'nano' (minimal tasks only)"
+          }
+        },
+        "required": [
+          "description",
+          "prompt"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "tavily_crawl",
+      "description": "Crawl a website from a base URL (depth and page limit configurable)",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "description": "Base URL to start crawling"
+          },
+          "max_depth": {
+            "type": "integer",
+            "description": "Maximum crawl depth"
+          },
+          "limit": {
+            "type": "integer",
+            "description": "Maximum number of pages to crawl"
+          }
+        },
+        "required": [
+          "url"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "tavily_extract",
+      "description": "Extract web page content for specified URLs (supports text and images)",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "urls": {
+            "type": "array",
+            "description": "List of URLs to extract content from",
+            "items": {
+              "type": "string"
+            }
+          },
+          "include_images": {
+            "type": "boolean",
+            "description": "Whether to include image metadata in extraction"
+          }
+        },
+        "required": [
+          "urls"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "tavily_map",
+      "description": "Map a site's internal link structure from a base URL",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "description": "Base URL to map"
+          },
+          "max_depth": {
+            "type": "integer",
+            "description": "Maximum depth to discover internal links"
+          }
+        },
+        "required": [
+          "url"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "tavily_search",
+      "description": "Fast web search with curated, relevant results. Best for news, facts, current events, and general information retrieval. Much faster than browser automation.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Search query for current information, news, facts, or data"
+          },
+          "search_depth": {
+            "type": "string",
+            "description": "Search depth: 'basic' for quick results, 'advanced' for comprehensive"
+          },
+          "max_results": {
+            "type": "integer",
+            "description": "Maximum number of results to return (1-20)"
+          }
+        },
+        "required": [
+          "query"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "think",
+      "description": "Use this tool as a scratchpad to record reasoning, analyze problems, and maintain context during complex multi-step tasks. Helps prevent losing track of progress and improves decision-making quality.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "thought": {
+            "type": "string",
+            "description": "Your reasoning, analysis, or thought to record. Use this to: break down complex problems, analyze tool outputs, verify policy compliance, check progress against goals, or plan next steps."
+          }
+        },
+        "required": [
+          "thought"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "TodoWrite",
+      "description": "Use this tool to create and manage a structured task list for your current coding session. This helps you track progress, organize complex tasks, and demonstrate thoroughness to the user.\n\nIMPORTANT: Todos are a progress-tracking aid, not independent directives. Never invent placeholder todos (e.g., 'First task') or start executing work solely because old todos exist; only reflect the user’s actual request.\n\nIMPORTANT: Work with 4-5 todos at a time for optimal focus and productivity. When todos are completed, remove them and add new ones as needed. Keep the active list manageable and prioritized.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "todos": {
+            "type": "array",
+            "description": "The updated todo list - array of objects with id, content, status (pending/in_progress/completed), priority (high/medium/low)",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "description": "Unique identifier for the todo item"
+                },
+                "content": {
+                  "type": "string",
+                  "description": "The todo content/description"
+                },
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "pending",
+                    "in_progress",
+                    "completed"
+                  ],
+                  "description": "Current status of the todo"
+                },
+                "priority": {
+                  "type": "string",
+                  "enum": [
+                    "high",
+                    "medium",
+                    "low"
+                  ],
+                  "description": "Priority level of the todo"
+                }
+              },
+              "required": [
+                "id",
+                "content",
+                "status",
+                "priority"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "todos"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "workflow_automation",
+      "description": "Record, save, replay and manage automated workflows. Supports both user-driven workflow creation and AI-powered pattern recognition. Can execute saved workflows with dynamic parameters. Supports macOS control (maintains login sessions) and browser automation modes.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "description": "Action to perform: 'record' (start recording), 'stop' (stop recording), 'replay' (execute workflow), 'list' (show workflows), 'suggest' (get AI suggestions), 'teach' (interactive teaching mode), 'delete' (remove workflow)"
+          },
+          "workflow_name": {
+            "type": "string",
+            "description": "Name of the workflow to record, replay, or manage"
+          },
+          "parameters": {
+            "type": "object",
+            "description": "Dynamic parameters for workflow execution (for replay action)"
+          },
+          "execution_mode": {
+            "type": "string",
+            "description": "Execution mode for replay: 'macos' (uses atomic-level precision macOS control - RECOMMENDED), 'browser' (uses browser-use, fresh sessions), 'legacy' (original simple execution), 'auto' (automatically choose best method)"
+          },
+          "category": {
+            "type": "string",
+            "description": "Workflow category: 'user' (user-created), 'learned' (AI-recognized), 'template' (reusable templates)"
+          },
+          "description": {
+            "type": "string",
+            "description": "Description of the workflow (for record action)"
+          },
+          "tags": {
+            "type": "array",
+            "description": "Tags for workflow organization (for record action)",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "action"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "write_file",
+      "description": "Write content to files",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "File path to write to"
+          },
+          "content": {
+            "type": "string",
+            "description": "Content to write to the file"
+          }
+        },
+        "required": [
+          "path",
+          "content"
+        ]
+      }
+    }
+  }
+]

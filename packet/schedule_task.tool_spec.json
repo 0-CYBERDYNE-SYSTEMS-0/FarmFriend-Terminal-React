@@ -1,0 +1,118 @@
+{
+  "tool_name": "schedule_task",
+  "description": "Schedule recurring or one-time FFT tasks. Agent provides structured timing parameters (schedule_type, hour, minute, etc.) calculated from natural language. Supports one-time execution, daily, weekly, and interval schedules.",
+  "parameters": [
+    {
+      "name": "action",
+      "type": "str",
+      "required": true,
+      "default": null,
+      "description": "Action: 'add' (create task), 'list' (show all), 'remove' (delete), 'enable' (activate), 'disable' (pause), 'status' (check)",
+      "items_schema": null
+    },
+    {
+      "name": "name",
+      "type": "str",
+      "required": false,
+      "default": null,
+      "description": "Task identifier",
+      "items_schema": null
+    },
+    {
+      "name": "prompt",
+      "type": "str",
+      "required": false,
+      "default": null,
+      "description": "Task/prompt to execute",
+      "items_schema": null
+    },
+    {
+      "name": "workflow",
+      "type": "str",
+      "required": false,
+      "default": null,
+      "description": "Workflow name to replay instead of prompt",
+      "items_schema": null
+    },
+    {
+      "name": "schedule_type",
+      "type": "str",
+      "required": false,
+      "default": null,
+      "description": "'one_time', 'daily', 'weekly', or 'interval'",
+      "items_schema": null
+    },
+    {
+      "name": "hour",
+      "type": "int",
+      "required": false,
+      "default": null,
+      "description": "Hour (0-23) for daily/weekly schedules",
+      "items_schema": null
+    },
+    {
+      "name": "minute",
+      "type": "int",
+      "required": false,
+      "default": null,
+      "description": "Minute (0-59) for daily/weekly schedules",
+      "items_schema": null
+    },
+    {
+      "name": "weekdays",
+      "type": "list",
+      "required": false,
+      "default": null,
+      "description": "Days to run on: [1,2,3,4,5] for Mon-Fri (0=Sun, 6=Sat)",
+      "items_schema": null
+    },
+    {
+      "name": "interval_seconds",
+      "type": "int",
+      "required": false,
+      "default": null,
+      "description": "Seconds between executions (must be >= 60)",
+      "items_schema": null
+    },
+    {
+      "name": "execution_timestamp",
+      "type": "int",
+      "required": false,
+      "default": null,
+      "description": "Unix timestamp for one_time execution",
+      "items_schema": null
+    },
+    {
+      "name": "time_string",
+      "type": "str",
+      "required": false,
+      "default": null,
+      "description": "Natural language time like '21:12 tonight', 'in 5 minutes', '6:35 AM daily', 'weekdays at 9:00'. Parsed automatically into schedule parameters.",
+      "items_schema": null
+    },
+    {
+      "name": "auto_remove",
+      "type": "bool",
+      "required": false,
+      "default": null,
+      "description": "Auto-delete after one_time completes (default: True)",
+      "items_schema": null
+    },
+    {
+      "name": "dry_run",
+      "type": "bool",
+      "required": false,
+      "default": null,
+      "description": "Preview without actually scheduling (default: False)",
+      "items_schema": null
+    },
+    {
+      "name": "open_result",
+      "type": "bool",
+      "required": false,
+      "default": null,
+      "description": "Auto-open generated files (default: True)",
+      "items_schema": null
+    }
+  ]
+}

@@ -1,0 +1,220 @@
+{
+  "tool_count": 43,
+  "tools": [
+    {
+      "name": "analyze_data",
+      "description": "Analyze data using natural language",
+      "category": "data"
+    },
+    {
+      "name": "analyze_image_gemini",
+      "description": "Analyze images using Gemini 2.5 Flash Image vision capabilities. State-of-the-art OCR, object detection, scene understanding, visual Q&A, document analysis, and chart/graph interpretation.",
+      "category": "data"
+    },
+    {
+      "name": "analyze_video_gemini",
+      "description": "Analyze videos using Gemini 2.5 Flash with File Upload API. Supports local video files up to 2GB, YouTube URLs, and comprehensive video understanding including scene analysis, object detection, content summarization, and visual Q&A.",
+      "category": "data"
+    },
+    {
+      "name": "ask_oracle",
+      "description": "Escalate only when normal reasoning is exhausted or when a user explicitly requests it. Ask Oracle summons DeepSeek V3.2 via OpenRouter for ultra-hard problems, intricate code debugging, or Oracle-level insight, returning a deeply reasoned answer plus optional reasoning traces.",
+      "category": "web"
+    },
+    {
+      "name": "ast_grep",
+      "description": "Semantic code search using AST patterns - finds code structure, not just text",
+      "category": "search"
+    },
+    {
+      "name": "browse_web",
+      "description": "Browser automation for INTERACTIVE web tasks requiring clicks, form filling, navigation, login, purchases, or complex user interactions. NOT for simple information retrieval, news, or data gathering - use Tavily or Perplexity search tools instead for faster results.",
+      "category": "web"
+    },
+    {
+      "name": "completion_validation",
+      "description": "Monitor and control the autonomous completion validation system that prevents agents from declaring tasks complete without fulfilling their commitments",
+      "category": "system"
+    },
+    {
+      "name": "edit_file",
+      "description": "Edit files using exact string replacement - must use Read tool first",
+      "category": "file"
+    },
+    {
+      "name": "edit_image_gemini",
+      "description": "Edit existing images using Gemini 2.5 Flash Image. State-of-the-art targeted transformations, background blurring, stain removal, pose alteration, and colorization with natural language instructions.",
+      "category": "visualization"
+    },
+    {
+      "name": "generate_image_gemini",
+      "description": "Generate images using Google's Gemini 2.5 Flash Image model (nano-banana). State-of-the-art image generation with character consistency, multi-image fusion, and enhanced world knowledge.",
+      "category": "visualization"
+    },
+    {
+      "name": "generate_image_openai",
+      "description": "Generate high-quality images using OpenAI's new GPT-image-1 model (not DALL-E). Supports various styles including coloring book pages, artistic images, and professional graphics. Cost-optimized for medium quality by default.",
+      "category": "visualization"
+    },
+    {
+      "name": "glob",
+      "description": "Fast file pattern matching with glob patterns",
+      "category": "search"
+    },
+    {
+      "name": "grep",
+      "description": "Search files with regex patterns and advanced filtering",
+      "category": "search"
+    },
+    {
+      "name": "list_templates",
+      "description": "List all available project templates with descriptions.",
+      "category": "system"
+    },
+    {
+      "name": "macos_control",
+      "description": "Control macOS applications and system functions using native automation. Can open apps, send keystrokes, click buttons, run AppleScript templates, and automate complex workflows with AppleScript skill integration.",
+      "category": "system"
+    },
+    {
+      "name": "manage_task",
+      "description": "Manage tasks with simple operations",
+      "category": "system"
+    },
+    {
+      "name": "multi_edit_file",
+      "description": "Edit files with multiple exact string replacements - must use Read tool first",
+      "category": "file"
+    },
+    {
+      "name": "notebook_edit",
+      "description": "Edit Jupyter notebook cells - insert, delete, or modify cells by ID or index",
+      "category": "file"
+    },
+    {
+      "name": "perplexity_search",
+      "description": "AI-powered search with intelligent, curated answers. Best for research, complex questions, analysis, and when you need synthesized information rather than raw search results.",
+      "category": "search"
+    },
+    {
+      "name": "project_template",
+      "description": "Create a new project from predefined templates.",
+      "category": "system"
+    },
+    {
+      "name": "quick_update",
+      "description": "Send brief progress updates to keep users informed during long operations",
+      "category": "system"
+    },
+    {
+      "name": "read_file",
+      "description": "Read file contents",
+      "category": "file"
+    },
+    {
+      "name": "run_command",
+      "description": "Execute shell commands and code",
+      "category": "system"
+    },
+    {
+      "name": "schedule_task",
+      "description": "Schedule recurring or one-time FFT tasks. Agent provides structured timing parameters (schedule_type, hour, minute, etc.) calculated from natural language. Supports one-time execution, daily, weekly, and interval schedules.",
+      "category": "system"
+    },
+    {
+      "name": "search_code",
+      "description": "Search code using natural language",
+      "category": "search"
+    },
+    {
+      "name": "semantic_search",
+      "description": "Semantic CODE search using natural language and local embeddings (osgrep).\nBEST FOR: Codebase concept search in git repositories - 'where is authentication handled?', 'find rate limiting logic', 'how do we validate tools?'.\nNOT FOR: Project discovery in ff-terminal-workspace (use glob/grep instead - workspace is not a git repo).\nFinds meaning in CODE, not just keywords. Powered by tree-sitter code parsing.",
+      "category": "search"
+    },
+    {
+      "name": "session_summary",
+      "description": "Create or update a session summary for cross-session continuity. Use at the end of work sessions to leave context for future sessions. Writes to ff-terminal-workspace/session_summary.md with accomplishments, decisions made, and recommended next steps.",
+      "category": "file"
+    },
+    {
+      "name": "skill_apply",
+      "description": "Write a drafted skill to disk and refresh the registry.",
+      "category": "system"
+    },
+    {
+      "name": "skill_documentation",
+      "description": "Generate documentation for existing skills or skill drafts.",
+      "category": "system"
+    },
+    {
+      "name": "skill_draft",
+      "description": "Draft a skill manifest and instructions before writing files.",
+      "category": "system"
+    },
+    {
+      "name": "skill_import",
+      "description": "Import a skill from URL, Git repository, or local file.",
+      "category": "system"
+    },
+    {
+      "name": "skill_loader",
+      "description": "Load a skill's instructions and optional assets when a task needs them.",
+      "category": "system"
+    },
+    {
+      "name": "skill_sequencer",
+      "description": "Execute multi-skill workflows with intelligent sequencing and compatibility checking.",
+      "category": "system"
+    },
+    {
+      "name": "smart_cleanup",
+      "description": "Clean workspace with intelligent rules (age, size, file type).",
+      "category": "system"
+    },
+    {
+      "name": "subagent_tool",
+      "description": "Launch specialized AI subagents for parallel execution and task acceleration. Create multiple subagents simultaneously to handle different aspects of complex projects. Each subagent works autonomously with full tool access - perfect for breaking down large tasks into parallel workstreams for maximum efficiency.",
+      "category": "system"
+    },
+    {
+      "name": "tavily_crawl",
+      "description": "Crawl a website from a base URL (depth and page limit configurable)",
+      "category": "search"
+    },
+    {
+      "name": "tavily_extract",
+      "description": "Extract web page content for specified URLs (supports text and images)",
+      "category": "search"
+    },
+    {
+      "name": "tavily_map",
+      "description": "Map a site's internal link structure from a base URL",
+      "category": "search"
+    },
+    {
+      "name": "tavily_search",
+      "description": "Fast web search with curated, relevant results. Best for news, facts, current events, and general information retrieval. Much faster than browser automation.",
+      "category": "search"
+    },
+    {
+      "name": "think",
+      "description": "Use this tool as a scratchpad to record reasoning, analyze problems, and maintain context during complex multi-step tasks. Helps prevent losing track of progress and improves decision-making quality.",
+      "category": "system"
+    },
+    {
+      "name": "TodoWrite",
+      "description": "Use this tool to create and manage a structured task list for your current coding session. This helps you track progress, organize complex tasks, and demonstrate thoroughness to the user.\n\nIMPORTANT: Todos are a progress-tracking aid, not independent directives. Never invent placeholder todos (e.g., 'First task') or start executing work solely because old todos exist; only reflect the user’s actual request.\n\nIMPORTANT: Work with 4-5 todos at a time for optimal focus and productivity. When todos are completed, remove them and add new ones as needed. Keep the active list manageable and prioritized.",
+      "category": "system"
+    },
+    {
+      "name": "workflow_automation",
+      "description": "Record, save, replay and manage automated workflows. Supports both user-driven workflow creation and AI-powered pattern recognition. Can execute saved workflows with dynamic parameters. Supports macOS control (maintains login sessions) and browser automation modes.",
+      "category": "system"
+    },
+    {
+      "name": "write_file",
+      "description": "Write content to files",
+      "category": "file"
+    }
+  ]
+}

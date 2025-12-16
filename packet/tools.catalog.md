@@ -1,0 +1,45 @@
+# Tool Catalog (43)
+
+- `analyze_data` — Analyze data using natural language
+- `analyze_image_gemini` — Analyze images using Gemini 2.5 Flash Image vision capabilities. State-of-the-art OCR, object detection, scene understanding, visual Q&A, document analysis, and chart/graph interpretation.
+- `analyze_video_gemini` — Analyze videos using Gemini 2.5 Flash with File Upload API. Supports local video files up to 2GB, YouTube URLs, and comprehensive video understanding including scene analysis, object detection, content summarization, and visual Q&A.
+- `ask_oracle` — Escalate only when normal reasoning is exhausted or when a user explicitly requests it. Ask Oracle summons DeepSeek V3.2 via OpenRouter for ultra-hard problems, intricate code debugging, or Oracle-level insight, returning a deeply reasoned answer plus optional reasoning traces.
+- `ast_grep` — Semantic code search using AST patterns - finds code structure, not just text
+- `browse_web` — Browser automation for INTERACTIVE web tasks requiring clicks, form filling, navigation, login, purchases, or complex user interactions. NOT for simple information retrieval, news, or data gathering - use Tavily or Perplexity search tools instead for faster results.
+- `completion_validation` — Monitor and control the autonomous completion validation system that prevents agents from declaring tasks complete without fulfilling their commitments
+- `edit_file` — Edit files using exact string replacement - must use Read tool first
+- `edit_image_gemini` — Edit existing images using Gemini 2.5 Flash Image. State-of-the-art targeted transformations, background blurring, stain removal, pose alteration, and colorization with natural language instructions.
+- `generate_image_gemini` — Generate images using Google's Gemini 2.5 Flash Image model (nano-banana). State-of-the-art image generation with character consistency, multi-image fusion, and enhanced world knowledge.
+- `generate_image_openai` — Generate high-quality images using OpenAI's new GPT-image-1 model (not DALL-E). Supports various styles including coloring book pages, artistic images, and professional graphics. Cost-optimized for medium quality by default.
+- `glob` — Fast file pattern matching with glob patterns
+- `grep` — Search files with regex patterns and advanced filtering
+- `list_templates` — List all available project templates with descriptions.
+- `macos_control` — Control macOS applications and system functions using native automation. Can open apps, send keystrokes, click buttons, run AppleScript templates, and automate complex workflows with AppleScript skill integration.
+- `manage_task` — Manage tasks with simple operations
+- `multi_edit_file` — Edit files with multiple exact string replacements - must use Read tool first
+- `notebook_edit` — Edit Jupyter notebook cells - insert, delete, or modify cells by ID or index
+- `perplexity_search` — AI-powered search with intelligent, curated answers. Best for research, complex questions, analysis, and when you need synthesized information rather than raw search results.
+- `project_template` — Create a new project from predefined templates.
+- `quick_update` — Send brief progress updates to keep users informed during long operations
+- `read_file` — Read file contents
+- `run_command` — Execute shell commands and code
+- `schedule_task` — Schedule recurring or one-time FFT tasks. Agent provides structured timing parameters (schedule_type, hour, minute, etc.) calculated from natural language. Supports one-time execution, daily, weekly, and interval schedules.
+- `search_code` — Search code using natural language
+- `semantic_search` — Semantic CODE search using natural language and local embeddings (osgrep). BEST FOR: Codebase concept search in git repositories - 'where is authentication handled?', 'find rate limiting logic', 'how do we validate tools?'. NOT FOR: Project discovery in ff-terminal-workspace (use glob/grep instead - workspace is not a git repo). Finds meaning in CODE, not just keywords. Powered by tree-sitter code parsing.
+- `session_summary` — Create or update a session summary for cross-session continuity. Use at the end of work sessions to leave context for future sessions. Writes to ff-terminal-workspace/session_summary.md with accomplishments, decisions made, and recommended next steps.
+- `skill_apply` — Write a drafted skill to disk and refresh the registry.
+- `skill_documentation` — Generate documentation for existing skills or skill drafts.
+- `skill_draft` — Draft a skill manifest and instructions before writing files.
+- `skill_import` — Import a skill from URL, Git repository, or local file.
+- `skill_loader` — Load a skill's instructions and optional assets when a task needs them.
+- `skill_sequencer` — Execute multi-skill workflows with intelligent sequencing and compatibility checking.
+- `smart_cleanup` — Clean workspace with intelligent rules (age, size, file type).
+- `subagent_tool` — Launch specialized AI subagents for parallel execution and task acceleration. Create multiple subagents simultaneously to handle different aspects of complex projects. Each subagent works autonomously with full tool access - perfect for breaking down large tasks into parallel workstreams for maximum efficiency.
+- `tavily_crawl` — Crawl a website from a base URL (depth and page limit configurable)
+- `tavily_extract` — Extract web page content for specified URLs (supports text and images)
+- `tavily_map` — Map a site's internal link structure from a base URL
+- `tavily_search` — Fast web search with curated, relevant results. Best for news, facts, current events, and general information retrieval. Much faster than browser automation.
+- `think` — Use this tool as a scratchpad to record reasoning, analyze problems, and maintain context during complex multi-step tasks. Helps prevent losing track of progress and improves decision-making quality.
+- `TodoWrite` — Use this tool to create and manage a structured task list for your current coding session. This helps you track progress, organize complex tasks, and demonstrate thoroughness to the user. IMPORTANT: Todos are a progress-tracking aid, not independent directives. Never invent placeholder todos (e.g., 'First task') or start executing work solely because old todos exist; only reflect the user’s actual request. IMPORTANT: Work with 4-5 todos at a time for optimal focus and productivity. When todos are completed, remove them and add new ones as needed. Keep the active list manageable and prioritized.
+- `workflow_automation` — Record, save, replay and manage automated workflows. Supports both user-driven workflow creation and AI-powered pattern recognition. Can execute saved workflows with dynamic parameters. Supports macOS control (maintains login sessions) and browser automation modes.
+- `write_file` — Write content to files

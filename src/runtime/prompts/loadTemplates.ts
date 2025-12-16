@@ -5,6 +5,9 @@ import { findRepoRoot } from "../config/repoRoot.js";
 export type PromptVariant = "a" | "b" | "local";
 
 export function portPacketDir(repoRoot = findRepoRoot()): string {
+  const localPacket = path.join(repoRoot, "packet");
+  if (fs.existsSync(localPacket) && fs.statSync(localPacket).isDirectory()) return localPacket;
+
   const direct = path.join(repoRoot, "ff_terminal_port_packet 2");
   if (fs.existsSync(direct) && fs.statSync(direct).isDirectory()) return direct;
 

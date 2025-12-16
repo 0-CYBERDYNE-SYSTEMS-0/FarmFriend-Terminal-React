@@ -10,6 +10,9 @@ export function findRepoRoot(startDir = process.cwd()): string {
     const packet = path.join(cur, "ff_terminal_port_packet 2");
     if (fs.existsSync(packet) && fs.statSync(packet).isDirectory()) return cur;
 
+    const localPacket = path.join(cur, "packet");
+    if (fs.existsSync(localPacket) && fs.statSync(localPacket).isDirectory()) return cur;
+
     const parent = path.dirname(cur);
     if (parent === cur) break;
     cur = parent;
