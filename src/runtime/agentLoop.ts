@@ -41,6 +41,65 @@ function redactSecrets(value: unknown): unknown {
   return String(value);
 }
 
+function getToolContextMessage(toolName: string, args: unknown): string {
+  const toolMessages: Record<string, (args: any) => string> = {
+    // File operations
+    read_file: (a) => `📖 Reading ${a?.file_path ? path.basename(String(a.file_path)) : "file"}...`,
+    write_file: (a) => `✏️  Writing ${a?.file_path ? path.basename(String(a.file_path)) : "file"}...`,
+    edit_file: (a) => `✏️  Editing ${a?.file_path ? path.basename(String(a.file_path)) : "file"}...`,
+    multi_edit_file: (a) => `✏️  Editing ${a?.file_path ? path.basename(String(a.file_path)) : "file"}...`,
+    glob: (a) => `🔍 Finding ${a?.pattern || "files"}...`,
+    grep: (a) => `🔍 Searching for "${String(a?.pattern || "").slice(0, 30)}"...`,
+
+    // Execution
+    run_command: (a) => `🔧 Running ${String(a?.command || "command").split(" ")[0]}...`,
+
+    // Web & search
+    tavily_search: (a) => `🔍 Searching the web for ${String(a?.query || "").slice(0, 40)}...`,
+    tavily_extract: (a) => `🌐 Extracting from ${a?.url ? new URL(String(a.url)).hostname : "URL"}...`,
+    perplexity_search: (a) => `🔍 Searching for ${String(a?.query || "").slice(0, 40)}...`,
+    browse_web: (a) => `🌐 Browsing ${a?.url ? new URL(String(a.url)).hostname : "URL"}...`,
+
+    // Code & analysis
+    search_code: (a) => `🔎 Searching code for "${String(a?.query || "").slice(0, 30)}"...`,
+    semantic_search: (a) => `🔎 Semantic search for "${String(a?.query || "").slice(0, 30)}"...`,
+    ast_grep: (a) => `🔎 AST search for pattern...`,
+    analyze_data: (a) => `📊 Analyzing data...`,
+
+    // Images & media
+    generate_image_gemini: (a) => `🎨 Generating image: ${String(a?.prompt || "").slice(0, 40)}...`,
+    generate_image_openai: (a) => `🎨 Generating image: ${String(a?.prompt || "").slice(0, 40)}...`,
+    analyze_image_gemini: (a) => `🖼️  Analyzing image...`,
+    analyze_image_openai: (a) => `🖼️  Analyzing image...`,
+
+    // Task management
+    manage_task: (a) => `📝 Managing tasks...`,
+    schedule_task: (a) => `⏰ Scheduling task...`,
+
+    // Skills
+    skill_apply: (a) => `🎯 Applying ${a?.skill_name || "skill"}...`,
+    skill_sequencer: (a) => `🔄 Sequencing skills...`,
+
+    // Notebook
+    notebook_edit: (a) => `📓 Editing notebook cell...`,
+
+    // Thinking & updates
+    think: (a) => `💭 Thinking...`,
+    quick_update: (a) => `💬 ${String(a?.message || "Updating").slice(0, 50)}...`,
+    session_summary: (a) => `📋 Generating summary...`
+  };
+
+  const formatter = toolMessages[toolName];
+  if (formatter) {
+    try {
+      return formatter(args);
+    } catch {
+      return `⚙️  ${toolName}...`;
+    }
+  }
+  return `⚙️  ${toolName}...`;
+}
+
 export async function* runAgentTurn(params: {
   userInput: string;
   registry: ToolRegistry;
@@ -304,7 +363,11 @@ export async function* runAgentTurn(params: {
       callsToRun.push(tc);
     }
 
-    for (const tc of callsToRun) yield { kind: "status", message: `tool_start:${tc.name}` };
+    // Generate contextual messages for clean UI mode
+    for (const tc of callsToRun) {
+      const contextMsg = getToolContextMessage(tc.name, tc.arguments);
+      yield { kind: "status", message: `tool_start:${tc.name}|${contextMsg}` };
+    }
 
     const durationById = new Map<string, number>();
     const resultsRan = await executeToolCalls(registry, callsToRun as any, {
@@ -352,10 +415,13 @@ export async function* runAgentTurn(params: {
     }
 
     for (const r of results) {
-      yield { kind: "status", message: `tool_end:${r.name}` };
+      const durationMs = durationById.get(r.id) ?? 0;
+      const durationSec = (durationMs / 1000).toFixed(1);
+      const status = r.ok ? "ok" : "error";
+      const preview = String(r.output || "").slice(0, 150).replace(/\n/g, " ").trim();
+      yield { kind: "status", message: `tool_end:${r.name}|${durationSec}s|${status}|${preview}` };
 
       const originalCall = callById.get(r.id);
-      const durationMs = durationById.get(r.id) ?? 0;
       if (originalCall) {
         await hookRegistry.runPostTool({
           sessionId,

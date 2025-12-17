@@ -27,13 +27,62 @@ type InputStore = {
   subscribers: Set<() => void>;
 };
 
-function parseWireChunk(chunk: string): Line | null {
+function parseWireChunk(chunk: string, displayMode: string = "clean"): Line | null {
+  // Hide verbose metadata in clean mode
+  if (displayMode === "clean") {
+    if (chunk === "task_completed") return null;
+    if (chunk === "Starting turn...") return null;
+    if (chunk.startsWith("Provider:") && chunk.includes("Model:")) return null;
+  }
+
   if (chunk === "task_completed") return { kind: "system", text: "task_completed" };
   if (chunk.startsWith("content:")) return { kind: "assistant", text: chunk.slice("content:".length) };
   if (chunk.startsWith("thinking:")) return { kind: "thinking", text: chunk.slice("thinking:".length) };
   if (chunk.startsWith("error:")) return { kind: "error", text: chunk.slice("error:".length) };
-  if (chunk.startsWith("tool_start:")) return { kind: "tool", text: `▶ ${chunk.slice("tool_start:".length).trim()}` };
-  if (chunk.startsWith("tool_end:")) return { kind: "tool", text: `■ ${chunk.slice("tool_end:".length).trim()}` };
+
+  if (chunk.startsWith("tool_start:")) {
+    const rest = chunk.slice("tool_start:".length);
+    const [toolName, ...contextParts] = rest.split("|");
+    const contextMsg = contextParts.join("|").trim();
+
+    if (contextMsg) {
+      // Clean mode: show contextual message with emoji
+      return { kind: "tool", text: contextMsg };
+    } else {
+      // Fallback: show traditional format
+      return { kind: "tool", text: `▶ ${toolName.trim()}` };
+    }
+  }
+
+  if (chunk.startsWith("tool_end:")) {
+    const rest = chunk.slice("tool_end:".length);
+    const [toolName, duration, status, ...previewParts] = rest.split("|");
+    const preview = previewParts.join("|").trim();
+
+    if (duration && status) {
+      // Clean mode: show result with checkmark/X and duration
+      const icon = status === "ok" ? "✓" : "✗";
+      let text = `${icon} `;
+
+      if (preview && status === "ok") {
+        // Successful tool with preview
+        text += preview.length > 80 ? preview.slice(0, 80) + "..." : preview;
+      } else if (status === "error") {
+        // Failed tool
+        text += `${toolName.trim()} failed`;
+        if (preview) text += `: ${preview.slice(0, 60)}`;
+      } else {
+        // Successful tool without meaningful preview
+        text += `Completed in ${duration}`;
+      }
+
+      return { kind: "tool", text };
+    } else {
+      // Fallback: show traditional format
+      return { kind: "tool", text: `■ ${toolName.trim()}` };
+    }
+  }
+
   return { kind: "system", text: chunk };
 }
 
@@ -812,12 +861,15 @@ ${fullContext}`;
           setSessionId(msg.sessionId);
           setTurnId(msg.turnId);
           setProcessing(true);
-          pushLines({ kind: "system", text: `--- turn ${msg.turnId} ---` }, { immediate: true });
+          // Hide verbose turn markers in clean mode
+          if (displayMode !== "clean") {
+            pushLines({ kind: "system", text: `--- turn ${msg.turnId} ---` }, { immediate: true });
+          }
           return;
         }
 
         if (msg.type === "chunk") {
-          const parsed = parseWireChunk(msg.chunk);
+          const parsed = parseWireChunk(msg.chunk, displayMode);
           if (!parsed) return;
           if (parsed.kind === "assistant" || parsed.kind === "thinking") {
             const merged = appendToLastLine(parsed.kind, parsed.text);
@@ -830,7 +882,10 @@ ${fullContext}`;
         if (msg.type === "turn_finished") {
           setTurnId(null);
           setProcessing(false);
-          pushLines({ kind: "system", text: `--- done (${msg.ok ? "ok" : "error"}) ---` });
+          // Hide verbose turn end markers in clean mode
+          if (displayMode !== "clean") {
+            pushLines({ kind: "system", text: `--- done (${msg.ok ? "ok" : "error"}) ---` });
+          }
           return;
         }
 
