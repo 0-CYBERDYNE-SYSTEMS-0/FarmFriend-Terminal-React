@@ -10,6 +10,11 @@ import { loadToolSchemas } from "../runtime/tools/toolSchemas.js";
 import { readMountsConfig, setMountEnabled } from "../runtime/config/mounts.js";
 import { findRepoRoot } from "../runtime/config/repoRoot.js";
 import { defaultWorkspaceDir } from "../runtime/config/paths.js";
+import { loadCommands, listCommands, getCommand } from "../runtime/commands/loader.js";
+import { loadAgentConfigs, listAgentConfigs, getAllTemplates } from "../runtime/agents/loader.js";
+import { parseCommand } from "../runtime/commands/parser.js";
+import type { Command } from "../runtime/commands/types.js";
+import type { AgentConfig, AgentTemplate } from "../runtime/agents/types.js";
 
 type ServerMessage =
   | { type: "hello"; daemonVersion: string }
@@ -257,7 +262,7 @@ const Transcript = memo(function Transcript(props: { lines: LineEntry[] }) {
   );
 });
 
-type Mode = "chat" | "models" | "mounts" | "init_project" | "wizard";
+type Mode = "chat" | "models" | "mounts" | "init_project" | "wizard" | "commands" | "agents" | "skills";
 type ModelKey = "model" | "subagentModel" | "toolModel" | "webModel" | "imageModel" | "videoModel";
 type ModelRow = { key: ModelKey; label: string; help: string };
 
@@ -270,12 +275,15 @@ const MODEL_ROWS: ModelRow[] = [
   { key: "videoModel", label: "Video model", help: "Reserved (future video tools)" }
 ];
 
-type WizardId = "models" | "mounts" | "init_project";
+type WizardId = "models" | "mounts" | "init_project" | "commands" | "agents" | "skills";
 type WizardRow = { id: WizardId; label: string; help: string };
 const WIZARD_ROWS: WizardRow[] = [
   { id: "models", label: "Models", help: "Edit model overrides for this profile" },
   { id: "mounts", label: "Mounts", help: "Enable read-only mounts for external skills" },
-  { id: "init_project", label: "Init Project", help: "Load FF_PROJECT.md / PROJECT.md from a project directory" }
+  { id: "init_project", label: "Init Project", help: "Load FF_PROJECT.md / PROJECT.md from a project directory" },
+  { id: "commands", label: "Commands", help: "Create and manage custom slash commands" },
+  { id: "agents", label: "Agents", help: "Configure specialized agent personas" },
+  { id: "skills", label: "Skills", help: "Create and manage reusable skills" }
 ];
 
 type OperationMode = "auto" | "confirm" | "read_only" | "planning";
@@ -303,6 +311,11 @@ type MainViewProps = {
   modelEditValue: string;
   currentProfile: Profile | null;
   profileName: string;
+  commandRows: Command[];
+  commandsIndex: number;
+  agentRows: AgentConfig[];
+  agentsIndex: number;
+  agentTemplates: AgentTemplate[];
 };
 
 const MainView = memo(function MainView(props: MainViewProps) {
@@ -323,7 +336,12 @@ const MainView = memo(function MainView(props: MainViewProps) {
     modelEditingKey,
     modelEditValue,
     currentProfile,
-    profileName
+    profileName,
+    commandRows,
+    commandsIndex,
+    agentRows,
+    agentsIndex,
+    agentTemplates
   } = props;
 
   const wizardPanel = mode === "wizard" ? (
@@ -440,6 +458,79 @@ const MainView = memo(function MainView(props: MainViewProps) {
     </Box>
   ) : null;
 
+  const commandsPanel = mode === "commands" ? (
+    <Box flexDirection="column">
+      <Text>Commands Manager</Text>
+      <Text dimColor>Esc: back • ↑/↓: select • Enter: view • n: new</Text>
+      <Box flexDirection="column" marginTop={1}>
+        {commandRows.length ? (
+          commandRows.slice(Math.max(0, commandsIndex - 8), commandsIndex + 12).map((cmd, idx) => {
+            const absoluteIndex = Math.max(0, commandsIndex - 8) + idx;
+            const selected = absoluteIndex === commandsIndex;
+            return (
+              <Text key={cmd.slug} color={selected ? "cyan" : "white"} dimColor={!selected}>
+                {selected ? "› " : "  "}
+                /{cmd.slug} {cmd.description && `— ${cmd.description}`}
+              </Text>
+            );
+          })
+        ) : (
+          <Text color="yellow">No custom commands yet. Create your first command with /wizard commands → n</Text>
+        )}
+      </Box>
+      {commandRows.length > 0 && (
+        <Text dimColor>{commandRows[commandsIndex]?.template?.slice(0, 60)}...</Text>
+      )}
+    </Box>
+  ) : null;
+
+  const agentsPanel = mode === "agents" ? (
+    <Box flexDirection="column">
+      <Text>Agents Manager</Text>
+      <Text dimColor>Esc: back • ↑/↓: select • Enter: view • t: new from template • n: new custom</Text>
+      <Box flexDirection="column" marginTop={1}>
+        <Text bold color="cyanBright">Configured Agents:</Text>
+        {agentRows.length ? (
+          agentRows.slice(Math.max(0, agentsIndex - 8), agentsIndex + 12).map((agent, idx) => {
+            const absoluteIndex = Math.max(0, agentsIndex - 8) + idx;
+            const selected = absoluteIndex === agentsIndex;
+            return (
+              <Text key={agent.id} color={selected ? "cyan" : "white"} dimColor={!selected}>
+                {selected ? "› " : "  "}
+                {agent.name} {agent.description && `— ${agent.description}`}
+              </Text>
+            );
+          })
+        ) : (
+          <Text dimColor>(none configured yet)</Text>
+        )}
+        <Box marginTop={1}>
+          <Text bold color="cyanBright">
+            Templates:
+          </Text>
+        </Box>
+        {agentTemplates.slice(0, 3).map((template) => (
+          <Text key={template.id} dimColor>
+            • {template.name}
+          </Text>
+        ))}
+        <Text dimColor color="gray">(use 't' to create agent from template)</Text>
+      </Box>
+    </Box>
+  ) : null;
+
+  const skillsPanel = mode === "skills" ? (
+    <Box flexDirection="column">
+      <Text>Skills Manager</Text>
+      <Text dimColor>Esc: back • n: create new skill using skill_draft</Text>
+      <Box flexDirection="column" marginTop={1}>
+        <Text color="cyan">Skills use the existing skill_draft and skill_apply tools</Text>
+        <Text dimColor>Press 'n' to launch the skill creation workflow</Text>
+        <Text dimColor>Skills are stored in: ff-terminal-workspace/skills/</Text>
+      </Box>
+    </Box>
+  ) : null;
+
   return (
     <>
       <Banner displayMode={displayMode} width={stdoutWidth} />
@@ -451,6 +542,9 @@ const MainView = memo(function MainView(props: MainViewProps) {
       {mountsPanel}
       {initProjectPanel}
       {modelsPanel}
+      {commandsPanel}
+      {agentsPanel}
+      {skillsPanel}
     </>
   );
 });
@@ -494,6 +588,10 @@ function App(props: { port: number }) {
   const [projectRefresh, setProjectRefresh] = useState(0);
   const [projectFilter, setProjectFilter] = useState("");
   const [projectIndex, setProjectIndex] = useState(0);
+  const [commandsRefresh, setCommandsRefresh] = useState(0);
+  const [commandsIndex, setCommandsIndex] = useState(0);
+  const [agentsRefresh, setAgentsRefresh] = useState(0);
+  const [agentsIndex, setAgentsIndex] = useState(0);
 
   const mountsCfg = useMemo(() => readMountsConfig(), [mountsRefresh]);
   const mountRows = useMemo(
@@ -551,6 +649,27 @@ function App(props: { port: number }) {
     if (!f) return all;
     return all.filter((p) => p.name.toLowerCase().includes(f));
   }, [projectFilter, projectRefresh]);
+
+  const commandRows = useMemo(() => {
+    // Force recompute when refresh is triggered
+    // eslint-disable-next-line @typescript-eslint/no-unused-expressions
+    commandsRefresh;
+    const cmds = loadCommands(workspaceDir);
+    return listCommands(cmds);
+  }, [workspaceDir, commandsRefresh]);
+
+  const agentRows = useMemo(() => {
+    // Force recompute when refresh is triggered
+    // eslint-disable-next-line @typescript-eslint/no-unused-expressions
+    agentsRefresh;
+    const agents = loadAgentConfigs(workspaceDir);
+    return listAgentConfigs(agents);
+  }, [workspaceDir, agentsRefresh]);
+
+  const agentTemplates = useMemo(() => {
+    const templates = getAllTemplates(workspaceDir);
+    return Array.from(templates.values());
+  }, [workspaceDir]);
 
   // Models wizard state
   const [modelIndex, setModelIndex] = useState(0);
@@ -1017,7 +1136,7 @@ ${fullContext}`;
         if (w === "mounts") {
           setMode("mounts");
           setMountsIndex(0);
-          pushLines({ kind: "system", text: "Mounts: Esc to exit • ↑/↓ select • Space/Enter toggle • q quit" });
+          pushLines({ kind: "system", text: "Mounts: Esc to exit • ↑/↓ select • Space/Enter toggle" });
           return;
         }
         if (w === "init_project") {
@@ -1026,6 +1145,23 @@ ${fullContext}`;
           setProjectIndex(0);
           setProjectRefresh((n) => n + 1);
           pushLines({ kind: "system", text: "Init Project: type to filter • ↑/↓ select • Enter load • Esc quit" });
+          return;
+        }
+        if (w === "commands") {
+          setMode("commands");
+          setCommandsIndex(0);
+          pushLines({ kind: "system", text: "Commands: Esc back • ↑/↓ select • Enter view • n new command" });
+          return;
+        }
+        if (w === "agents") {
+          setMode("agents");
+          setAgentsIndex(0);
+          pushLines({ kind: "system", text: "Agents: Esc back • ↑/↓ select • Enter view • t template • n custom" });
+          return;
+        }
+        if (w === "skills") {
+          setMode("skills");
+          pushLines({ kind: "system", text: "Skills: Esc back • n create new skill using skill_draft" });
           return;
         }
       }
@@ -1077,6 +1213,111 @@ ${fullContext}`;
       return;
     }
 
+    // Commands wizard mode
+    if (mode === "commands") {
+      if (key.escape) {
+        setMode("chat");
+        return;
+      }
+      if (key.upArrow) {
+        setCommandsIndex((i) => (i - 1 + commandRows.length) % commandRows.length);
+        return;
+      }
+      if (key.downArrow) {
+        setCommandsIndex((i) => (i + 1) % commandRows.length);
+        return;
+      }
+      if (key.return) {
+        const cmd = commandRows[commandsIndex];
+        if (cmd) {
+          pushLines([
+            { kind: "system", text: `Command: /${cmd.slug}` },
+            { kind: "system", text: `Description: ${cmd.description || "(no description)"}` },
+            { kind: "system", text: `Template preview: ${cmd.template.slice(0, 100)}${cmd.template.length > 100 ? "..." : ""}` }
+          ]);
+        }
+        return;
+      }
+      if (ch === "n") {
+        pushLines({
+          kind: "system",
+          text: "To create a new command, manually add a .md file to ff-terminal-workspace/commands/ with this format:\n\n---\ndescription: \"Command description\"\n---\n\nCommand prompt template with $1, $2 for args"
+        });
+        return;
+      }
+      return;
+    }
+
+    // Agents wizard mode
+    if (mode === "agents") {
+      if (key.escape) {
+        setMode("chat");
+        return;
+      }
+      if (key.upArrow) {
+        setAgentsIndex((i) => (i - 1 + agentRows.length) % agentRows.length);
+        return;
+      }
+      if (key.downArrow) {
+        setAgentsIndex((i) => (i + 1) % agentRows.length);
+        return;
+      }
+      if (key.return) {
+        const agent = agentRows[agentsIndex];
+        if (agent) {
+          pushLines([
+            { kind: "system", text: `Agent: ${agent.name}` },
+            { kind: "system", text: `Description: ${agent.description}` },
+            { kind: "system", text: `Mode: ${agent.mode || "auto"}` },
+            { kind: "system", text: `Max turns: ${agent.maxTurns || "∞"}` }
+          ]);
+        }
+        return;
+      }
+      if (ch === "t") {
+        if (agentTemplates.length > 0) {
+          pushLines({
+            kind: "system",
+            text: `Available templates: ${agentTemplates.map((t) => t.name).join(", ")}\n\nTo create from template, manually add JSON to ff-terminal-workspace/agents/`
+          });
+        }
+        return;
+      }
+      if (ch === "n") {
+        pushLines({
+          kind: "system",
+          text: "To create a custom agent, add a JSON file to ff-terminal-workspace/agents/ with: id, name, description, systemPromptAddition, allowedTools[], mode, tags[], etc"
+        });
+        return;
+      }
+      return;
+    }
+
+    // Skills wizard mode
+    if (mode === "skills") {
+      if (key.escape) {
+        setMode("chat");
+        return;
+      }
+      if (ch === "n") {
+        const skillPrompt = `Create a new skill using the skill_draft tool. Provide:
+- skill_slug: Unique identifier (lowercase, 2-64 chars, alphanumeric + hyphen/underscore)
+- name: Display name for the skill
+- summary: One-line description
+- instructions: Detailed instructions for when this skill is activated
+- Optional: triggers (list), tags (list), recommended_tools (list)
+
+After creating the draft, I can apply it with skill_apply to make it active.`;
+
+        pushLines({ kind: "system", text: "Creating new skill with skill_draft..." });
+        sendTurn(skillPrompt, { echoUser: false });
+        setMode("chat");
+        return;
+      }
+      pushLines({ kind: "system", text: "Press 'n' to create a new skill, or Esc to go back" });
+      return;
+    }
+
     const openWizardMenu = () => {
       setMode("wizard");
       setWizardIndex(0);
@@ -1090,17 +1331,33 @@ ${fullContext}`;
         { kind: "system", text: "  /tools           List available tools" },
         { kind: "system", text: "  /agents          List available agent roles/models" },
         { kind: "system", text: "  /mounts          Show mounts status (read-only)" },
-        { kind: "system", text: "  /wizard          Open wizard menu (wizards: models, mounts, init-project)" },
-        { kind: "system", text: "  /models          Open models wizard (alias: /wizard models)" },
+        { kind: "system", text: "" },
+        { kind: "system", text: "Wizards:" },
+        { kind: "system", text: "  /wizard          Open wizard menu (models, mounts, init-project, commands, agents, skills)" },
+        { kind: "system", text: "  /wizard models   Open models wizard" },
+        { kind: "system", text: "  /wizard mounts   Open mounts wizard (read-only)" },
+        { kind: "system", text: "  /wizard init-project  Open project initialization picker" },
+        { kind: "system", text: "  /wizard commands Open custom commands manager" },
+        { kind: "system", text: "  /wizard agents   Open agent configuration wizard" },
+        { kind: "system", text: "  /wizard skills   Open skills wizard (create reusable skills)" },
+        { kind: "system", text: "  /models          Shortcut for /wizard models" },
+        { kind: "system", text: "  /commands        Open custom commands manager" },
+        { kind: "system", text: "  /command SLUG [args]  Execute custom command with arguments" },
+        { kind: "system", text: "  /agents          Open agent configuration" },
+        { kind: "system", text: "  /skills          Open skills wizard" },
+        { kind: "system", text: "" },
+        { kind: "system", text: "Settings:" },
         { kind: "system", text: "  /mode [auto|confirm|read_only|planning]  Set operation mode" },
         { kind: "system", text: "  /planning        Alias for /mode planning" },
-        { kind: "system", text: "  /init            Run a hidden init turn" },
+        { kind: "system", text: "" },
+        { kind: "system", text: "Project:" },
+        { kind: "system", text: "  /init            Run initialization analysis" },
         { kind: "system", text: "  /init-project [path]  Initialize from a project directory (picker if omitted)" },
+        { kind: "system", text: "" },
+        { kind: "system", text: "Other:" },
         { kind: "system", text: "  /clear           Clear transcript" },
-        { kind: "system", text: "  /commands        List custom commands (not implemented yet)" },
-        { kind: "system", text: "  /command ...     Manage custom commands (not implemented yet)" },
-        { kind: "system", text: "  /quit (/exit)    Exit" },
         { kind: "system", text: "  /theme (/colors) Print color-role samples" },
+        { kind: "system", text: "  /quit (/exit)    Exit" },
         { kind: "system", text: "  //text           Send a literal prompt starting with '/'" },
         { kind: "system", text: "" },
         { kind: "system", text: "Shortcuts:" },
@@ -1168,7 +1425,10 @@ ${fullContext}`;
           }
 
           if (command === "agents") {
-            showAgents();
+            setMode("agents");
+            setAgentsIndex(0);
+            setAgentsRefresh((n) => n + 1);
+            pushLines({ kind: "system", text: "Agents: Esc to exit • ↑/↓ to select • Enter to view • t to view templates • n to create new" });
             setInputValue("");
             return;
           }
@@ -1186,16 +1446,27 @@ ${fullContext}`;
           }
 
           if (command === "commands") {
-            pushLines({ kind: "system", text: "Custom commands are not implemented in the TS Ink UI yet." });
+            setMode("commands");
+            setCommandsIndex(0);
+            setCommandsRefresh((n) => n + 1);
+            pushLines({ kind: "system", text: "Commands: Esc to exit • ↑/↓ to select • Enter to view • n to create new" });
             setInputValue("");
             return;
           }
 
           if (command === "command") {
-            pushLines({
-              kind: "system",
-              text: "Custom command management is not implemented in the TS Ink UI yet (Python TUI supports /command create/list/edit/delete/show)."
-            });
+            // /command is just an alias to enter commands wizard
+            setMode("commands");
+            setCommandsIndex(0);
+            setCommandsRefresh((n) => n + 1);
+            pushLines({ kind: "system", text: "Commands: Esc to exit • ↑/↓ to select • Enter to view • n to create new" });
+            setInputValue("");
+            return;
+          }
+
+          if (command === "skills") {
+            setMode("skills");
+            pushLines({ kind: "system", text: "Skills: Press 'n' to create a new skill • Esc to exit" });
             setInputValue("");
             return;
           }
@@ -1320,6 +1591,20 @@ ${fullContext}`;
             return;
           }
 
+          // Check for custom commands
+          const customCommands = loadCommands(workspaceDir);
+          const customCmd = getCommand(customCommands, command);
+
+          if (customCmd) {
+            // Parse command with arguments
+            const { substituted } = parseCommand(customCmd.template, argsRaw);
+
+            pushLines({ kind: "system", text: `Executing /${customCmd.slug}…` });
+            sendTurn(substituted);
+            setInputValue("");
+            return;
+          }
+
           pushLines({ kind: "error", text: `Unknown command: /${command} (type /help)` });
           setInputValue("");
           return;
@@ -1358,6 +1643,11 @@ ${fullContext}`;
         modelEditValue={modelEditValue}
         currentProfile={currentProfile}
         profileName={profileName}
+        commandRows={commandRows}
+        commandsIndex={commandsIndex}
+        agentRows={agentRows}
+        agentsIndex={agentsIndex}
+        agentTemplates={agentTemplates}
       />
       <Transcript lines={lines} />
       {mode === "chat" ? (
