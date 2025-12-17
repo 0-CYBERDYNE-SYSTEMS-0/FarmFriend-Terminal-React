@@ -36,6 +36,7 @@ function usage(): void {
   ff-terminal profile list
   ff-terminal profile default <name>
   ff-terminal profile delete <name>
+  ff-terminal profile tool-keys
 `);
 }
 
@@ -442,6 +443,12 @@ async function run(): Promise<void> {
       await deleteCredential(name);
       // eslint-disable-next-line no-console
       console.log(`Deleted profile ${name}`);
+      return;
+    }
+
+    if (action === "tool-keys") {
+      const { runToolKeysManager } = await import("../runtime/profiles/toolKeysManager.js");
+      await runToolKeysManager();
       return;
     }
 

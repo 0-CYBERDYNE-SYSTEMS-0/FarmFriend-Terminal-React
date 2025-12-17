@@ -197,24 +197,86 @@ export async function runProfileSetupWizard(params: { config: Config }): Promise
       await storeCredential(profile.name, label, credential.trim());
     }
 
-    const { addOptional } = await inquirer.prompt<{ addOptional: boolean }>([
-      {
-        type: "confirm",
-        name: "addOptional",
-        message: "Add optional API keys for tools (Tavily/Perplexity/Gemini/OpenWeather)?",
-        default: false
+    // Check which tool keys are already configured globally
+    const keyStatus = {
+      configured: [] as string[],
+      missing: [] as string[],
+      all: OPTIONAL_TOOL_ENV_KEYS as readonly string[]
+    };
+
+    for (const key of OPTIONAL_TOOL_ENV_KEYS) {
+      const value = await getCredential(GLOBAL_TOOL_CRED_PROFILE, key);
+      if (value) {
+        keyStatus.configured.push(key);
+      } else {
+        keyStatus.missing.push(key);
       }
-    ]);
+    }
+
+    // Display status if any keys are configured
+    if (keyStatus.configured.length > 0) {
+      // eslint-disable-next-line no-console
+      console.log("\nGlobal tool API keys detected:");
+      for (const key of keyStatus.all) {
+        const status = keyStatus.configured.includes(key) ? "✓" : "✗";
+        // eslint-disable-next-line no-console
+        console.log(`  ${status} ${key}`);
+      }
+    }
+
+    // Only prompt if there are missing keys or no keys configured at all
+    const shouldPrompt = keyStatus.missing.length > 0 || keyStatus.configured.length === 0;
+    const defaultAnswer = keyStatus.missing.length > 0;
+
+    if (!shouldPrompt) {
+      // eslint-disable-next-line no-console
+      console.log("\n✓ All tool API keys already configured globally (skipping prompt)");
+    }
+
+    const addOptional = shouldPrompt
+      ? (
+          await inquirer.prompt<{ addOptional: boolean }>([
+            {
+              type: "confirm",
+              name: "addOptional",
+              message:
+                keyStatus.configured.length > 0
+                  ? `Update tool API keys? (${keyStatus.missing.length} not set)`
+                  : "Add optional API keys for tools (Tavily/Perplexity/Gemini/OpenWeather)?",
+              default: defaultAnswer
+            }
+          ])
+        ).addOptional
+      : false;
+
     if (addOptional) {
       for (const key of OPTIONAL_TOOL_ENV_KEYS) {
+        const existing = await getCredential(GLOBAL_TOOL_CRED_PROFILE, key);
+        const hasValue = !!existing;
+
         const { value } = await inquirer.prompt<{ value: string }>([
-          { type: "password", name: "value", message: `Enter ${key} (leave blank to skip):`, mask: "*" }
+          {
+            type: "password",
+            name: "value",
+            message: hasValue
+              ? `${key} (already set, press Enter to keep or enter new value):`
+              : `Enter ${key} (leave blank to skip):`,
+            mask: "*"
+          }
         ]);
+
         const v = String(value || "").trim();
         if (v) {
-          await storeCredential(profile.name, key, v);
-          const existingGlobal = await getCredential(GLOBAL_TOOL_CRED_PROFILE, key);
-          if (!existingGlobal) await storeCredential(GLOBAL_TOOL_CRED_PROFILE, key, v);
+          // Store directly to global (primary storage)
+          await storeCredential(GLOBAL_TOOL_CRED_PROFILE, key, v);
+          // eslint-disable-next-line no-console
+          console.log(`  ✓ ${key} saved globally`);
+        } else if (!hasValue) {
+          // eslint-disable-next-line no-console
+          console.log(`  ⊘ ${key} skipped`);
+        } else {
+          // eslint-disable-next-line no-console
+          console.log(`  ↻ ${key} unchanged`);
         }
       }
     }
