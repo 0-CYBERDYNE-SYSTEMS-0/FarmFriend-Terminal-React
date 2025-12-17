@@ -1,7 +1,7 @@
 import readline from "node:readline/promises";
 
 import type { Config, Profile, ProviderKind } from "./types.js";
-import { getCredential, isKeytarAvailable, storeCredential } from "./storage.js";
+import { getCredential, storeCredential } from "./storage.js";
 import { GLOBAL_TOOL_CRED_PROFILE, OPTIONAL_TOOL_ENV_KEYS } from "./toolKeys.js";
 
 type Preset = { provider: ProviderKind; baseUrl?: string; model?: string; credentialLabel?: string };
@@ -139,10 +139,6 @@ export async function runProfileSetupWizard(params: { config: Config }): Promise
     // Inquirer path (closest to ai-claude-start UX).
     // eslint-disable-next-line no-console
     console.log("\nFF-Terminal Profile Setup Wizard\n");
-    if (!isKeytarAvailable()) {
-      // eslint-disable-next-line no-console
-      console.log("⚠️  keytar not available; credentials will be stored in plaintext in ~/.ff-terminal-profiles.json\n");
-    }
 
     const presetNames = [...Object.keys(PRESETS), "Custom"];
     const { presetName } = await inquirer.prompt<{ presetName: string }>([
@@ -302,10 +298,6 @@ export async function runProfileSetupWizard(params: { config: Config }): Promise
   try {
     // eslint-disable-next-line no-console
     console.log("\nFF-Terminal Profile Setup Wizard\n");
-    if (!isKeytarAvailable()) {
-      // eslint-disable-next-line no-console
-      console.log("Note: keytar not available; credentials will be stored in plaintext in ~/.ff-terminal-profiles.json\n");
-    }
 
     const presetNames = [...Object.keys(PRESETS), "Custom"];
     // eslint-disable-next-line no-console

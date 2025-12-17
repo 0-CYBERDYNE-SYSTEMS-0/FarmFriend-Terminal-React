@@ -13,7 +13,7 @@ import { newId } from "../shared/ids.js";
 import { loadTaskStore, saveTaskStore, taskStorePath } from "../runtime/scheduling/taskStore.js";
 import fs from "node:fs";
 import path from "node:path";
-import { readConfig, writeConfig, getProfileByName, getCredential, deleteCredential, isKeytarAvailable, storeCredential } from "../runtime/profiles/storage.js";
+import { readConfig, writeConfig, getProfileByName, getCredential, deleteCredential, storeCredential } from "../runtime/profiles/storage.js";
 import { promptSelectProfile, runProfileSetupWizard } from "../runtime/profiles/wizard.js";
 import readline from "node:readline/promises";
 import { withToolContext } from "../runtime/tools/context.js";
@@ -380,10 +380,6 @@ async function run(): Promise<void> {
         // eslint-disable-next-line no-console
         console.log("  (none)  Run: ff-terminal profile setup");
         return;
-      }
-      if (!isKeytarAvailable()) {
-        // eslint-disable-next-line no-console
-        console.log("  (keytar not available; credentials stored in plaintext)\n");
       }
       for (const p of config.profiles) {
         const isDefault = config.defaultProfile && p.name === config.defaultProfile;
