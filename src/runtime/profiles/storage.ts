@@ -1,6 +1,6 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync, chmodSync } from "node:fs";
 
 import type { Config, Profile } from "./types.js";
 
@@ -30,6 +30,12 @@ export function writeConfig(config: Config): void {
     : { config: { profiles: [] } };
   existing.config = config;
   writeFileSync(CONFIG_FILE, JSON.stringify(existing, null, 2) + "\n", "utf8");
+  try {
+    // Restrict file permissions to user-only (sensitive credential data)
+    chmodSync(CONFIG_FILE, 0o600);
+  } catch {
+    // ignore chmod errors on Windows or filesystems that don't support permissions
+  }
 }
 
 export async function storeCredential(profileName: string, keyOrCredential: string, credentialMaybe?: string): Promise<void> {
@@ -54,6 +60,12 @@ export async function storeCredential(profileName: string, keyOrCredential: stri
   }
 
   writeFileSync(CONFIG_FILE, JSON.stringify(data, null, 2) + "\n", "utf8");
+  try {
+    // Restrict file permissions to user-only (sensitive credential data)
+    chmodSync(CONFIG_FILE, 0o600);
+  } catch {
+    // ignore chmod errors on Windows or filesystems that don't support permissions
+  }
 }
 
 export async function getCredential(profileName: string, key?: string): Promise<string | null> {
@@ -84,6 +96,12 @@ export async function deleteCredential(profileName: string, key?: string): Promi
     }
   }
   writeFileSync(CONFIG_FILE, JSON.stringify(data, null, 2) + "\n", "utf8");
+  try {
+    // Restrict file permissions to user-only (sensitive credential data)
+    chmodSync(CONFIG_FILE, 0o600);
+  } catch {
+    // ignore chmod errors on Windows or filesystems that don't support permissions
+  }
 }
 
 export function getProfileByName(config: Config, name: string): Profile | null {

@@ -3,6 +3,7 @@ import readline from "node:readline/promises";
 import type { Config, Profile, ProviderKind } from "./types.js";
 import { getCredential, storeCredential } from "./storage.js";
 import { GLOBAL_TOOL_CRED_PROFILE, OPTIONAL_TOOL_ENV_KEYS } from "./toolKeys.js";
+import { promptSecret } from "./prompts.js";
 
 type Preset = { provider: ProviderKind; baseUrl?: string; model?: string; credentialLabel?: string };
 type InquirerLike = {
@@ -26,45 +27,6 @@ const PRESETS: Record<string, Preset> = {
   },
   "LM Studio (local)": { provider: "lmstudio", baseUrl: "http://localhost:1234", model: "llama-3.2-3b-instruct" }
 };
-
-async function promptSecret(prompt: string): Promise<string> {
-  process.stdout.write(prompt);
-  const stdin = process.stdin;
-  const wasRaw = (stdin as any).isRaw;
-  stdin.setRawMode?.(true);
-  stdin.resume();
-
-  return await new Promise((resolve) => {
-    let value = "";
-    const onData = (chunk: Buffer) => {
-      const s = chunk.toString("utf8");
-      for (const ch of s) {
-        if (ch === "\r" || ch === "\n") {
-          process.stdout.write("\n");
-          stdin.off("data", onData);
-          stdin.setRawMode?.(Boolean(wasRaw));
-          resolve(value);
-          return;
-        }
-        if (ch === "\u0003") {
-          // Ctrl+C
-          process.stdout.write("\n");
-          stdin.off("data", onData);
-          stdin.setRawMode?.(Boolean(wasRaw));
-          resolve("");
-          return;
-        }
-        if (ch === "\u007f") {
-          // backspace
-          value = value.slice(0, -1);
-          continue;
-        }
-        value += ch;
-      }
-    };
-    stdin.on("data", onData);
-  });
-}
 
 async function tryInquirer(): Promise<InquirerLike | null> {
   try {

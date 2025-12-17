@@ -14,7 +14,7 @@ export function parseCommand(template: string, args: string[]): CommandParseResu
   result = result.replace(/\$ARGUMENTS/g, args.join(" "));
 
   // Replace $ARGn and $n with positional arguments
-  for (let i = 0; i < Math.max(args.length, 10); i++) {
+  for (let i = 0; i < args.length; i++) {
     const positional = i + 1;
     const value = args[i] || "";
 
