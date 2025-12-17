@@ -65,14 +65,14 @@ function parseWireChunk(chunk: string, displayMode: string = "clean"): Line | nu
       let text = `${icon} `;
 
       if (preview && status === "ok") {
-        // Successful tool with preview
-        text += preview.length > 80 ? preview.slice(0, 80) + "..." : preview;
+        // Smart previews are already concise, show them in full
+        text += preview;
       } else if (status === "error") {
         // Failed tool
         text += `${toolName.trim()} failed`;
-        if (preview) text += `: ${preview.slice(0, 60)}`;
+        if (preview) text += `: ${preview.slice(0, 50)}`;
       } else {
-        // Successful tool without meaningful preview
+        // No preview available, just show completion
         text += `Completed in ${duration}`;
       }
 

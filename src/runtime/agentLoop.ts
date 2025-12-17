@@ -41,6 +41,16 @@ function redactSecrets(value: unknown): unknown {
   return String(value);
 }
 
+function smartTruncate(text: string, maxLen: number): string {
+  if (text.length <= maxLen) return text;
+  const truncated = text.slice(0, maxLen);
+  const lastSpace = truncated.lastIndexOf(" ");
+  if (lastSpace > maxLen * 0.7) {
+    return truncated.slice(0, lastSpace) + "...";
+  }
+  return truncated + "...";
+}
+
 function getToolContextMessage(toolName: string, args: unknown): string {
   const toolMessages: Record<string, (args: any) => string> = {
     // File operations
@@ -48,27 +58,27 @@ function getToolContextMessage(toolName: string, args: unknown): string {
     write_file: (a) => `✏️  Writing ${a?.file_path ? path.basename(String(a.file_path)) : "file"}...`,
     edit_file: (a) => `✏️  Editing ${a?.file_path ? path.basename(String(a.file_path)) : "file"}...`,
     multi_edit_file: (a) => `✏️  Editing ${a?.file_path ? path.basename(String(a.file_path)) : "file"}...`,
-    glob: (a) => `🔍 Finding ${a?.pattern || "files"}...`,
-    grep: (a) => `🔍 Searching for "${String(a?.pattern || "").slice(0, 30)}"...`,
+    glob: (a) => `🔍 Finding ${smartTruncate(String(a?.pattern || "files"), 60)}...`,
+    grep: (a) => `🔍 Searching for "${smartTruncate(String(a?.pattern || ""), 60)}"...`,
 
     // Execution
-    run_command: (a) => `🔧 Running ${String(a?.command || "command").split(" ")[0]}...`,
+    run_command: (a) => `🔧 Running ${smartTruncate(String(a?.command || "command"), 70)}...`,
 
     // Web & search
-    tavily_search: (a) => `🔍 Searching the web for ${String(a?.query || "").slice(0, 40)}...`,
+    tavily_search: (a) => `🔍 Searching the web for ${smartTruncate(String(a?.query || ""), 80)}...`,
     tavily_extract: (a) => `🌐 Extracting from ${a?.url ? new URL(String(a.url)).hostname : "URL"}...`,
-    perplexity_search: (a) => `🔍 Searching for ${String(a?.query || "").slice(0, 40)}...`,
+    perplexity_search: (a) => `🔍 Searching for ${smartTruncate(String(a?.query || ""), 80)}...`,
     browse_web: (a) => `🌐 Browsing ${a?.url ? new URL(String(a.url)).hostname : "URL"}...`,
 
     // Code & analysis
-    search_code: (a) => `🔎 Searching code for "${String(a?.query || "").slice(0, 30)}"...`,
-    semantic_search: (a) => `🔎 Semantic search for "${String(a?.query || "").slice(0, 30)}"...`,
+    search_code: (a) => `🔎 Searching code for "${smartTruncate(String(a?.query || ""), 60)}"...`,
+    semantic_search: (a) => `🔎 Semantic search for "${smartTruncate(String(a?.query || ""), 60)}"...`,
     ast_grep: (a) => `🔎 AST search for pattern...`,
     analyze_data: (a) => `📊 Analyzing data...`,
 
     // Images & media
-    generate_image_gemini: (a) => `🎨 Generating image: ${String(a?.prompt || "").slice(0, 40)}...`,
-    generate_image_openai: (a) => `🎨 Generating image: ${String(a?.prompt || "").slice(0, 40)}...`,
+    generate_image_gemini: (a) => `🎨 Generating image: ${smartTruncate(String(a?.prompt || ""), 70)}...`,
+    generate_image_openai: (a) => `🎨 Generating image: ${smartTruncate(String(a?.prompt || ""), 70)}...`,
     analyze_image_gemini: (a) => `🖼️  Analyzing image...`,
     analyze_image_openai: (a) => `🖼️  Analyzing image...`,
 
@@ -85,7 +95,7 @@ function getToolContextMessage(toolName: string, args: unknown): string {
 
     // Thinking & updates
     think: (a) => `💭 Thinking...`,
-    quick_update: (a) => `💬 ${String(a?.message || "Updating").slice(0, 50)}...`,
+    quick_update: (a) => `💬 ${smartTruncate(String(a?.message || "Updating"), 70)}...`,
     session_summary: (a) => `📋 Generating summary...`
   };
 
@@ -98,6 +108,98 @@ function getToolContextMessage(toolName: string, args: unknown): string {
     }
   }
   return `⚙️  ${toolName}...`;
+}
+
+function getToolPreview(toolName: string, output: string, ok: boolean): string {
+  if (!ok || !output) return "";
+
+  try {
+    switch (toolName) {
+      case "tavily_search":
+      case "perplexity_search": {
+        const data = JSON.parse(output);
+        const results = data?.results || [];
+        if (results.length > 0) {
+          const sources = results
+            .slice(0, 3)
+            .map((r: any) => {
+              try {
+                const hostname = new URL(r.url).hostname.replace("www.", "");
+                return hostname;
+              } catch {
+                return "source";
+              }
+            })
+            .join(", ");
+          return `Found ${results.length} article${results.length === 1 ? "" : "s"}${sources ? " from " + sources : ""}`;
+        }
+        return `Found ${results.length} results`;
+      }
+
+      case "read_file": {
+        const lines = output.split("\n").length;
+        const chars = output.length;
+        if (lines > 100) return `Read file (${lines} lines)`;
+        if (chars > 1000) return `Read file (${(chars / 1000).toFixed(1)}k chars)`;
+        return `Read file (${lines} lines)`;
+      }
+
+      case "edit_file":
+      case "multi_edit_file": {
+        const match = output.match(/(\d+)\s+line/i);
+        if (match) return `Modified ${match[1]} line${match[1] === "1" ? "" : "s"}`;
+        return "File edited";
+      }
+
+      case "write_file": {
+        const lines = output.split("\n").length;
+        return `Wrote file (${lines} lines)`;
+      }
+
+      case "run_command": {
+        const firstLine = output.split("\n")[0]?.trim();
+        if (firstLine && firstLine.length < 60) return firstLine;
+        if (output.includes("exit code 0") || output.toLowerCase().includes("success")) {
+          return "Command completed successfully";
+        }
+        return "Command executed";
+      }
+
+      case "glob": {
+        const match = output.match(/Found (\d+)/);
+        if (match) return `Found ${match[1]} file${match[1] === "1" ? "" : "s"}`;
+        return "Files found";
+      }
+
+      case "grep":
+      case "search_code": {
+        const match = output.match(/(\d+)\s+match/i);
+        if (match) return `Found ${match[1]} match${match[1] === "1" ? "" : "es"}`;
+        const lines = output.split("\n").filter(l => l.trim()).length;
+        if (lines > 0) return `Found ${lines} match${lines === 1 ? "" : "es"}`;
+        return "Search complete";
+      }
+
+      case "browse_web":
+      case "tavily_extract": {
+        const wordCount = output.split(/\s+/).length;
+        if (wordCount > 500) return `Extracted ${(wordCount / 1000).toFixed(1)}k words`;
+        return `Extracted ${wordCount} words`;
+      }
+
+      default: {
+        if (output.startsWith("{") || output.startsWith("[")) {
+          return "";
+        }
+        const firstLine = output.split("\n")[0]?.trim();
+        if (firstLine && firstLine.length <= 60) return firstLine;
+        if (firstLine) return firstLine.slice(0, 60) + "...";
+        return "";
+      }
+    }
+  } catch {
+    return "";
+  }
 }
 
 export async function* runAgentTurn(params: {
@@ -418,7 +520,7 @@ export async function* runAgentTurn(params: {
       const durationMs = durationById.get(r.id) ?? 0;
       const durationSec = (durationMs / 1000).toFixed(1);
       const status = r.ok ? "ok" : "error";
-      const preview = String(r.output || "").slice(0, 150).replace(/\n/g, " ").trim();
+      const preview = getToolPreview(r.name, r.output, r.ok);
       yield { kind: "status", message: `tool_end:${r.name}|${durationSec}s|${status}|${preview}` };
 
       const originalCall = callById.get(r.id);

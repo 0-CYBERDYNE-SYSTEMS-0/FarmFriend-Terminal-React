@@ -125,7 +125,7 @@ function toolCallsFromAnthropicStream(toolByIndex: Map<number, { id?: string; na
   return out;
 }
 
-function zaiAnthropicProvider(params: { apiKey: string; baseUrl: string }): Provider {
+function zaiAnthropicProvider(params: { apiKey: string; baseUrl: string; endpoint?: string }): Provider {
   let baseUrl = params.baseUrl.replace(/\/+$/, "");
   if (baseUrl.endsWith("/v1")) baseUrl = baseUrl.slice(0, -3);
   const debug = ["1", "true", "yes", "on"].includes(String(process.env.FF_DEBUG_PROVIDER || "").trim().toLowerCase());
@@ -135,10 +135,12 @@ function zaiAnthropicProvider(params: { apiKey: string; baseUrl: string }): Prov
     console.error(`[ff-terminal][provider:zai-anthropic]`, ...args);
   };
 
+  const endpoint = params.endpoint !== undefined ? params.endpoint : "/v1/messages";
+
   return {
     name: "zai",
     async *streamChat({ model, messages, tools, temperature, maxTokens, signal }): AsyncGenerator<ProviderStreamEvent> {
-      const url = `${baseUrl}/v1/messages`;
+      const url = endpoint ? `${baseUrl}${endpoint}` : baseUrl;
       const { anthropicMessages, system } = convertMessages(messages);
       const payload: any = {
         // Z.ai "Anthropic-compatible" endpoint expects GLM model IDs (e.g. GLM-4.6).
@@ -265,13 +267,14 @@ export function zaiProvider(params: { apiKey: string; baseUrl: string }): Provid
   // Z.ai gateways vary: some expose `/chat/completions` under the given base URL, others require an extra `/v1`.
   const noV1 = openAICompatProvider({ ...common, appendV1: false });
   const withV1 = openAICompatProvider({ ...common, appendV1: true });
+  const rawAnthropic = zaiAnthropicProvider({ ...params, endpoint: "" });
   const anthropic = zaiAnthropicProvider(params);
 
   return {
     name: "zai",
     async *streamChat(args: Parameters<Provider["streamChat"]>[0]) {
       const preferAnthropic = params.baseUrl.toLowerCase().includes("anthropic");
-      const attempts = preferAnthropic ? [anthropic, noV1, withV1] : [noV1, withV1, anthropic];
+      const attempts = preferAnthropic ? [rawAnthropic, anthropic, noV1, withV1] : [noV1, withV1, rawAnthropic, anthropic];
       const discardedErrors: string[] = [];
 
       for (let i = 0; i < attempts.length; i += 1) {

@@ -35,6 +35,11 @@ export function buildEnvironmentalContext(params: { workingDir: string; sessionS
         ]
       : []),
     "## Contextual Awareness Guidelines",
+    "",
+    "CRITICAL - Current Date Awareness:",
+    `Today's date is ${yyyy}-${mm}-${dd} (${weekday}). When searching for current events, news, breaking stories, or ANY time-sensitive information, you MUST use this current date (${yyyy}-${mm}-${dd}) in your search queries. DO NOT use dates from your training data or assume the year is anything other than ${yyyy}.`,
+    "",
+    "Additional Guidelines:",
     "- Consider current time for scheduling and time-sensitive tasks",
     "- Account for system resources when suggesting performance optimizations",
     "- Provide platform-specific solutions based on the operating system",
