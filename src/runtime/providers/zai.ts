@@ -274,7 +274,8 @@ export function zaiProvider(params: { apiKey: string; baseUrl: string }): Provid
     name: "zai",
     async *streamChat(args: Parameters<Provider["streamChat"]>[0]) {
       const preferAnthropic = params.baseUrl.toLowerCase().includes("anthropic");
-      const attempts = preferAnthropic ? [rawAnthropic, anthropic, noV1, withV1] : [noV1, withV1, rawAnthropic, anthropic];
+      // For anthropic-compatible endpoints, ONLY use raw base URL (no path suffixes)
+      const attempts = preferAnthropic ? [rawAnthropic] : [noV1, withV1, rawAnthropic, anthropic];
       const discardedErrors: string[] = [];
 
       for (let i = 0; i < attempts.length; i += 1) {
