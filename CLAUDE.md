@@ -40,6 +40,11 @@ npm run build
 ```
 This catches TypeScript errors before deployment.
 
+### Logging & Observability
+- Structured JSONL session logs are written to `ff-terminal-workspace/logs/sessions/<session>.jsonl` (rotated, level-controlled via `log_level` in config). Per-run headless logs live in `ff-terminal-workspace/logs/runs/`.
+- Tool start/end events include redacted args and output previews; turn completion entries capture duration and tool counts.
+- To trace a failing run quickly: `tail -f ff-terminal-workspace/logs/sessions/<session>.jsonl`.
+
 ## Project Structure
 
 The codebase follows a modular architecture with clear separation of concerns:
@@ -134,6 +139,9 @@ The core agent execution engine with multiple responsibilities:
 - `registry.ts` - Hook registration
 - `completionValidator.ts` - Validates promise extraction from tool results
 - Built-in: `completionValidationStopHook.ts` - Default completion validation
+
+**Logging (`logging/`)**
+- `structuredLogger.ts` - JSONL logger with rotation/redaction used by agent loop and headless runs.
 
 #### **Web (`src/web/server.ts`)**
 Alternative HTTP+WebSocket server on port 8787 for web-based UI.

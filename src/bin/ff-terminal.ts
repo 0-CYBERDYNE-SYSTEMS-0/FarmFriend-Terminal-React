@@ -7,6 +7,7 @@ import { ToolRegistry } from "../runtime/tools/registry.js";
 import { registerAllTools } from "../runtime/registerDefaultTools.js";
 import { defaultWorkspaceDir } from "../runtime/config/paths.js";
 import { findRepoRoot } from "../runtime/config/repoRoot.js";
+import { resolveConfig } from "../runtime/config/loadConfig.js";
 import { runAgentTurn } from "../runtime/agentLoop.js";
 import { toWire } from "../runtime/streamProtocol.js";
 import { newId } from "../shared/ids.js";
@@ -20,6 +21,7 @@ import { withToolContext } from "../runtime/tools/context.js";
 import { spawn } from "node:child_process";
 import { loadDefaultDotenv } from "../runtime/config/dotenv.js";
 import { GLOBAL_TOOL_CRED_PROFILE, OPTIONAL_TOOL_ENV_KEYS } from "../runtime/profiles/toolKeys.js";
+import { StructuredLogger, parseLogLevel, truncateForLog } from "../runtime/logging/structuredLogger.js";
 
 function usage(): void {
   // eslint-disable-next-line no-console
@@ -251,6 +253,12 @@ async function run(): Promise<void> {
 
     const repoRoot = findRepoRoot();
     const workspaceDir = process.env.FF_WORKSPACE_DIR || defaultWorkspaceDir(repoRoot);
+    const runtimeCfg = resolveConfig({ repoRoot });
+    const logLevel = parseLogLevel((runtimeCfg as any).log_level);
+    const logMaxBytes = Number((runtimeCfg as any).log_max_bytes ?? 5 * 1024 * 1024);
+    const logRetention = Number((runtimeCfg as any).log_retention ?? 3);
+    const runStartedAt = Date.now();
+    let runLogger: StructuredLogger | null = null;
     const registry = new ToolRegistry();
     registerAllTools(registry, { workspaceDir });
 
@@ -271,6 +279,20 @@ async function run(): Promise<void> {
       task.last_run = { started_at: new Date().toISOString() };
       saveTaskStore(workspaceDir, store);
     }
+
+    const runLogFile = path.join(
+      workspaceDir,
+      "logs",
+      "runs",
+      `${scheduledTaskName ? `scheduled_${scheduledTaskName}` : `session_${sessionId}`}.jsonl`
+    );
+    runLogger = new StructuredLogger({ filePath: runLogFile, level: logLevel, maxBytes: logMaxBytes, retention: logRetention });
+    runLogger.log("info", "run_start", {
+      session_id: sessionId,
+      scheduled_task: scheduledTaskName ?? undefined,
+      headless,
+      prompt_preview: truncateForLog(promptToRun, 400)
+    });
 
     const controller = new AbortController();
     const lines: string[] = [];
@@ -299,6 +321,11 @@ async function run(): Promise<void> {
       error = err instanceof Error ? err.message : String(err);
       // eslint-disable-next-line no-console
       console.error(error);
+      runLogger?.log("error", "run_exception", {
+        session_id: sessionId,
+        scheduled_task: scheduledTaskName ?? undefined,
+        message: error
+      });
       process.exitCode = 1;
     }
 
@@ -309,6 +336,12 @@ async function run(): Promise<void> {
       const stamp = new Date().toISOString().replace(/[:.]/g, "-");
       const logPath = path.join(logsDir, `${scheduledTaskName}_${stamp}.log`);
       fs.writeFileSync(logPath, lines.join("\n") + "\n", "utf8");
+      runLogger?.log("info", "run_stdout_saved", {
+        session_id: sessionId,
+        scheduled_task: scheduledTaskName,
+        path: logPath,
+        lines: lines.length
+      });
 
       const store = loadTaskStore(workspaceDir);
       const task = store.tasks.find((t) => t.name === scheduledTaskName);
@@ -320,11 +353,19 @@ async function run(): Promise<void> {
           ok,
           error,
           session_id: sessionId,
-          stdout_log: logPath
+          stdout_log: logPath,
+          duration_ms: Date.now() - runStartedAt
         };
         saveTaskStore(workspaceDir, store);
       }
     }
+    runLogger?.log("info", "run_complete", {
+      session_id: sessionId,
+      scheduled_task: scheduledTaskName ?? undefined,
+      ok,
+      error,
+      duration_ms: Date.now() - runStartedAt
+    });
     return;
   }
 

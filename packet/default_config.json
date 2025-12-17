@@ -37,6 +37,8 @@
   "show_reasoning": false,
   "debug": false,
   "log_level": "INFO",
+  "log_max_bytes": 5242880,
+  "log_retention": 3,
   "mute": false,
   "hooks_enabled": true,
   "hooks_command_blocking": true,

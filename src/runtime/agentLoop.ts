@@ -20,26 +20,8 @@ import {
 import { listSkillStubs } from "./tools/implementations/skills.js";
 import { HookRegistry } from "./hooks/registry.js";
 import { createCompletionValidationStopHook } from "./hooks/builtin/completionValidationStopHook.js";
-
-function redactSecrets(value: unknown): unknown {
-  const KEY_RE = /(api_?key|token|password|secret|authorization)/i;
-  if (value == null) return value;
-  if (typeof value === "string") {
-    // Don't try to be clever; if it looks like a token, redact.
-    if (value.length >= 16) return "[REDACTED]";
-    return value;
-  }
-  if (typeof value === "number" || typeof value === "boolean") return value;
-  if (Array.isArray(value)) return value.map(redactSecrets);
-  if (typeof value === "object") {
-    const out: Record<string, unknown> = {};
-    for (const [k, v] of Object.entries(value as any)) {
-      out[k] = KEY_RE.test(k) ? "[REDACTED]" : redactSecrets(v);
-    }
-    return out;
-  }
-  return String(value);
-}
+import { StructuredLogger, parseLogLevel, redactValue, truncateForLog } from "./logging/structuredLogger.js";
+import { newId } from "../shared/ids.js";
 
 function smartTruncate(text: string, maxLen: number): string {
   if (text.length <= maxLen) return text;
@@ -213,6 +195,8 @@ export async function* runAgentTurn(params: {
   const { userInput, registry, signal, sessionId } = params;
   const repoRoot = params.repoRoot ?? findRepoRoot();
   const workingDir = process.cwd();
+  const runStartedAt = Date.now();
+  const turnId = newId("turn");
 
   yield { kind: "status", message: `Starting turn...` };
 
@@ -221,8 +205,13 @@ export async function* runAgentTurn(params: {
   saveSession(session);
 
   const cfg = resolveConfig({ repoRoot });
-
   const toolCtx = getToolContext();
+  const logLevel = parseLogLevel((cfg as any).log_level);
+  const logMaxBytes = Number((cfg as any).log_max_bytes ?? 5 * 1024 * 1024);
+  const logRetention = Number((cfg as any).log_retention ?? 3);
+  const logBaseDir = toolCtx?.workspaceDir ?? repoRoot ?? process.cwd();
+  const sessionLogPath = path.join(logBaseDir, "logs", "sessions", `${sessionId}.jsonl`);
+  const logger = new StructuredLogger({ filePath: sessionLogPath, level: logLevel, maxBytes: logMaxBytes, retention: logRetention });
   const workspaceDirForSummary = toolCtx?.workspaceDir;
   const sessionSummary = (() => {
     if (!workspaceDirForSummary) return undefined;
@@ -288,7 +277,6 @@ export async function* runAgentTurn(params: {
   const { provider, model } = createProvider({ repoRoot, modelOverride: params.modelOverride });
   // Only advertise tools we can actually execute (prevents the model from calling unimplemented tools).
   const tools = loadToolSchemas(repoRoot).filter((t) => registry.has(t.function.name));
-
   const messages: OpenAIMessage[] = [{ role: "system", content: systemPrompt }];
   for (const m of session.conversation.slice(-40)) {
     messages.push({ role: m.role === "assistant" ? "assistant" : "user", content: m.content });
@@ -305,16 +293,43 @@ export async function* runAgentTurn(params: {
   const completionValidationEnabled =
     hooksEnabled && (cfg as any).hooks_completion_validation !== false && String(process.env.FF_DISABLE_COMPLETION_VALIDATION || "") !== "1";
   const completionValidationMaxAttempts = Number((cfg as any).hooks_completion_validation_max_attempts ?? 2);
+  logger.log("info", "turn_start", {
+    session_id: sessionId,
+    turn_id: turnId,
+    user_input_preview: smartTruncate(userInput, 400),
+    provider: provider.name,
+    model,
+    workspace_dir: toolCtx?.workspaceDir,
+    repo_root: repoRoot,
+    max_iterations: maxIterations,
+    tool_limit_total: toolLimitTotal,
+    hooks_enabled: hooksEnabled,
+    hooks_tool_logging: hooksToolLogging,
+    completion_validation: completionValidationEnabled
+  });
   const toolsLogPath =
     toolCtx?.workspaceDir && hooksEnabled && hooksToolLogging
       ? path.join(toolCtx.workspaceDir, hooksLogDirectory, `tools_${sessionId}.jsonl`)
       : null;
 
   const logToolEvent = (ev: Record<string, unknown>) => {
+    const payload = { ...ev, session_id: sessionId, turn_id: turnId };
+    // Structured logger (central, rotated)
+    try {
+      logger.log("info", String(ev.event || "tool_event"), {
+        ...payload,
+        arguments: ev.arguments ? redactValue(ev.arguments) : undefined,
+        output_preview: ev.output_preview ? truncateForLog(String(ev.output_preview)) : undefined
+      });
+    } catch {
+      // ignore structured logger errors
+    }
+
+    // Legacy per-session tool log file
     if (!toolsLogPath) return;
     try {
       fs.mkdirSync(path.dirname(toolsLogPath), { recursive: true });
-      fs.appendFileSync(toolsLogPath, JSON.stringify(ev) + "\n", "utf8");
+      fs.appendFileSync(toolsLogPath, JSON.stringify(payload) + "\n", "utf8");
     } catch {
       // ignore logging failures
     }
@@ -323,6 +338,7 @@ export async function* runAgentTurn(params: {
   const promisesThisTurn: CompletionPromise[] = [];
   const executionsThisTurn: ExecutionRecord[] = [];
   const hookRegistry = new HookRegistry();
+  let iterationCount = 0;
 
   if (completionValidationEnabled) {
     hookRegistry.register(
@@ -348,6 +364,8 @@ export async function* runAgentTurn(params: {
   };
 
   for (let i = 0; i < maxIterations; i += 1) {
+    iterationCount = i + 1;
+    logger.log("debug", "iteration_start", { session_id: sessionId, turn_id: turnId, iteration: i + 1 });
     yield { kind: "status", message: `Provider: ${provider.name} | Model: ${model}` };
 
     let toolCalls: { id: string; name: string; arguments: unknown }[] = [];
@@ -369,12 +387,24 @@ export async function* runAgentTurn(params: {
         if (cleaned) {
           emittedAnyContent = true;
           yield { kind: "content", delta: cleaned };
+          logger.log("debug", "assistant_delta", {
+            session_id: sessionId,
+            turn_id: turnId,
+            iteration: i + 1,
+            delta_preview: truncateForLog(cleaned, 400)
+          });
         }
       } else if (ev.type === "thinking") {
         emittedAnyThinking = true;
         yield { kind: "thinking", delta: ev.delta };
       } else if (ev.type === "error") {
         yield { kind: "error", message: ev.message };
+        logger.log("error", "provider_error", {
+          session_id: sessionId,
+          turn_id: turnId,
+          iteration: i + 1,
+          message: ev.message
+        });
       } else if (ev.type === "final") {
         assistantContent = ev.content.replace("[AWAITING_INPUT]", "");
         toolCalls = ev.toolCalls;
@@ -387,6 +417,13 @@ export async function* runAgentTurn(params: {
     }
 
     finalAssistantContent = assistantContent;
+    logger.log("info", "assistant_message", {
+      session_id: sessionId,
+      turn_id: turnId,
+      iteration: i + 1,
+      content_preview: smartTruncate(assistantContent, 800),
+      tool_calls_count: toolCalls.length
+    });
 
     if (completionValidationEnabled) {
       const extracted = extractPromises(assistantContent);
@@ -417,6 +454,14 @@ export async function* runAgentTurn(params: {
         maxIterations,
         toolExecutionsCount: executionsThisTurn.length
       });
+      const stopReason = stop.action === "allow" ? undefined : (stop as any).reason ?? (stop as any).statusMessage;
+      logger.log("debug", "agent_stop_decision", {
+        session_id: sessionId,
+        turn_id: turnId,
+        iteration: i + 1,
+        action: stop.action,
+        reason: stopReason
+      });
       if (stop.action === "block" && i < maxIterations - 1) {
         if (stop.statusMessage) yield { kind: "status", message: stop.statusMessage };
         messages.push({ role: "system", content: stop.systemPrompt });
@@ -429,6 +474,13 @@ export async function* runAgentTurn(params: {
     }
     if (toolCallsExecuted + toolCalls.length > toolLimitTotal) {
       yield { kind: "error", message: `Tool call limit exceeded (${toolLimitTotal}). Refusing to execute more tools.` };
+      logger.log("warn", "tool_limit_reached", {
+        session_id: sessionId,
+        turn_id: turnId,
+        iteration: i + 1,
+        attempted: toolCallsExecuted + toolCalls.length,
+        limit: toolLimitTotal
+      });
       break;
     }
 
@@ -452,6 +504,14 @@ export async function* runAgentTurn(params: {
           name: tc.name,
           ok: false,
           output: `Blocked by pre_tool hook: ${pre.reason}`
+        });
+        logToolEvent({
+          event: "tool_blocked",
+          ts: new Date().toISOString(),
+          session_id: sessionId,
+          tool_call_id: tc.id,
+          tool_name: tc.name,
+          reason: pre.reason
         });
         continue;
       }
@@ -482,7 +542,7 @@ export async function* runAgentTurn(params: {
             session_id: sessionId,
             tool_call_id: call.id,
             tool_name: call.name,
-            arguments: redactSecrets(call.arguments)
+            arguments: call.arguments
           });
         },
         onFinish: (call, result, durationMs) => {
@@ -495,7 +555,7 @@ export async function* runAgentTurn(params: {
             tool_name: call.name,
             ok: result.ok,
             duration_ms: durationMs,
-            output_preview: String(result.output || "").slice(0, 800)
+            output_preview: result.output
           });
         }
       }
@@ -574,6 +634,15 @@ export async function* runAgentTurn(params: {
   if (finalAssistantContent.includes("[AWAITING_INPUT]")) {
     // No-op; token already stripped from output.
   }
+
+  logger.log("info", "turn_complete", {
+    session_id: sessionId,
+    turn_id: turnId,
+    duration_ms: Date.now() - runStartedAt,
+    iterations: iterationCount,
+    tool_calls_executed: toolCallsExecuted,
+    final_content_preview: smartTruncate(finalAssistantContent, 800)
+  });
 
   yield { kind: "task_completed" };
 }

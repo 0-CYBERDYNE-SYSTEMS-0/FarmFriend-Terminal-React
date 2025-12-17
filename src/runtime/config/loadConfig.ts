@@ -10,6 +10,9 @@ export type RuntimeConfig = Record<string, unknown> & {
   hooks_enabled?: boolean;
   parallel_mode?: boolean;
   system_message_variant?: "a" | "b";
+  log_level?: string;
+  log_max_bytes?: number;
+  log_retention?: number;
 
   // Optional key locations (recommended for background runs where env vars may be missing)
   openai_api_key?: string;

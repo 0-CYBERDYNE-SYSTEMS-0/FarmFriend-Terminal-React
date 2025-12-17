@@ -26,6 +26,7 @@ export type ScheduledTask = {
     session_id?: string;
     stdout_log?: string;
     stderr_log?: string;
+    duration_ms?: number;
   };
 };
 
