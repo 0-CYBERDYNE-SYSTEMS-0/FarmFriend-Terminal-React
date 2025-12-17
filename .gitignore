@@ -25,7 +25,8 @@ skills/**/*.p12
 skills/**/*.pfx
 
 # Profile configurations (may contain sensitive data)
-~/.ff-terminal-profiles.json
+.ff-terminal-profiles.json
+*.ff-terminal-profiles.json
 profiles.json
 .user-profiles
 
