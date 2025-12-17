@@ -350,7 +350,7 @@ const MainView = memo(function MainView(props: MainViewProps) {
   const mountsPanel = mode === "mounts" ? (
     <Box flexDirection="column">
       <Text>Mounts (read-only)</Text>
-      <Text dimColor>Esc: back • ↑/↓: select • Space/Enter: toggle • q: quit</Text>
+      <Text dimColor>Esc: back • ↑/↓: select • Space/Enter: toggle</Text>
       <Box flexDirection="column" marginTop={1}>
         {mountRows.map((row, idx) => {
           const selected = idx === mountsIndex;
@@ -412,7 +412,7 @@ const MainView = memo(function MainView(props: MainViewProps) {
       <Text>
         Models for profile: <Text color="yellow">{profileName}</Text>
       </Text>
-      <Text dimColor>Esc: back • ↑/↓: select • Enter: edit • q: quit</Text>
+      <Text dimColor>Esc: back • ↑/↓: select • Enter: edit</Text>
       <Box flexDirection="column" marginTop={1}>
         {MODEL_ROWS.map((row, idx) => {
           const selected = idx === modelIndex && !modelEditingKey;
@@ -949,10 +949,6 @@ ${fullContext}`;
         toggle();
         return;
       }
-      if (ch === "q") {
-        setMode("chat");
-        return;
-      }
       return;
     }
 
@@ -986,10 +982,6 @@ ${fullContext}`;
       if (ch && ch.trim()) {
         setProjectFilter((v) => v + ch);
         setProjectIndex(0);
-        return;
-      }
-      if (ch === "q") {
-        setMode("chat");
         return;
       }
       return;
@@ -1054,7 +1046,7 @@ ${fullContext}`;
           persistModelValue(modelEditingKey, modelEditValue);
           pushLines({
             kind: "system",
-            text: `Saved ${modelEditingKey} for profile "${profileName}". Restart ff-terminal to apply to the daemon.`
+            text: `Saved ${modelEditingKey} for profile "${profileName}". Restart daemon (npm run dev:start) to apply changes.`
           });
           setModelEditingKey(null);
           setModelEditValue("");
@@ -1082,10 +1074,6 @@ ${fullContext}`;
         setModelEditValue(getModelValue(currentProfile, k));
         return;
       }
-      if (ch === "q") {
-        setMode("chat");
-        return;
-      }
       return;
     }
 
@@ -1101,23 +1089,22 @@ ${fullContext}`;
         { kind: "system", text: "  /help            Show this help" },
         { kind: "system", text: "  /tools           List available tools" },
         { kind: "system", text: "  /agents          List available agent roles/models" },
-        { kind: "system", text: "  /wizard          Open wizard picker" },
-        { kind: "system", text: "  /models          Open models wizard" },
-        { kind: "system", text: "  /mounts          Show mounts + status" },
-        { kind: "system", text: "  /wizard mounts   Configure mounts" },
+        { kind: "system", text: "  /mounts          Show mounts status (read-only)" },
+        { kind: "system", text: "  /wizard          Open wizard menu (wizards: models, mounts, init-project)" },
+        { kind: "system", text: "  /models          Open models wizard (alias: /wizard models)" },
         { kind: "system", text: "  /mode [auto|confirm|read_only|planning]  Set operation mode" },
-        { kind: "system", text: "  /planning         Alias for /mode planning" },
-        { kind: "system", text: "  /init             Run a hidden init turn" },
+        { kind: "system", text: "  /planning        Alias for /mode planning" },
+        { kind: "system", text: "  /init            Run a hidden init turn" },
         { kind: "system", text: "  /init-project [path]  Initialize from a project directory (picker if omitted)" },
-        { kind: "system", text: "  /clear            Clear transcript" },
-        { kind: "system", text: "  /commands         List custom commands (not implemented yet)" },
-        { kind: "system", text: "  /command ...      Manage custom commands (not implemented yet)" },
-        { kind: "system", text: "  /quit (/exit)     Exit" },
+        { kind: "system", text: "  /clear           Clear transcript" },
+        { kind: "system", text: "  /commands        List custom commands (not implemented yet)" },
+        { kind: "system", text: "  /command ...     Manage custom commands (not implemented yet)" },
+        { kind: "system", text: "  /quit (/exit)    Exit" },
         { kind: "system", text: "  /theme (/colors) Print color-role samples" },
         { kind: "system", text: "  //text           Send a literal prompt starting with '/'" },
         { kind: "system", text: "" },
         { kind: "system", text: "Shortcuts:" },
-        { kind: "system", text: "  Shift+Tab         Cycle operation mode" }
+        { kind: "system", text: "  Shift+Tab        Cycle operation mode" }
       ]);
     };
 
