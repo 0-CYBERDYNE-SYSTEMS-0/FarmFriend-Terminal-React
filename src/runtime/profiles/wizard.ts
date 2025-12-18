@@ -25,7 +25,9 @@ const PRESETS: Record<string, Preset> = {
     model: "MiniMax-M2",
     credentialLabel: "MINIMAX_API_KEY"
   },
-  "LM Studio (local)": { provider: "lmstudio", baseUrl: "http://localhost:1234", model: "llama-3.2-3b-instruct" }
+  "LM Studio (local)": { provider: "lmstudio", baseUrl: "http://localhost:1234", model: "llama-3.2-3b-instruct" },
+  "OpenAI-Compatible (Generic)": { provider: "openai-compatible", credentialLabel: "API_KEY" },
+  "Anthropic-Compatible (Generic)": { provider: "anthropic-compatible", credentialLabel: "API_KEY" }
 };
 
 async function tryInquirer(): Promise<InquirerLike | null> {
@@ -119,7 +121,7 @@ export async function runProfileSetupWizard(params: { config: Config }): Promise
           type: "list",
           name: "provider",
           message: "Provider:",
-          choices: ["openrouter", "anthropic", "zai", "minimax", "lmstudio"]
+          choices: ["openrouter", "anthropic", "zai", "minimax", "lmstudio", "openai-compatible", "anthropic-compatible"]
         },
         { type: "input", name: "baseUrl", message: "Base URL (optional):" },
         { type: "input", name: "model", message: "Model (optional):" }
@@ -132,16 +134,28 @@ export async function runProfileSetupWizard(params: { config: Config }): Promise
       };
     } else {
       const preset = PRESETS[presetName];
+      const isGenericProvider = ["openai-compatible", "anthropic-compatible"].includes(preset.provider);
       const ans = await inquirer.prompt<{ baseUrl?: string; model?: string }>([
-        ...(preset.baseUrl
-          ? [{ type: "input", name: "baseUrl", message: "Base URL:", default: preset.baseUrl }]
+        ...(preset.baseUrl !== undefined || isGenericProvider
+          ? [{
+              type: "input",
+              name: "baseUrl",
+              message: "Base URL:",
+              default: preset.baseUrl || "",
+              validate: (input: string) => {
+                if (isGenericProvider && !input.trim()) {
+                  return "Base URL is required for generic providers";
+                }
+                return true;
+              }
+            }]
           : []),
         { type: "input", name: "model", message: "Model:", default: preset.model || "" }
       ]);
       profile = {
         name: name.trim(),
         provider: preset.provider,
-        baseUrl: preset.baseUrl ? (ans.baseUrl?.trim() || preset.baseUrl) : undefined,
+        baseUrl: ans.baseUrl?.trim() || preset.baseUrl || undefined,
         model: ans.model?.trim() || preset.model
       };
     }
@@ -281,16 +295,34 @@ export async function runProfileSetupWizard(params: { config: Config }): Promise
     let profile: Profile;
 
     if (presetName === "Custom") {
-      const provider = (await rl.question("Provider (openrouter | anthropic | zai | minimax | lmstudio): ")).trim() as ProviderKind;
-      if (!["openrouter", "anthropic", "zai", "minimax", "lmstudio"].includes(provider)) throw new Error("Invalid provider");
+      const provider = (await rl.question("Provider (openrouter | anthropic | zai | minimax | lmstudio | openai-compatible | anthropic-compatible): ")).trim() as ProviderKind;
+      if (!["openrouter", "anthropic", "zai", "minimax", "lmstudio", "openai-compatible", "anthropic-compatible"].includes(provider)) throw new Error("Invalid provider");
       const baseUrl = (await rl.question("Base URL (optional): ")).trim() || undefined;
       const model = (await rl.question("Model (optional): ")).trim() || undefined;
       profile = { name, provider, baseUrl, model };
     } else {
       const preset = PRESETS[presetName];
-      const baseUrl = preset.baseUrl
-        ? (await rl.question(`Base URL [default: ${preset.baseUrl}]: `)).trim() || preset.baseUrl
-        : undefined;
+      const isGenericProvider = ["openai-compatible", "anthropic-compatible"].includes(preset.provider);
+
+      let baseUrl: string | undefined;
+      if (preset.baseUrl !== undefined || isGenericProvider) {
+        let baseUrlInput: string;
+        do {
+          baseUrlInput = (await rl.question(`Base URL${preset.baseUrl ? ` [default: ${preset.baseUrl}]` : ""}: `)).trim();
+          if (!baseUrlInput && preset.baseUrl) {
+            baseUrl = preset.baseUrl;
+            break;
+          }
+          if (!baseUrlInput && isGenericProvider) {
+            // eslint-disable-next-line no-console
+            console.log("Base URL is required for generic providers");
+            continue;
+          }
+          baseUrl = baseUrlInput || undefined;
+          break;
+        } while (true);
+      }
+
       const model = (await rl.question(`Model${preset.model ? ` [default: ${preset.model}]` : ""}: `)).trim() || preset.model;
       profile = { name, provider: preset.provider, baseUrl, model };
     }

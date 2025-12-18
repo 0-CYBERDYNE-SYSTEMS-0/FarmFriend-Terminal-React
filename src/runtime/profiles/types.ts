@@ -1,4 +1,4 @@
-export type ProviderKind = "openrouter" | "zai" | "minimax" | "lmstudio" | "anthropic";
+export type ProviderKind = "openrouter" | "zai" | "minimax" | "lmstudio" | "anthropic" | "openai-compatible" | "anthropic-compatible";
 
 // Modeled after `ai-claude-start`: profile = connection details (non-secret),
 // credential stored separately (keychain if available, else local file fallback).

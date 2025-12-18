@@ -133,6 +133,16 @@ async function run(): Promise<void> {
       if (profile.baseUrl) process.env.MINIMAX_BASE_URL = profile.baseUrl;
     } else if (profile.provider === "lmstudio") {
       if (profile.baseUrl) process.env.LM_STUDIO_BASE_URL = profile.baseUrl;
+    } else if (profile.provider === "openai-compatible") {
+      const cred = await getCredential(profile.name, "API_KEY");
+      if (!cred) throw new Error(`No credential found for profile "${profile.name}" (API_KEY). Run: ff-terminal profile setup`);
+      process.env.API_KEY = cred;
+      if (profile.baseUrl) process.env.OPENAI_BASE_URL = profile.baseUrl;
+    } else if (profile.provider === "anthropic-compatible") {
+      const cred = await getCredential(profile.name, "API_KEY");
+      if (!cred) throw new Error(`No credential found for profile "${profile.name}" (API_KEY). Run: ff-terminal profile setup`);
+      process.env.API_KEY = cred;
+      if (profile.baseUrl) process.env.ANTHROPIC_BASE_URL = profile.baseUrl;
     }
 
     // Optional tool keys: profile override → existing env/.env → global defaults → any existing profile (migrates to global).
@@ -291,6 +301,16 @@ async function run(): Promise<void> {
         if (profile.baseUrl) process.env.MINIMAX_BASE_URL = profile.baseUrl;
       } else if (profile.provider === "lmstudio") {
         if (profile.baseUrl) process.env.LM_STUDIO_BASE_URL = profile.baseUrl;
+      } else if (profile.provider === "openai-compatible") {
+        const cred = await getCredential(profile.name, "API_KEY");
+        if (!cred) throw new Error(`No credential found for profile "${profile.name}" (API_KEY). Run: ff-terminal profile setup`);
+        process.env.API_KEY = cred;
+        if (profile.baseUrl) process.env.OPENAI_BASE_URL = profile.baseUrl;
+      } else if (profile.provider === "anthropic-compatible") {
+        const cred = await getCredential(profile.name, "API_KEY");
+        if (!cred) throw new Error(`No credential found for profile "${profile.name}" (API_KEY). Run: ff-terminal profile setup`);
+        process.env.API_KEY = cred;
+        if (profile.baseUrl) process.env.ANTHROPIC_BASE_URL = profile.baseUrl;
       }
 
       // Optional per-profile model overrides

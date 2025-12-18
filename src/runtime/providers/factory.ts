@@ -5,6 +5,7 @@ import { zaiProvider } from "./zai.js";
 import { minimaxProvider } from "./minimax.js";
 import { lmStudioProvider } from "./lmstudio.js";
 import { anthropicProvider } from "./anthropic.js";
+import { openAICompatProvider } from "./openaiCompat.js";
 
 function isEnabled(v: unknown): boolean {
   if (v === true) return true;
@@ -54,6 +55,21 @@ export function createProvider(params?: { repoRoot?: string; modelOverride?: str
       const baseUrl = String(process.env.LM_STUDIO_BASE_URL || cfg.lm_studio_base_url || "http://localhost:1234");
       const apiKey = typeof cfg.lm_studio_api_key === "string" ? cfg.lm_studio_api_key : undefined;
       return { provider: lmStudioProvider({ baseUrl, apiKey }), model };
+    }
+    if (override === "openai-compatible") {
+      const apiKey = String(process.env.API_KEY || process.env.OPENAI_API_KEY || cfg.api_key || "");
+      if (!apiKey) throw new Error("FF_PROVIDER=openai-compatible but API_KEY is not set");
+      const baseUrl = String(process.env.OPENAI_BASE_URL || cfg.openai_base_url || "");
+      if (!baseUrl) throw new Error("FF_PROVIDER=openai-compatible requires a base URL (set OPENAI_BASE_URL)");
+      return { provider: openAICompatProvider({ name: "openai-compatible", baseUrl, apiKey }), model };
+    }
+    if (override === "anthropic-compatible") {
+      const apiKey = String(process.env.API_KEY || process.env.ANTHROPIC_API_KEY || cfg.api_key || "");
+      if (!apiKey) throw new Error("FF_PROVIDER=anthropic-compatible but API_KEY is not set");
+      const baseUrl = String(process.env.ANTHROPIC_BASE_URL || cfg.anthropic_base_url || "");
+      if (!baseUrl) throw new Error("FF_PROVIDER=anthropic-compatible requires a base URL (set ANTHROPIC_BASE_URL)");
+      const anthropicVersion = String(process.env.ANTHROPIC_VERSION || cfg.anthropic_version || "2023-06-01");
+      return { provider: anthropicProvider({ apiKey, baseUrl, anthropicVersion }), model };
     }
     throw new Error(`Unknown FF_PROVIDER: ${override}`);
   }

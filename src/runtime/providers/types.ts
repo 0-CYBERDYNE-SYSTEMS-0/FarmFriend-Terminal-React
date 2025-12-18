@@ -26,7 +26,7 @@ export type ProviderStreamEvent =
   | { type: "final"; content: string; toolCalls: ToolCall[]; rawModel?: string };
 
 export type Provider = {
-  name: "openrouter" | "zai" | "minimax" | "lmstudio" | "anthropic";
+  name: "openrouter" | "zai" | "minimax" | "lmstudio" | "anthropic" | "openai-compatible" | "anthropic-compatible";
   streamChat(params: {
     model: string;
     messages: OpenAIMessage[];
