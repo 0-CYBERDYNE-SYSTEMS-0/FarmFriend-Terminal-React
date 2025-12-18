@@ -391,3 +391,29 @@ settings.local.json
 yarn.lock
 pnpm-lock.yaml
 !package-lock.json
+
+# ================================
+# FF-Terminal Workspace (Runtime)
+# ================================
+# All workspace-generated files should be local-only
+ff-terminal-workspace/
+# Explicitly allow some workspace files if needed
+!ff-terminal-workspace/.gitkeep
+
+# Session artifacts (thoughts, todos, memories)
+ff-terminal-workspace/thoughts/
+ff-terminal-workspace/todos/
+ff-terminal-workspace/session_summary.md
+
+# Logs (session and scheduled runs)
+ff-terminal-workspace/logs/
+
+# Workspace-specific docs (generated)
+ff-terminal-workspace/docs/
+
+# Memory and skill cache
+ff-terminal-workspace/memory_core/
+ff-terminal-workspace/projects/
+
+# Temporary workspace files
+.fakehome/
