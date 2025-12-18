@@ -34,43 +34,14 @@ export function createCompletionValidationStopHook(params: {
     const unfulfilled = unfulfilledHighConfidence(promises);
     if (!unfulfilled.length) return { action: "allow" };
 
-    const signature = signatureOf(unfulfilled);
-    const noProgress = lastGuardSignature === signature && lastGuardExecutions === executions.length;
-    const madeToolProgressSinceLastGuard = executions.length > lastGuardExecutions;
-
-    if (madeToolProgressSinceLastGuard && !noProgress && blockAttempts < params.maxAttempts) {
-      blockAttempts += 1;
-      lastGuardSignature = signature;
-      lastGuardExecutions = executions.length;
-      const systemPrompt = buildContinuationFeedback(unfulfilled);
-      return {
-        action: "block",
-        reason: "completion_validation: unfulfilled commitments",
-        statusMessage: `completion_validation: continuing (${blockAttempts}/${params.maxAttempts})`,
-        systemPrompt
-      };
-    }
-
-    if (!madeToolProgressSinceLastGuard && !reasoningOnlyKickUsed) {
-      reasoningOnlyKickUsed = true;
-      lastGuardSignature = signature;
-      lastGuardExecutions = executions.length;
-      return {
-        action: "block",
-        reason: "completion_validation: reasoning-only kick",
-        statusMessage: "completion_validation: continuing (reasoning-only kick; must resolve or ask user)",
-        systemPrompt:
-          "Stop-hook: you are about to stop with unfulfilled commitments. In your next message, do ONE of:\n" +
-          "1) Call the necessary tools to actually complete the missing work, OR\n" +
-          "2) Ask the user specific questions required to proceed, and clearly mark the task as waiting on user input.\n" +
-          "Do not claim completion unless the missing commitments are satisfied."
-      };
-    }
+    // ADVISORY MODE: Inform user but allow agent to stop naturally
+    // This removes adversarial tension while maintaining visibility
+    const statusMessage = `⚠️ Agent stopped with ${unfulfilled.length} announced task${unfulfilled.length > 1 ? 's' : ''} incomplete`;
 
     return {
-      action: "need_user",
-      reason: "completion_validation: blocked (no progress possible without user input or constraints change)",
-      statusMessage: "need_user: blocked on missing info/progress (ask user or adjust constraints)"
+      action: "allow",
+      reason: "completion_validation: advisory (agent allowed to stop)",
+      statusMessage
     };
   };
 
