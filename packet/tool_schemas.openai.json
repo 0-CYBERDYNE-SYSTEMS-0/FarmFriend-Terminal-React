@@ -1253,7 +1253,8 @@
     "type": "function",
     "function": {
       "name": "TodoWrite",
-      "description": "Use this tool to create and manage a structured task list for your current coding session. This helps you track progress, organize complex tasks, and demonstrate thoroughness to the user.\n\nIMPORTANT: Todos are a progress-tracking aid, not independent directives. Never invent placeholder todos (e.g., 'First task') or start executing work solely because old todos exist; only reflect the user’s actual request.\n\nIMPORTANT: Work with 4-5 todos at a time for optimal focus and productivity. When todos are completed, remove them and add new ones as needed. Keep the active list manageable and prioritized.",
+      "description": "Use this tool to track progress on complex tasks that require sustained execution over time. Creates persistent state to help maintain context during long-horizon operations (30+ minutes, 5+ complex steps, or tasks that may span multiple turns).\n\nWhen to use: Multi-step investigations, tasks requiring 30+ minutes, operations spanning multiple horizons, work where progress tracking provides real value.\n\nWhen NOT to use: Quick tasks (under 5 minutes), simple queries requiring 1-3 tools, or creating todos just to 'look thorough'. True thoroughness comes from completing work well, not from excessive todo creation.",
+
       "parameters": {
         "type": "object",
         "properties": {

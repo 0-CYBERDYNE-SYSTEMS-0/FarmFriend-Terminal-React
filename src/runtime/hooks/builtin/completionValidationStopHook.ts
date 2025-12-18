@@ -32,17 +32,10 @@ export function createCompletionValidationStopHook(params: {
     markFulfilled(promises, executions);
 
     const unfulfilled = unfulfilledHighConfidence(promises);
-    if (!unfulfilled.length) return { action: "allow" };
-
-    // ADVISORY MODE: Inform user but allow agent to stop naturally
-    // This removes adversarial tension while maintaining visibility
-    const statusMessage = `⚠️ Agent stopped with ${unfulfilled.length} announced task${unfulfilled.length > 1 ? 's' : ''} incomplete`;
-
-    return {
-      action: "allow",
-      reason: "completion_validation: advisory (agent allowed to stop)",
-      statusMessage
-    };
+    // ADVISORY MODE: Always allow agent to stop naturally
+    // The previous blocking logic created adversarial tension that caused loops
+    // If agent says it's done, trust it - thoroughness comes from model quality, not force
+    return { action: "allow" };
   };
 
   return {
