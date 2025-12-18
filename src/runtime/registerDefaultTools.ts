@@ -23,6 +23,7 @@ import { tavilyCrawlTool, tavilyExtractTool, tavilyMapTool } from "./tools/imple
 import { astGrepTool } from "./tools/implementations/astGrep.js";
 import { listTemplatesTool, projectTemplateTool } from "./tools/implementations/templates.js";
 import { skillApplyTool, skillDraftTool, skillSequencerTool } from "./tools/implementations/skillsWorkflow.js";
+import { agentApplyTool, agentDraftTool } from "./tools/implementations/agentsWorkflow.js";
 import { smartCleanupTool } from "./tools/implementations/smartCleanup.js";
 import { analyzeDataTool } from "./tools/implementations/analyzeData.js";
 import { notebookEditTool } from "./tools/implementations/notebookEdit.js";
@@ -76,6 +77,10 @@ export function registerDefaultTools(registry: ToolRegistry, opts: { workspaceDi
   registry.register("skill_draft", async (args) => skillDraftTool(args));
   registry.register("skill_apply", async (args) => skillApplyTool(args));
   registry.register("skill_sequencer", async (args) => skillSequencerTool(args));
+
+  // Agents workflow helpers (draft/apply).
+  registry.register("agent_draft", async (args) => agentDraftTool(args));
+  registry.register("agent_apply", async (args) => agentApplyTool(args));
 
   // Workspace cleanup.
   registry.register("smart_cleanup", async (args) => smartCleanupTool(args));
