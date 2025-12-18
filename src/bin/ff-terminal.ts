@@ -64,6 +64,50 @@ function safeModel(model?: string): string | undefined {
   return m.length ? m : undefined;
 }
 
+async function applyProviderCredentialsFromProfile(profile: ReturnType<typeof getProfileByName>): Promise<void> {
+  if (!profile) return;
+
+  try {
+    if (profile.provider === "openrouter") {
+      const cred = await getCredential(profile.name, "OPENROUTER_API_KEY");
+      if (!cred) throw new Error("OPENROUTER_API_KEY");
+      process.env.OPENROUTER_API_KEY = cred;
+    } else if (profile.provider === "anthropic") {
+      const cred = await getCredential(profile.name, "ANTHROPIC_API_KEY");
+      if (!cred) throw new Error("ANTHROPIC_API_KEY");
+      process.env.ANTHROPIC_API_KEY = cred;
+      if (profile.baseUrl) process.env.ANTHROPIC_BASE_URL = profile.baseUrl;
+    } else if (profile.provider === "zai") {
+      const cred = await getCredential(profile.name, "ANTHROPIC_AUTH_TOKEN");
+      if (!cred) throw new Error("ANTHROPIC_AUTH_TOKEN");
+      process.env.ANTHROPIC_AUTH_TOKEN = cred;
+      if (profile.baseUrl) process.env.ANTHROPIC_BASE_URL = profile.baseUrl;
+    } else if (profile.provider === "minimax") {
+      const cred = await getCredential(profile.name, "MINIMAX_API_KEY");
+      if (!cred) throw new Error("MINIMAX_API_KEY");
+      process.env.MINIMAX_API_KEY = cred;
+      if (profile.baseUrl) process.env.MINIMAX_BASE_URL = profile.baseUrl;
+    } else if (profile.provider === "lmstudio") {
+      if (profile.baseUrl) process.env.LM_STUDIO_BASE_URL = profile.baseUrl;
+    } else if (profile.provider === "openai-compatible") {
+      const cred = await getCredential(profile.name, "API_KEY");
+      if (!cred) throw new Error("API_KEY");
+      process.env.API_KEY = cred;
+      if (profile.baseUrl) process.env.OPENAI_BASE_URL = profile.baseUrl;
+    } else if (profile.provider === "anthropic-compatible") {
+      const cred = await getCredential(profile.name, "API_KEY");
+      if (!cred) throw new Error("API_KEY");
+      process.env.API_KEY = cred;
+      if (profile.baseUrl) process.env.ANTHROPIC_BASE_URL = profile.baseUrl;
+    }
+  } catch (error) {
+    const credentialType = error instanceof Error ? error.message : "credentials";
+    // eslint-disable-next-line no-console
+    console.error(`Error: Credential not found (${credentialType}). Run: ff-terminal profile setup`);
+    process.exit(1);
+  }
+}
+
 async function run(): Promise<void> {
   // Load .env/.env.local (cwd + repo root) for convenience (API keys like TAVILY_API_KEY, PERPLEXITY_API_KEY, etc.).
   loadDefaultDotenv({ repoRoot: findRepoRoot() });
@@ -112,38 +156,7 @@ async function run(): Promise<void> {
     if (model) process.env.FF_MODEL = model;
 
     // Provider env injection (mirrors ai-claude-start style: only inject needed secret).
-    if (profile.provider === "openrouter") {
-      const cred = await getCredential(profile.name, "OPENROUTER_API_KEY");
-      if (!cred) throw new Error(`No credential found for profile "${profile.name}" (OPENROUTER_API_KEY). Run: ff-terminal profile setup`);
-      process.env.OPENROUTER_API_KEY = cred;
-    } else if (profile.provider === "anthropic") {
-      const cred = await getCredential(profile.name, "ANTHROPIC_API_KEY");
-      if (!cred) throw new Error(`No credential found for profile "${profile.name}" (ANTHROPIC_API_KEY). Run: ff-terminal profile setup`);
-      process.env.ANTHROPIC_API_KEY = cred;
-      if (profile.baseUrl) process.env.ANTHROPIC_BASE_URL = profile.baseUrl;
-    } else if (profile.provider === "zai") {
-      const cred = await getCredential(profile.name, "ANTHROPIC_AUTH_TOKEN");
-      if (!cred) throw new Error(`No credential found for profile "${profile.name}" (ANTHROPIC_AUTH_TOKEN). Run: ff-terminal profile setup`);
-      process.env.ANTHROPIC_AUTH_TOKEN = cred;
-      if (profile.baseUrl) process.env.ANTHROPIC_BASE_URL = profile.baseUrl;
-    } else if (profile.provider === "minimax") {
-      const cred = await getCredential(profile.name, "MINIMAX_API_KEY");
-      if (!cred) throw new Error(`No credential found for profile "${profile.name}" (MINIMAX_API_KEY). Run: ff-terminal profile setup`);
-      process.env.MINIMAX_API_KEY = cred;
-      if (profile.baseUrl) process.env.MINIMAX_BASE_URL = profile.baseUrl;
-    } else if (profile.provider === "lmstudio") {
-      if (profile.baseUrl) process.env.LM_STUDIO_BASE_URL = profile.baseUrl;
-    } else if (profile.provider === "openai-compatible") {
-      const cred = await getCredential(profile.name, "API_KEY");
-      if (!cred) throw new Error(`No credential found for profile "${profile.name}" (API_KEY). Run: ff-terminal profile setup`);
-      process.env.API_KEY = cred;
-      if (profile.baseUrl) process.env.OPENAI_BASE_URL = profile.baseUrl;
-    } else if (profile.provider === "anthropic-compatible") {
-      const cred = await getCredential(profile.name, "API_KEY");
-      if (!cred) throw new Error(`No credential found for profile "${profile.name}" (API_KEY). Run: ff-terminal profile setup`);
-      process.env.API_KEY = cred;
-      if (profile.baseUrl) process.env.ANTHROPIC_BASE_URL = profile.baseUrl;
-    }
+    await applyProviderCredentialsFromProfile(profile);
 
     // Optional tool keys: profile override → existing env/.env → global defaults → any existing profile (migrates to global).
     for (const k of OPTIONAL_TOOL_ENV_KEYS) {
@@ -280,38 +293,7 @@ async function run(): Promise<void> {
       if (model) process.env.FF_MODEL = model;
 
       // Set up credentials based on provider
-      if (profile.provider === "openrouter") {
-        const cred = await getCredential(profile.name, "OPENROUTER_API_KEY");
-        if (!cred) throw new Error(`No credential found for profile "${profile.name}" (OPENROUTER_API_KEY). Run: ff-terminal profile setup`);
-        process.env.OPENROUTER_API_KEY = cred;
-      } else if (profile.provider === "anthropic") {
-        const cred = await getCredential(profile.name, "ANTHROPIC_API_KEY");
-        if (!cred) throw new Error(`No credential found for profile "${profile.name}" (ANTHROPIC_API_KEY). Run: ff-terminal profile setup`);
-        process.env.ANTHROPIC_API_KEY = cred;
-        if (profile.baseUrl) process.env.ANTHROPIC_BASE_URL = profile.baseUrl;
-      } else if (profile.provider === "zai") {
-        const cred = await getCredential(profile.name, "ANTHROPIC_AUTH_TOKEN");
-        if (!cred) throw new Error(`No credential found for profile "${profile.name}" (ANTHROPIC_AUTH_TOKEN). Run: ff-terminal profile setup`);
-        process.env.ANTHROPIC_AUTH_TOKEN = cred;
-        if (profile.baseUrl) process.env.ANTHROPIC_BASE_URL = profile.baseUrl;
-      } else if (profile.provider === "minimax") {
-        const cred = await getCredential(profile.name, "MINIMAX_API_KEY");
-        if (!cred) throw new Error(`No credential found for profile "${profile.name}" (MINIMAX_API_KEY). Run: ff-terminal profile setup`);
-        process.env.MINIMAX_API_KEY = cred;
-        if (profile.baseUrl) process.env.MINIMAX_BASE_URL = profile.baseUrl;
-      } else if (profile.provider === "lmstudio") {
-        if (profile.baseUrl) process.env.LM_STUDIO_BASE_URL = profile.baseUrl;
-      } else if (profile.provider === "openai-compatible") {
-        const cred = await getCredential(profile.name, "API_KEY");
-        if (!cred) throw new Error(`No credential found for profile "${profile.name}" (API_KEY). Run: ff-terminal profile setup`);
-        process.env.API_KEY = cred;
-        if (profile.baseUrl) process.env.OPENAI_BASE_URL = profile.baseUrl;
-      } else if (profile.provider === "anthropic-compatible") {
-        const cred = await getCredential(profile.name, "API_KEY");
-        if (!cred) throw new Error(`No credential found for profile "${profile.name}" (API_KEY). Run: ff-terminal profile setup`);
-        process.env.API_KEY = cred;
-        if (profile.baseUrl) process.env.ANTHROPIC_BASE_URL = profile.baseUrl;
-      }
+      await applyProviderCredentialsFromProfile(profile);
 
       // Optional per-profile model overrides
       if (profile.subagentModel?.trim()) process.env.FF_SUBAGENT_MODEL = profile.subagentModel.trim();

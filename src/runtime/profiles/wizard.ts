@@ -30,6 +30,42 @@ const PRESETS: Record<string, Preset> = {
   "Anthropic-Compatible (Generic)": { provider: "anthropic-compatible", credentialLabel: "API_KEY" }
 };
 
+function validateBaseUrl(baseUrl: string, isGenericProvider: boolean): { valid: boolean; error?: string } {
+  if (!baseUrl || baseUrl.trim() === "") {
+    if (isGenericProvider) {
+      return { valid: false, error: "Base URL is required for generic provider endpoints." };
+    }
+    return { valid: true };
+  }
+
+  try {
+    const url = new URL(baseUrl.trim());
+
+    // Require HTTPS for security (except localhost for development)
+    if (url.protocol !== "https:" && !url.hostname.includes("localhost") && !url.hostname.includes("127.0.0.1")) {
+      return { valid: false, error: "Base URL must use HTTPS for security (except localhost for development)." };
+    }
+
+    // Block common SSRF targets
+    const blockedHosts = ["169.254.169.254", "metadata.google.internal", "169.254.169.254:80"];
+    if (blockedHosts.includes(url.hostname)) {
+      return { valid: false, error: "Invalid base URL (blocked host)." };
+    }
+
+    // Block internal IP ranges (basic check)
+    const internalPatterns = [/^127\./, /^10\./, /^172\.1[6-9]\./, /^172\.2[0-9]\./, /^172\.3[01]\./, /^192\.168\./];
+    const isInternalIP = internalPatterns.some((pattern) => pattern.test(url.hostname)) && !url.hostname.includes("localhost");
+    if (isInternalIP && !baseUrl.includes("localhost")) {
+      // Allow internal IPs only if explicitly using localhost
+      return { valid: false, error: "Private IP ranges are only allowed with localhost for development." };
+    }
+
+    return { valid: true };
+  } catch (error) {
+    return { valid: false, error: "Invalid URL format. Please provide a valid HTTP/HTTPS URL." };
+  }
+}
+
 async function tryInquirer(): Promise<InquirerLike | null> {
   try {
     const mod = await import("inquirer");
@@ -143,10 +179,8 @@ export async function runProfileSetupWizard(params: { config: Config }): Promise
               message: "Base URL:",
               default: preset.baseUrl || "",
               validate: (input: string) => {
-                if (isGenericProvider && !input.trim()) {
-                  return "Base URL is required for generic providers";
-                }
-                return true;
+                const validation = validateBaseUrl(input, isGenericProvider);
+                return validation.valid ? true : validation.error!;
               }
             }]
           : []),
@@ -313,11 +347,14 @@ export async function runProfileSetupWizard(params: { config: Config }): Promise
             baseUrl = preset.baseUrl;
             break;
           }
-          if (!baseUrlInput && isGenericProvider) {
+
+          const validation = validateBaseUrl(baseUrlInput, isGenericProvider);
+          if (!validation.valid) {
             // eslint-disable-next-line no-console
-            console.log("Base URL is required for generic providers");
+            console.log(`Error: ${validation.error}`);
             continue;
           }
+
           baseUrl = baseUrlInput || undefined;
           break;
         } while (true);
