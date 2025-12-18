@@ -863,6 +863,7 @@ function App(props: { port: number }) {
   const linesRef = useRef<LineEntry[]>([]);
   const lineSeq = useRef(0);
   const linesCommitTimer = useRef<NodeJS.Timeout | null>(null);
+  const ctrlCPressTime = useRef<number>(0);
   const inputStore = useRef<InputStore>({ value: "", subscribers: new Set() });
   const notifyInputSubscribers = useCallback(() => {
     inputStore.current.subscribers.forEach((cb) => cb());
@@ -2229,7 +2230,25 @@ Use skill_draft first to create the draft, then skill_apply to create the final 
     };
 
     if (key.ctrl && ch === "c") {
-      if (turnId && ws) ws.send(JSON.stringify({ type: "cancel_turn", turnId }));
+      const now = Date.now();
+      const timeSinceLastCtrlC = now - ctrlCPressTime.current;
+
+      if (timeSinceLastCtrlC < 1000) {
+        // Second Ctrl+C within 1 second - exit program
+        pushLines({ kind: "system", text: "Exiting..." });
+        process.exit(0);
+      } else {
+        // First Ctrl+C - cancel turn or show exit hint
+        if (processing && turnId && ws) {
+          // Cancel the current turn
+          ws.send(JSON.stringify({ type: "cancel_turn", turnId }));
+          pushLines({ kind: "system", text: "Turn cancelled. Press Ctrl+C again to exit." });
+        } else {
+          // Not processing - show exit hint
+          pushLines({ kind: "system", text: "Press Ctrl+C again to exit." });
+        }
+        ctrlCPressTime.current = now;
+      }
       return;
     }
 
@@ -2516,7 +2535,7 @@ Use skill_draft first to create the draft, then skill_apply to create the final 
 }
 
 export function startInkUi(params?: { port?: number }): void {
-  render(<App port={params?.port ?? DEFAULT_PORT} />);
+  render(<App port={params?.port ?? DEFAULT_PORT} />, { exitOnCtrlC: false });
 }
 
 const argv1 = process.argv[1] || "";
