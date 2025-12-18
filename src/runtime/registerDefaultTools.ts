@@ -24,6 +24,7 @@ import { astGrepTool } from "./tools/implementations/astGrep.js";
 import { listTemplatesTool, projectTemplateTool } from "./tools/implementations/templates.js";
 import { skillApplyTool, skillDraftTool, skillSequencerTool } from "./tools/implementations/skillsWorkflow.js";
 import { agentApplyTool, agentDraftTool } from "./tools/implementations/agentsWorkflow.js";
+import { commandApplyTool, commandDraftTool } from "./tools/implementations/commandsWorkflow.js";
 import { smartCleanupTool } from "./tools/implementations/smartCleanup.js";
 import { analyzeDataTool } from "./tools/implementations/analyzeData.js";
 import { notebookEditTool } from "./tools/implementations/notebookEdit.js";
@@ -81,6 +82,10 @@ export function registerDefaultTools(registry: ToolRegistry, opts: { workspaceDi
   // Agents workflow helpers (draft/apply).
   registry.register("agent_draft", async (args) => agentDraftTool(args));
   registry.register("agent_apply", async (args) => agentApplyTool(args));
+
+  // Commands workflow helpers (draft/apply).
+  registry.register("command_draft", async (args) => commandDraftTool(args));
+  registry.register("command_apply", async (args) => commandApplyTool(args));
 
   // Workspace cleanup.
   registry.register("smart_cleanup", async (args) => smartCleanupTool(args));

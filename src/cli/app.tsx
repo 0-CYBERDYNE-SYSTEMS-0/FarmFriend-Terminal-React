@@ -322,6 +322,16 @@ type MainViewProps = {
   agentFormStep: number;
   agentFormData: Partial<AgentConfig>;
   agentEditValue: string;
+  skillMenuMode: "list" | "form" | "preview";
+  skillFormStep: number;
+  skillFormData: Record<string, any>;
+  skillSkippedFields: Set<string>;
+  skillEditValue: string;
+  commandMenuMode: "list" | "form" | "preview";
+  commandFormStep: number;
+  commandFormData: Record<string, any>;
+  commandSkippedFields: Set<string>;
+  commandEditValue: string;
 };
 
 const MainView = memo(function MainView(props: MainViewProps) {
@@ -353,7 +363,17 @@ const MainView = memo(function MainView(props: MainViewProps) {
     agentTemplateIndex,
     agentFormStep,
     agentFormData,
-    agentEditValue
+    agentEditValue,
+    skillMenuMode,
+    skillFormStep,
+    skillFormData,
+    skillSkippedFields,
+    skillEditValue,
+    commandMenuMode,
+    commandFormStep,
+    commandFormData,
+    commandSkippedFields,
+    commandEditValue
   } = props;
 
   const wizardPanel = mode === "wizard" ? (
@@ -470,31 +490,110 @@ const MainView = memo(function MainView(props: MainViewProps) {
     </Box>
   ) : null;
 
-  const commandsPanel = mode === "commands" ? (
-    <Box flexDirection="column">
-      <Text>Commands Manager</Text>
-      <Text dimColor>Esc: back • ↑/↓: select • Enter: view • n: new</Text>
-      <Box flexDirection="column" marginTop={1}>
-        {commandRows.length ? (
-          commandRows.slice(Math.max(0, commandsIndex - 8), commandsIndex + 12).map((cmd, idx) => {
-            const absoluteIndex = Math.max(0, commandsIndex - 8) + idx;
-            const selected = absoluteIndex === commandsIndex;
-            return (
-              <Text key={cmd.slug} color={selected ? "cyan" : "white"} dimColor={!selected}>
-                {selected ? "› " : "  "}
-                /{cmd.slug} {cmd.description && `— ${cmd.description}`}
-              </Text>
-            );
-          })
-        ) : (
-          <Text color="yellow">No custom commands yet. Create your first command with /wizard commands → n</Text>
-        )}
-      </Box>
-      {commandRows.length > 0 && (
-        <Text dimColor>{commandRows[commandsIndex]?.template?.slice(0, 60)}...</Text>
-      )}
-    </Box>
-  ) : null;
+  const commandsPanel = mode === "commands" ? (() => {
+    // Commands list view
+    if (commandMenuMode === "list") {
+      return (
+        <Box flexDirection="column">
+          <Text>Commands Manager</Text>
+          <Text dimColor>Esc: back • ↑/↓: select • Enter: view • n: new</Text>
+          <Box flexDirection="column" marginTop={1}>
+            {commandRows.length ? (
+              commandRows.slice(Math.max(0, commandsIndex - 8), commandsIndex + 12).map((cmd, idx) => {
+                const absoluteIndex = Math.max(0, commandsIndex - 8) + idx;
+                const selected = absoluteIndex === commandsIndex;
+                return (
+                  <Text key={cmd.slug} color={selected ? "cyan" : "white"} dimColor={!selected}>
+                    {selected ? "› " : "  "}
+                    /{cmd.slug} {cmd.description && `— ${cmd.description}`}
+                  </Text>
+                );
+              })
+            ) : (
+              <Text color="yellow">No custom commands yet. Press 'n' to create one</Text>
+            )}
+          </Box>
+          {commandRows.length > 0 && (
+            <Text dimColor>{commandRows[commandsIndex]?.template?.slice(0, 60)}...</Text>
+          )}
+        </Box>
+      );
+    }
+
+    // Commands form - 3 steps (slug, description, template)
+    if (commandMenuMode === "form") {
+      const formSteps = [
+        { label: "Command Slug", hint: "e.g., 'deploy-app' (lowercase, alphanumeric)", required: true },
+        { label: "Description", hint: "Short description of what the command does", required: true },
+        { label: "Template", hint: "Command template with $1, $2 for arguments", required: true },
+        { label: "Tags", hint: "Comma-separated tags [press Enter to skip]", required: false },
+        { label: "Review & Save", hint: "Enter to save, 'e' to edit, Esc to cancel", required: false }
+      ];
+
+      const currentStep = formSteps[commandFormStep];
+      if (!currentStep) return null;
+
+      const stepFieldKey = ["command_slug", "description", "template", "tags"][commandFormStep];
+
+      return (
+        <Box flexDirection="column">
+          <Text>Create New Command</Text>
+          <Text dimColor>
+            Step {commandFormStep + 1}/{formSteps.length}: {currentStep.label}
+            {currentStep.required ? " (required)" : " (optional)"}
+          </Text>
+          <Box flexDirection="column" marginTop={1}>
+            {commandFormStep < 4 && (
+              <>
+                <Text>{currentStep.hint}</Text>
+                <Text>
+                  <Text color="green">{"› "}</Text>
+                  {commandEditValue}
+                </Text>
+              </>
+            )}
+
+            {commandFormStep === 4 && (
+              <>
+                <Text bold color="cyanBright">Command Configuration Preview</Text>
+                <Text dimColor>Review the command below</Text>
+                <Box flexDirection="column" marginTop={1}>
+                  <Text>Slug: {commandFormData.command_slug || "(not set)"}</Text>
+                  <Text>Description: {commandFormData.description || "(not set)"}</Text>
+                  <Text dimColor>Template: {commandFormData.template?.slice(0, 50) || "(not set)"}...</Text>
+                  <Box marginTop={1}>
+                    <Text dimColor>Tags: {commandFormData.tags?.join(", ") || "(AI will generate)"}</Text>
+                  </Box>
+                </Box>
+                <Box marginTop={1}>
+                  <Text dimColor>Press Enter to create, 'e' to edit, Esc to cancel</Text>
+                </Box>
+              </>
+            )}
+          </Box>
+        </Box>
+      );
+    }
+
+    // Commands preview (unused in this flow, but keeping for consistency)
+    if (commandMenuMode === "preview") {
+      return (
+        <Box flexDirection="column">
+          <Text>Command Configuration Preview</Text>
+          <Text dimColor>Review the command configuration below</Text>
+          <Box flexDirection="column" marginTop={1}>
+            <Text>Slug: {commandFormData.command_slug || "(not set)"}</Text>
+            <Text>Description: {commandFormData.description || "(not set)"}</Text>
+            <Text dimColor>Template: {commandFormData.template?.slice(0, 50) || "(not set)"}...</Text>
+            <Box marginTop={1}><Text dimColor>Tags: {commandFormData.tags?.join(", ") || "(AI will generate)"}</Text></Box>
+          </Box>
+          <Box marginTop={1}><Text dimColor>Press Enter to create, 'e' to edit, Esc to cancel</Text></Box>
+        </Box>
+      );
+    }
+
+    return null;
+  })() : null;
 
   const agentsPanel = mode === "agents" ? (() => {
     // Agent list view - shows configured agents
@@ -630,17 +729,71 @@ const MainView = memo(function MainView(props: MainViewProps) {
     return null;
   })() : null;
 
-  const skillsPanel = mode === "skills" ? (
-    <Box flexDirection="column">
-      <Text>Skills Manager</Text>
-      <Text dimColor>Esc: back • n: create new skill using skill_draft</Text>
-      <Box flexDirection="column" marginTop={1}>
-        <Text color="cyan">Skills use the existing skill_draft and skill_apply tools</Text>
-        <Text dimColor>Press 'n' to launch the skill creation workflow</Text>
-        <Text dimColor>Skills are stored in: ff-terminal-workspace/skills/</Text>
-      </Box>
-    </Box>
-  ) : null;
+  const skillsPanel = mode === "skills" ? (() => {
+    // Skills list view
+    if (skillMenuMode === "list") {
+      return (
+        <Box flexDirection="column">
+          <Text>Skills Manager</Text>
+          <Text dimColor>Esc: back • n: create new skill</Text>
+          <Box flexDirection="column" marginTop={1}>
+            <Text dimColor>Skills are stored in: ff-terminal-workspace/skills/</Text>
+            <Text dimColor>Create reusable AI capabilities with custom instructions</Text>
+          </Box>
+        </Box>
+      );
+    }
+
+    // Skills form - interactive field entry
+    if (skillMenuMode === "form") {
+      const formSteps = [
+        { label: "Skill ID", hint: "lowercase alphanumeric, 2-64 chars (a-z0-9_-)", required: true },
+        { label: "Name", hint: "display name for the skill", required: true },
+        { label: "Summary", hint: "one-line description", required: true },
+        { label: "Instructions", hint: "detailed skill instructions (multi-line)", required: true },
+        { label: "Triggers", hint: "when to activate (e.g., 'code review, testing') [press Enter to skip]", required: false },
+        { label: "Tags", hint: "comma-separated tags [press Enter to skip]", required: false },
+        { label: "Recommended Tools", hint: "comma-separated tool names [press Enter to skip]", required: false }
+      ];
+
+      const currentStep = formSteps[skillFormStep];
+
+      return (
+        <Box flexDirection="column">
+          <Text>Create Skill - Step {skillFormStep + 1}/{formSteps.length}</Text>
+          <Text dimColor>{currentStep?.required ? "Required" : "Optional (Enter to skip)"} • Esc: cancel</Text>
+          <Box flexDirection="column" marginTop={1}>
+            <Text>{currentStep?.label}</Text>
+            <Text dimColor>{currentStep?.hint}</Text>
+            <Box marginTop={1}>
+              <Text>{skillEditValue || "(empty)"}</Text>
+            </Box>
+          </Box>
+        </Box>
+      );
+    }
+
+    // Skills preview - show collected data and generated fields
+    if (skillMenuMode === "preview") {
+      return (
+        <Box flexDirection="column">
+          <Text>Skill Configuration Preview</Text>
+          <Text dimColor>Review the skill configuration below</Text>
+          <Box flexDirection="column" marginTop={1}>
+            <Text>ID: {skillFormData.skill_slug || "(not set)"}</Text>
+            <Text>Name: {skillFormData.name || "(not set)"}</Text>
+            <Text>Summary: {skillFormData.summary || "(not set)"}</Text>
+            <Box marginTop={1}><Text dimColor>Triggers: {skillFormData.triggers?.join(", ") || "(AI will generate)"}</Text></Box>
+            <Text dimColor>Tags: {skillFormData.tags?.join(", ") || "(AI will generate)"}</Text>
+            <Text dimColor>Tools: {skillFormData.recommended_tools?.join(", ") || "(AI will generate)"}</Text>
+          </Box>
+          <Box marginTop={1}><Text dimColor>Press Enter to create, 'e' to edit, Esc to cancel</Text></Box>
+        </Box>
+      );
+    }
+
+    return null;
+  })() : null;
 
   return (
     <>
@@ -709,6 +862,18 @@ function App(props: { port: number }) {
   const [agentFormStep, setAgentFormStep] = useState(0);
   const [agentFormData, setAgentFormData] = useState<Partial<AgentConfig>>({});
   const [agentEditValue, setAgentEditValue] = useState("");
+
+  const [skillMenuMode, setSkillMenuMode] = useState<"list" | "form" | "preview">("list");
+  const [skillFormStep, setSkillFormStep] = useState(0);
+  const [skillFormData, setSkillFormData] = useState<Record<string, any>>({});
+  const [skillSkippedFields, setSkillSkippedFields] = useState<Set<string>>(new Set());
+  const [skillEditValue, setSkillEditValue] = useState("");
+
+  const [commandMenuMode, setCommandMenuMode] = useState<"list" | "form" | "preview">("list");
+  const [commandFormStep, setCommandFormStep] = useState(0);
+  const [commandFormData, setCommandFormData] = useState<Record<string, any>>({});
+  const [commandSkippedFields, setCommandSkippedFields] = useState<Set<string>>(new Set());
+  const [commandEditValue, setCommandEditValue] = useState("");
 
   const mountsCfg = useMemo(() => readMountsConfig(), [mountsRefresh]);
   const mountRows = useMemo(
@@ -1295,6 +1460,11 @@ Then apply it with agent_apply to save the agent config.`;
         if (w === "commands") {
           setMode("commands");
           setCommandsIndex(0);
+          setCommandMenuMode("list");
+          setCommandFormStep(0);
+          setCommandFormData({});
+          setCommandSkippedFields(new Set());
+          setCommandEditValue("");
           pushLines({ kind: "system", text: "Commands: Esc back • ↑/↓ select • Enter view • n new command" });
           return;
         }
@@ -1359,7 +1529,8 @@ Then apply it with agent_apply to save the agent config.`;
     }
 
     // Commands wizard mode
-    if (mode === "commands") {
+    // Commands wizard - main menu (list view)
+    if (mode === "commands" && commandMenuMode === "list") {
       if (key.escape) {
         setMode("chat");
         return;
@@ -1384,11 +1555,141 @@ Then apply it with agent_apply to save the agent config.`;
         return;
       }
       if (ch === "n") {
-        pushLines({
-          kind: "system",
-          text: "To create a new command, manually add a .md file to ff-terminal-workspace/commands/ with this format:\n\n---\ndescription: \"Command description\"\n---\n\nCommand prompt template with $1, $2 for args"
-        });
+        setCommandMenuMode("form");
+        setCommandFormStep(0);
+        setCommandFormData({});
+        setCommandSkippedFields(new Set());
+        setCommandEditValue("");
         return;
+      }
+      return;
+    }
+
+    // Commands wizard - form entry
+    if (mode === "commands" && commandMenuMode === "form") {
+      const requiredFields = ["command_slug", "description", "template"];
+      const requiredSteps = [0, 1, 2];
+      const fieldKeys = ["command_slug", "description", "template", "tags"];
+
+      if (key.escape) {
+        setCommandMenuMode("list");
+        setCommandFormStep(0);
+        setCommandFormData({});
+        setCommandSkippedFields(new Set());
+        setCommandEditValue("");
+        return;
+      }
+
+      if (commandFormStep < 4) {
+        if (key.return) {
+          const currentFieldKey = fieldKeys[commandFormStep];
+          const value = commandEditValue.trim();
+          const isRequired = requiredSteps.includes(commandFormStep);
+
+          // Validate required fields
+          if (isRequired && !value) {
+            pushLines({
+              kind: "system",
+              text: `Required field cannot be empty. Please enter a value.`
+            });
+            return;
+          }
+
+          // If empty (skipping optional field), mark as skipped
+          if (!value && !isRequired) {
+            setCommandSkippedFields((prev) => new Set([...prev, currentFieldKey]));
+          } else {
+            // Parse comma-separated fields for tags
+            if (currentFieldKey === "tags") {
+              const newFormData = { ...commandFormData };
+              newFormData.tags = value.split(",").map((s) => s.trim()).filter(Boolean);
+              setCommandFormData(newFormData);
+            } else {
+              setCommandFormData((prev) => ({
+                ...prev,
+                [currentFieldKey]: value
+              }));
+            }
+          }
+
+          setCommandFormStep((s) => s + 1);
+          setCommandEditValue("");
+          return;
+        }
+
+        if (key.backspace || key.delete) {
+          setCommandEditValue((v) => v.slice(0, -1));
+          return;
+        }
+
+        if (ch) {
+          setCommandEditValue((v) => v + ch);
+          return;
+        }
+      }
+
+      // Step 4 - Preview & Save
+      if (commandFormStep === 4) {
+        if (key.return) {
+          // Create the command via LLM if skipped fields, otherwise directly
+          if (commandSkippedFields.size > 0) {
+            const skippedList = Array.from(commandSkippedFields).join(", ");
+            const llmPrompt = `I created a command with these details:
+- command_slug: "${commandFormData.command_slug}"
+- description: "${commandFormData.description}"
+- template: "${commandFormData.template}"
+
+I skipped these optional fields: ${skippedList}
+
+Please generate reasonable values for the skipped fields and return ONLY a valid JSON object like:
+{
+  "tags": ["tag1", "tag2"]
+}
+
+Do NOT add any markdown formatting or code fences. Return ONLY the JSON object.`;
+
+            sendTurn(llmPrompt, { echoUser: false });
+            setMode("chat");
+            setCommandMenuMode("list");
+            setCommandFormStep(0);
+            setCommandFormData({});
+            setCommandSkippedFields(new Set());
+            setCommandEditValue("");
+          } else {
+            // All fields provided, create directly via command_draft + command_apply
+            const llmPrompt = `Use the command_draft tool to create a new command with these parameters:
+- command_slug: "${commandFormData.command_slug}"
+- description: "${commandFormData.description}"
+- template: "${commandFormData.template}"
+${commandFormData.tags ? `- tags: ${JSON.stringify(commandFormData.tags)}` : ""}
+
+After the draft is created, use command_apply to apply it and save the command.`;
+
+            sendTurn(llmPrompt, { echoUser: false });
+            setMode("chat");
+            setCommandMenuMode("list");
+            setCommandFormStep(0);
+            setCommandFormData({});
+            setCommandSkippedFields(new Set());
+            setCommandEditValue("");
+          }
+          return;
+        }
+
+        if (ch === "e") {
+          setCommandFormStep(0);
+          setCommandEditValue("");
+          return;
+        }
+
+        if (key.escape) {
+          setCommandMenuMode("list");
+          setCommandFormStep(0);
+          setCommandFormData({});
+          setCommandSkippedFields(new Set());
+          setCommandEditValue("");
+          return;
+        }
       }
       return;
     }
@@ -1610,28 +1911,151 @@ Call agent_draft with these parameters. Show me the preview but DO NOT call agen
       return;
     }
 
-    // Skills wizard mode
-    if (mode === "skills") {
+    // Skills wizard - main menu
+    if (mode === "skills" && skillMenuMode === "list") {
       if (key.escape) {
         setMode("chat");
         return;
       }
       if (ch === "n") {
-        const skillPrompt = `Create a new skill using the skill_draft tool. Provide:
-- skill_slug: Unique identifier (lowercase, 2-64 chars, alphanumeric + hyphen/underscore)
-- name: Display name for the skill
-- summary: One-line description
-- instructions: Detailed instructions for when this skill is activated
-- Optional: triggers (list), tags (list), recommended_tools (list)
-
-After creating the draft, I can apply it with skill_apply to make it active.`;
-
-        pushLines({ kind: "system", text: "Creating new skill with skill_draft..." });
-        sendTurn(skillPrompt, { echoUser: false });
-        setMode("chat");
+        setSkillMenuMode("form");
+        setSkillFormStep(0);
+        setSkillFormData({});
+        setSkillSkippedFields(new Set());
+        setSkillEditValue("");
         return;
       }
-      pushLines({ kind: "system", text: "Press 'n' to create a new skill, or Esc to go back" });
+      return;
+    }
+
+    // Skills form - interactive field entry
+    if (mode === "skills" && skillMenuMode === "form") {
+      if (key.escape) {
+        setSkillMenuMode("list");
+        setSkillFormStep(0);
+        setSkillFormData({});
+        setSkillSkippedFields(new Set());
+        setSkillEditValue("");
+        return;
+      }
+      if (key.return) {
+        const value = skillEditValue.trim();
+        const formSteps = ["skill_slug", "name", "summary", "instructions", "triggers", "tags", "recommended_tools"];
+        const requiredSteps = ["skill_slug", "name", "summary", "instructions"];
+        const currentFieldKey = formSteps[skillFormStep];
+
+        // Validate required fields
+        if (!value && requiredSteps.includes(currentFieldKey)) {
+          pushLines({ kind: "system", text: "This field is required." });
+          return;
+        }
+
+        let newFormData = { ...skillFormData };
+
+        // If empty (skipping optional field), mark as skipped
+        if (!value && !requiredSteps.includes(currentFieldKey)) {
+          setSkillSkippedFields((prev) => new Set([...prev, currentFieldKey]));
+        } else {
+          // Validate skill_slug format
+          if (currentFieldKey === "skill_slug" && !/^[a-z0-9_-]{2,64}$/.test(value)) {
+            pushLines({ kind: "system", text: "Invalid skill ID. Must be 2-64 chars of a-z, 0-9, _, -" });
+            return;
+          }
+
+          // Parse comma-separated fields
+          if (currentFieldKey === "triggers" || currentFieldKey === "tags" || currentFieldKey === "recommended_tools") {
+            newFormData[currentFieldKey] = value
+              .split(",")
+              .map((s: string) => s.trim())
+              .filter(Boolean);
+          } else {
+            newFormData[currentFieldKey] = value;
+          }
+        }
+
+        setSkillFormData(newFormData);
+
+        // Move to next step or show preview
+        if (skillFormStep < formSteps.length - 1) {
+          setSkillFormStep((s) => s + 1);
+          setSkillEditValue("");
+        } else {
+          // All steps done, show preview
+          setSkillMenuMode("preview");
+        }
+        return;
+      }
+      if (key.backspace || key.delete) {
+        setSkillEditValue((v) => v.slice(0, -1));
+        return;
+      }
+      if (ch) {
+        setSkillEditValue((v) => v + ch);
+        return;
+      }
+      return;
+    }
+
+    // Skills preview - show and confirm
+    if (mode === "skills" && skillMenuMode === "preview") {
+      if (key.escape) {
+        setSkillMenuMode("list");
+        setSkillFormStep(0);
+        setSkillFormData({});
+        setSkillSkippedFields(new Set());
+        setSkillEditValue("");
+        return;
+      }
+      if (key.return) {
+        // If there are skipped fields, ask LLM to fill them in
+        if (skillSkippedFields.size > 0) {
+          const skippedList = Array.from(skillSkippedFields).join(", ");
+          const llmPrompt = `I created a skill with these details:
+- skill_slug: "${skillFormData.skill_slug}"
+- name: "${skillFormData.name}"
+- summary: "${skillFormData.summary}"
+- instructions: """${skillFormData.instructions}"""
+
+I skipped these optional fields: ${skippedList}
+
+Please generate reasonable values for the skipped fields and return a JSON object with:
+{
+  "triggers": ["array", "of", "triggers"],
+  "tags": ["array", "of", "tags"],
+  "recommended_tools": ["array", "of", "tool", "names"]
+}
+
+Only include the fields I skipped. Return ONLY valid JSON, no explanation.`;
+
+          pushLines({ kind: "system", text: "Generating values for skipped fields..." });
+          sendTurn(llmPrompt, { echoUser: false });
+        } else {
+          // All fields provided, create skill directly
+          const skillPrompt = `Create a skill using skill_draft and skill_apply tools with these details:
+- skill_slug: "${skillFormData.skill_slug}"
+- name: "${skillFormData.name}"
+- summary: "${skillFormData.summary}"
+- instructions: """${skillFormData.instructions}"""
+- triggers: ${JSON.stringify(skillFormData.triggers || [])}
+- tags: ${JSON.stringify(skillFormData.tags || [])}
+- recommended_tools: ${JSON.stringify(skillFormData.recommended_tools || [])}
+
+Use skill_draft first to create the draft, then skill_apply to create the final skill.`;
+
+          pushLines({ kind: "system", text: "Creating skill..." });
+          sendTurn(skillPrompt, { echoUser: false });
+        }
+        setMode("chat");
+        setSkillMenuMode("list");
+        return;
+      }
+      if (ch === "e") {
+        // Edit mode - go back to form
+        setSkillMenuMode("form");
+        setSkillFormStep(0);
+        setSkillEditValue("");
+        return;
+      }
       return;
     }
 
@@ -1783,7 +2207,11 @@ After creating the draft, I can apply it with skill_apply to make it active.`;
 
           if (command === "skills") {
             setMode("skills");
-            pushLines({ kind: "system", text: "Skills: Press 'n' to create a new skill • Esc to exit" });
+            setSkillMenuMode("list");
+            setSkillFormStep(0);
+            setSkillFormData({});
+            setSkillSkippedFields(new Set());
+            setSkillEditValue("");
             setInputValue("");
             return;
           }
@@ -1971,6 +2399,16 @@ After creating the draft, I can apply it with skill_apply to make it active.`;
         agentFormStep={agentFormStep}
         agentFormData={agentFormData}
         agentEditValue={agentEditValue}
+        skillMenuMode={skillMenuMode}
+        skillFormStep={skillFormStep}
+        skillFormData={skillFormData}
+        skillSkippedFields={skillSkippedFields}
+        skillEditValue={skillEditValue}
+        commandMenuMode={commandMenuMode}
+        commandFormStep={commandFormStep}
+        commandFormData={commandFormData}
+        commandSkippedFields={commandSkippedFields}
+        commandEditValue={commandEditValue}
       />
       <Transcript lines={lines} />
       {mode === "chat" ? (
