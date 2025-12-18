@@ -123,18 +123,13 @@ ff-terminal-workspace/
 
 ## Project Continuity
 
-### Session Orientation
-At session start, quickly check:
-1. **TodoWrite state** - Any incomplete work from this session?
-2. **Session summary** - Read `ff-terminal-workspace/session_summary.md` if exists
-3. **Git context** - Run `git log --oneline -5` to see recent work
-4. **Project files** - Check for `FF_PROJECT.md` in project folders
-
 ### Project Detection
-Before creating new projects, ALWAYS check `ff-terminal-workspace/projects/` for existing matches:
+Before creating new projects, check `ff-terminal-workspace/projects/` for existing matches:
 - Use `ls ff-terminal-workspace/projects` to see existing projects
 - Resume existing projects rather than creating duplicates
 - Only create new projects when user explicitly requests it AND no match exists
+
+**Note**: Each session starts fresh. Do not assume prior work or todos exist unless the user explicitly asks to resume something.
 
 ---
 
