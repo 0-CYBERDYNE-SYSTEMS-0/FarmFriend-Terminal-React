@@ -30,8 +30,8 @@ function usage(): void {
   ff-terminal ui
   ff-terminal start [profile] [--display-mode verbose|clean]
   ff-terminal web
-  ff-terminal run --prompt "..." [--session <id>] [--headless]
-  ff-terminal run --scheduled-task <id-or-name> [--session <id>] --headless
+  ff-terminal run --prompt "..." [--profile <name>] [--session <id>] [--headless]
+  ff-terminal run --scheduled-task <id-or-name> [--profile <name>] [--session <id>] --headless
   ff-terminal schedule list
   ff-terminal schedule status <name>
   ff-terminal profile setup
@@ -245,6 +245,7 @@ async function run(): Promise<void> {
     const userPrompt = pickArg(rest, "--prompt") || "";
     const scheduledTaskRef = pickArg(rest, "--scheduled-task");
     const headless = hasFlag(rest, "--headless");
+    const profileName = pickArg(rest, "--profile");
 
     if (!userPrompt && !scheduledTaskRef) throw new Error("Missing --prompt or --scheduled-task\n");
     if (scheduledTaskRef && !headless) throw new Error("--scheduled-task requires --headless\n");
@@ -253,6 +254,78 @@ async function run(): Promise<void> {
 
     const repoRoot = findRepoRoot();
     const workspaceDir = process.env.FF_WORKSPACE_DIR || defaultWorkspaceDir(repoRoot);
+
+    // Load profile if specified
+    if (profileName) {
+      const config = readConfig();
+      const profile = getProfileByName(config, profileName);
+      if (!profile) throw new Error(`No such profile: ${profileName}\n`);
+
+      // Set provider
+      process.env.FF_PROVIDER = profile.provider;
+      process.env.FF_PROFILE = profile.name;
+
+      // Set model
+      const model = profile.model?.trim();
+      if (model) process.env.FF_MODEL = model;
+
+      // Set up credentials based on provider
+      if (profile.provider === "openrouter") {
+        const cred = await getCredential(profile.name, "OPENROUTER_API_KEY");
+        if (!cred) throw new Error(`No credential found for profile "${profile.name}" (OPENROUTER_API_KEY). Run: ff-terminal profile setup`);
+        process.env.OPENROUTER_API_KEY = cred;
+      } else if (profile.provider === "anthropic") {
+        const cred = await getCredential(profile.name, "ANTHROPIC_API_KEY");
+        if (!cred) throw new Error(`No credential found for profile "${profile.name}" (ANTHROPIC_API_KEY). Run: ff-terminal profile setup`);
+        process.env.ANTHROPIC_API_KEY = cred;
+        if (profile.baseUrl) process.env.ANTHROPIC_BASE_URL = profile.baseUrl;
+      } else if (profile.provider === "zai") {
+        const cred = await getCredential(profile.name, "ANTHROPIC_AUTH_TOKEN");
+        if (!cred) throw new Error(`No credential found for profile "${profile.name}" (ANTHROPIC_AUTH_TOKEN). Run: ff-terminal profile setup`);
+        process.env.ANTHROPIC_AUTH_TOKEN = cred;
+        if (profile.baseUrl) process.env.ANTHROPIC_BASE_URL = profile.baseUrl;
+      } else if (profile.provider === "minimax") {
+        const cred = await getCredential(profile.name, "MINIMAX_API_KEY");
+        if (!cred) throw new Error(`No credential found for profile "${profile.name}" (MINIMAX_API_KEY). Run: ff-terminal profile setup`);
+        process.env.MINIMAX_API_KEY = cred;
+        if (profile.baseUrl) process.env.MINIMAX_BASE_URL = profile.baseUrl;
+      } else if (profile.provider === "lmstudio") {
+        if (profile.baseUrl) process.env.LM_STUDIO_BASE_URL = profile.baseUrl;
+      }
+
+      // Optional per-profile model overrides
+      if (profile.subagentModel?.trim()) process.env.FF_SUBAGENT_MODEL = profile.subagentModel.trim();
+      if (profile.toolModel?.trim()) process.env.FF_TOOL_MODEL = profile.toolModel.trim();
+      if (profile.webModel?.trim()) process.env.FF_WEB_MODEL = profile.webModel.trim();
+      if (profile.imageModel?.trim()) process.env.FF_IMAGE_MODEL = profile.imageModel.trim();
+      if (profile.videoModel?.trim()) process.env.FF_VIDEO_MODEL = profile.videoModel.trim();
+
+      // Optional tool keys: profile override → existing env/.env → global defaults
+      for (const k of OPTIONAL_TOOL_ENV_KEYS) {
+        const profileValue = await getCredential(profile.name, k);
+        if (profileValue) {
+          process.env[k] = profileValue;
+          continue;
+        }
+
+        // Respect explicitly-set env/.env values if the profile doesn't override
+        if (String(process.env[k] || "").trim()) continue;
+
+        const globalValue = await getCredential(GLOBAL_TOOL_CRED_PROFILE, k);
+        if (globalValue) {
+          process.env[k] = globalValue;
+          continue;
+        }
+      }
+
+      // eslint-disable-next-line no-console
+      console.log(`Using profile: ${profile.name} (${profile.provider})`);
+      if (model) {
+        // eslint-disable-next-line no-console
+        console.log(`Model: ${model}`);
+      }
+    }
+
     const runtimeCfg = resolveConfig({ repoRoot });
     const logLevel = parseLogLevel((runtimeCfg as any).log_level);
     const logMaxBytes = Number((runtimeCfg as any).log_max_bytes ?? 5 * 1024 * 1024);
