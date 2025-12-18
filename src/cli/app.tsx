@@ -316,11 +316,11 @@ type MainViewProps = {
   agentRows: AgentConfig[];
   agentsIndex: number;
   agentTemplates: AgentTemplate[];
-  agentCreationMode: "none" | "template" | "manual" | "ai";
+  agentMenuMode: "list" | "creation_method" | "template_select" | "form" | "ai_description";
+  agentCreationMethodIndex: number;
   agentTemplateIndex: number;
   agentFormStep: number;
   agentFormData: Partial<AgentConfig>;
-  agentEditingField: string | null;
   agentEditValue: string;
 };
 
@@ -348,11 +348,11 @@ const MainView = memo(function MainView(props: MainViewProps) {
     agentRows,
     agentsIndex,
     agentTemplates,
-    agentCreationMode,
+    agentMenuMode,
+    agentCreationMethodIndex,
     agentTemplateIndex,
     agentFormStep,
     agentFormData,
-    agentEditingField,
     agentEditValue
   } = props;
 
@@ -497,89 +497,137 @@ const MainView = memo(function MainView(props: MainViewProps) {
   ) : null;
 
   const agentsPanel = mode === "agents" ? (() => {
-    let helpText = "";
-    let title = "Agents Manager";
-    let content: React.ReactNode = null;
-
-    if (agentCreationMode === "none") {
-      helpText = "Esc: back • ↑/↓: select • Enter: view • t: template • n: custom (f=form, a=AI)";
-      content = (
-        <Box flexDirection="column" marginTop={1}>
-          <Text bold color="cyanBright">Configured Agents:</Text>
-          {agentRows.length ? (
-            agentRows.slice(Math.max(0, agentsIndex - 8), agentsIndex + 12).map((agent, idx) => {
-              const absoluteIndex = Math.max(0, agentsIndex - 8) + idx;
-              const selected = absoluteIndex === agentsIndex;
-              return (
-                <Text key={agent.id} color={selected ? "cyan" : "white"} dimColor={!selected}>
-                  {selected ? "› " : "  "}
-                  {agent.name} {agent.description && `— ${agent.description}`}
-                </Text>
-              );
-            })
-          ) : (
-            <Text dimColor>(none configured yet)</Text>
-          )}
-          <Box marginTop={1}>
-            <Text bold color="cyanBright">Templates:</Text>
+    // Agent list view - shows configured agents
+    if (agentMenuMode === "list") {
+      return (
+        <Box flexDirection="column">
+          <Text>Agents Manager</Text>
+          <Text dimColor>Esc: back • ↑/↓: select • Enter: view • n: new agent</Text>
+          <Box flexDirection="column" marginTop={1}>
+            <Text bold color="cyanBright">Configured Agents:</Text>
+            {agentRows.length ? (
+              agentRows.slice(Math.max(0, agentsIndex - 8), agentsIndex + 12).map((agent, idx) => {
+                const absoluteIndex = Math.max(0, agentsIndex - 8) + idx;
+                const selected = absoluteIndex === agentsIndex;
+                return (
+                  <Text key={agent.id} color={selected ? "cyan" : "white"} dimColor={!selected}>
+                    {selected ? "› " : "  "}
+                    {agent.name}
+                  </Text>
+                );
+              })
+            ) : (
+              <Text dimColor>(none configured yet)</Text>
+            )}
+            <Box marginTop={1}>
+              <Text bold color="cyanBright">Built-in Templates:</Text>
+            </Box>
+            {agentTemplates.slice(0, 3).map((template) => (
+              <Text key={template.id} dimColor>
+                • {template.name}
+              </Text>
+            ))}
           </Box>
-          {agentTemplates.slice(0, 3).map((template) => (
-            <Text key={template.id} dimColor>
-              • {template.name}
-            </Text>
-          ))}
-        </Box>
-      );
-    } else if (agentCreationMode === "template") {
-      title = "Template Selection";
-      helpText = "Esc: back • ↑/↓: select template • Enter: use";
-      content = (
-        <Box flexDirection="column" marginTop={1}>
-          {agentTemplates.map((template, idx) => {
-            const selected = idx === agentTemplateIndex;
-            return (
-              <Box key={template.id} flexDirection="column">
-                <Text color={selected ? "cyan" : "white"} dimColor={!selected}>
-                  {selected ? "› " : "  "}
-                  <Text bold>{template.name}</Text>
-                </Text>
-                {selected && <Text dimColor>  {template.description}</Text>}
-              </Box>
-            );
-          })}
-        </Box>
-      );
-    } else if (agentCreationMode === "manual") {
-      title = `Agent Form (Step ${agentFormStep + 1}/5)`;
-      helpText = "Enter value, then press Enter • Esc to cancel";
-      content = (
-        <Box flexDirection="column" marginTop={1}>
-          <Text dimColor>Current input: {agentEditValue}</Text>
-          {agentFormStep === 0 && <Text dimColor>Enter Agent ID (lowercase alphanumeric, 2-64 chars)</Text>}
-          {agentFormStep === 1 && <Text dimColor>Enter Agent Name (display name)</Text>}
-          {agentFormStep === 2 && <Text dimColor>Enter Description (one-line summary)</Text>}
-          {agentFormStep === 3 && <Text dimColor>Enter Mode (auto/confirm/read_only/planning)</Text>}
-          {agentFormStep === 4 && <Text dimColor>Enter System Prompt Addition (agent instructions)</Text>}
-        </Box>
-      );
-    } else if (agentCreationMode === "ai") {
-      title = "AI-Assisted Agent Creation";
-      helpText = "Describe the agent you want (Enter to create, Esc to cancel)";
-      content = (
-        <Box flexDirection="column" marginTop={1}>
-          <Text dimColor>Description:</Text>
-          <Text>{agentEditValue}</Text>
         </Box>
       );
     }
 
-    return (
-      <Box flexDirection="column">
-        <Text>{title}</Text>
-        <Text dimColor>{helpText}</Text>
-        {content}
-      </Box>
-    );
+    // Creation method selection menu
+    if (agentMenuMode === "creation_method") {
+      const creationMethods = [
+        { label: "Create from template", description: "Customize a built-in template" },
+        { label: "Create from scratch", description: "Manual form entry" },
+        { label: "AI-assisted creation", description: "Describe what you want" }
+      ];
+
+      return (
+        <Box flexDirection="column">
+          <Text>Create New Agent</Text>
+          <Text dimColor>↑/↓: select • Enter: choose • Esc: back</Text>
+          <Box flexDirection="column" marginTop={1}>
+            {creationMethods.map((method, idx) => {
+              const selected = idx === agentCreationMethodIndex;
+              return (
+                <Box key={idx} flexDirection="column">
+                  <Text color={selected ? "cyan" : "white"} dimColor={!selected}>
+                    {selected ? "› " : "  "}
+                    {method.label}
+                  </Text>
+                  {selected && <Text dimColor>  {method.description}</Text>}
+                </Box>
+              );
+            })}
+          </Box>
+        </Box>
+      );
+    }
+
+    // Template selection menu
+    if (agentMenuMode === "template_select") {
+      return (
+        <Box flexDirection="column">
+          <Text>Select Template</Text>
+          <Text dimColor>↑/↓: select • Enter: use template • Esc: back</Text>
+          <Box flexDirection="column" marginTop={1}>
+            {agentTemplates.map((template, idx) => {
+              const selected = idx === agentTemplateIndex;
+              return (
+                <Box key={template.id} flexDirection="column">
+                  <Text color={selected ? "cyan" : "white"} dimColor={!selected}>
+                    {selected ? "› " : "  "}
+                    {template.name}
+                  </Text>
+                  {selected && <Text dimColor>  {template.description}</Text>}
+                </Box>
+              );
+            })}
+          </Box>
+        </Box>
+      );
+    }
+
+    // Manual form mode
+    if (agentMenuMode === "form") {
+      const formSteps = [
+        { label: "Agent ID", hint: "lowercase alphanumeric, 2-64 chars (a-z0-9_-)" },
+        { label: "Display Name", hint: "user-friendly name for the agent" },
+        { label: "Description", hint: "one-line summary of the agent's purpose" },
+        { label: "Operation Mode", hint: "auto / confirm / read_only / planning" },
+        { label: "System Prompt", hint: "detailed instructions for the agent" }
+      ];
+
+      const currentStep = formSteps[agentFormStep];
+
+      return (
+        <Box flexDirection="column">
+          <Text>Create Agent - Step {agentFormStep + 1}/{formSteps.length}</Text>
+          <Text dimColor>Enter value • Esc: cancel</Text>
+          <Box flexDirection="column" marginTop={1}>
+            <Text>{currentStep?.label}</Text>
+            <Text dimColor>{currentStep?.hint}</Text>
+            <Box marginTop={1}>
+              <Text>{agentEditValue || "(empty)"}</Text>
+            </Box>
+          </Box>
+        </Box>
+      );
+    }
+
+    // AI description input
+    if (agentMenuMode === "ai_description") {
+      return (
+        <Box flexDirection="column">
+          <Text>AI-Assisted Agent Creation</Text>
+          <Text dimColor>Describe what you want • Enter when done • Esc: cancel</Text>
+          <Box flexDirection="column" marginTop={1}>
+            <Text dimColor>Description:</Text>
+            <Text>{agentEditValue || "(type here)"}</Text>
+          </Box>
+        </Box>
+      );
+    }
+
+    return null;
   })() : null;
 
   const skillsPanel = mode === "skills" ? (
@@ -655,11 +703,11 @@ function App(props: { port: number }) {
   const [commandsIndex, setCommandsIndex] = useState(0);
   const [agentsRefresh, setAgentsRefresh] = useState(0);
   const [agentsIndex, setAgentsIndex] = useState(0);
-  const [agentCreationMode, setAgentCreationMode] = useState<"none" | "template" | "manual" | "ai">("none");
+  const [agentMenuMode, setAgentMenuMode] = useState<"list" | "creation_method" | "template_select" | "form" | "ai_description">("list");
+  const [agentCreationMethodIndex, setAgentCreationMethodIndex] = useState(0);
   const [agentTemplateIndex, setAgentTemplateIndex] = useState(0);
   const [agentFormStep, setAgentFormStep] = useState(0);
   const [agentFormData, setAgentFormData] = useState<Partial<AgentConfig>>({});
-  const [agentEditingField, setAgentEditingField] = useState<string | null>(null);
   const [agentEditValue, setAgentEditValue] = useState("");
 
   const mountsCfg = useMemo(() => readMountsConfig(), [mountsRefresh]);
@@ -1128,7 +1176,7 @@ Then apply it with agent_apply to save the agent config.`;
       pushLines({ kind: "system", text: "Creating agent..." });
       sendTurn(prompt, { echoUser: false });
       setMode("chat");
-      setAgentCreationMode("none");
+      setAgentMenuMode("list");
     },
     [pushLines, sendTurn]
   );
@@ -1345,18 +1393,19 @@ Then apply it with agent_apply to save the agent config.`;
       return;
     }
 
-    // Agents wizard mode - list/view agents
-    if (mode === "agents" && agentCreationMode === "none") {
+    // Agents wizard - main menu (list view)
+    if (mode === "agents" && agentMenuMode === "list") {
       if (key.escape) {
         setMode("chat");
+        setAgentMenuMode("list");
         return;
       }
       if (key.upArrow) {
-        setAgentsIndex((i) => (i - 1 + agentRows.length) % agentRows.length);
+        setAgentsIndex((i) => Math.max(0, i - 1));
         return;
       }
       if (key.downArrow) {
-        setAgentsIndex((i) => (i + 1) % agentRows.length);
+        setAgentsIndex((i) => Math.min(agentRows.length - 1, i + 1));
         return;
       }
       if (key.return) {
@@ -1371,58 +1420,154 @@ Then apply it with agent_apply to save the agent config.`;
         }
         return;
       }
-      if (ch === "t") {
-        // Start template selection mode
-        setAgentCreationMode("template");
-        setAgentTemplateIndex(0);
-        pushLines({ kind: "system", text: "Template Selection: ↑/↓ select • Enter use • Esc back" });
-        return;
-      }
       if (ch === "n") {
-        // Show menu for form or AI mode
-        pushLines({
-          kind: "system",
-          text: "Create agent: Press 'f' for interactive form, 'a' for AI-assisted (describe what you want)"
-        });
+        setAgentMenuMode("creation_method");
+        setAgentCreationMethodIndex(0);
         return;
       }
       return;
     }
 
-    // Agents template selection mode
-    if (mode === "agents" && agentCreationMode === "template") {
+    // Creation method selection menu
+    if (mode === "agents" && agentMenuMode === "creation_method") {
       if (key.escape) {
-        setAgentCreationMode("none");
+        setAgentMenuMode("list");
         return;
       }
       if (key.upArrow) {
-        setAgentTemplateIndex((i) => (i - 1 + agentTemplates.length) % agentTemplates.length);
+        setAgentCreationMethodIndex((i) => Math.max(0, i - 1));
         return;
       }
       if (key.downArrow) {
-        setAgentTemplateIndex((i) => (i + 1) % agentTemplates.length);
+        setAgentCreationMethodIndex((i) => Math.min(2, i + 1));
         return;
       }
       if (key.return) {
-        const template = agentTemplates[agentTemplateIndex];
-        if (template) {
-          // Initialize form data with template config
-          setAgentFormData(template.config);
+        if (agentCreationMethodIndex === 0) {
+          // Create from template
+          setAgentMenuMode("template_select");
+          setAgentTemplateIndex(0);
+        } else if (agentCreationMethodIndex === 1) {
+          // Create from scratch
+          setAgentMenuMode("form");
           setAgentFormStep(0);
-          setAgentCreationMode("manual");
-          pushLines({ kind: "system", text: `Using template: ${template.name}. Customize fields or press 's' to save.` });
+          setAgentFormData({
+            id: "",
+            name: "",
+            description: "",
+            mode: "auto",
+            systemPromptAddition: ""
+          });
+          setAgentEditValue("");
+        } else if (agentCreationMethodIndex === 2) {
+          // AI-assisted
+          setAgentMenuMode("ai_description");
+          setAgentEditValue("");
         }
         return;
       }
       return;
     }
 
-    // Agents AI mode - collect description
-    if (mode === "agents" && agentCreationMode === "ai") {
+    // Template selection menu
+    if (mode === "agents" && agentMenuMode === "template_select") {
       if (key.escape) {
-        setAgentCreationMode("none");
+        setAgentMenuMode("creation_method");
+        return;
+      }
+      if (key.upArrow) {
+        setAgentTemplateIndex((i) => Math.max(0, i - 1));
+        return;
+      }
+      if (key.downArrow) {
+        setAgentTemplateIndex((i) => Math.min(agentTemplates.length - 1, i + 1));
+        return;
+      }
+      if (key.return) {
+        const template = agentTemplates[agentTemplateIndex];
+        if (template) {
+          setAgentFormData(template.config);
+          setAgentFormStep(0);
+          setAgentMenuMode("form");
+          setAgentEditValue("");
+        }
+        return;
+      }
+      return;
+    }
+
+    // Manual form mode - text input
+    if (mode === "agents" && agentMenuMode === "form") {
+      if (key.escape) {
+        setAgentMenuMode("creation_method");
+        setAgentFormStep(0);
+        setAgentFormData({});
         setAgentEditValue("");
-        pushLines({ kind: "system", text: "Cancelled. Back to agent list." });
+        return;
+      }
+      if (key.return) {
+        const value = agentEditValue.trim();
+        if (!value && agentFormStep < 4) {
+          pushLines({ kind: "system", text: "This field is required." });
+          return;
+        }
+
+        let newFormData = { ...agentFormData };
+        const opModes = ["auto", "confirm", "read_only", "planning"];
+
+        switch (agentFormStep) {
+          case 0: // agent_id
+            if (!/^[a-z0-9_-]{2,64}$/.test(value)) {
+              pushLines({ kind: "system", text: "Invalid agent ID. Must be 2-64 chars of a-z, 0-9, _, -" });
+              return;
+            }
+            newFormData.id = value;
+            break;
+          case 1: // name
+            newFormData.name = value;
+            break;
+          case 2: // description
+            newFormData.description = value;
+            break;
+          case 3: // mode
+            const selectedMode = value.toLowerCase() as any;
+            if (value && !opModes.includes(selectedMode)) {
+              pushLines({ kind: "system", text: "Invalid mode. Choose: auto, confirm, read_only, or planning" });
+              return;
+            }
+            newFormData.mode = selectedMode || "auto";
+            break;
+          case 4: // systemPromptAddition
+            newFormData.systemPromptAddition = value;
+            saveAgentFromForm(newFormData);
+            setAgentMenuMode("list");
+            setAgentFormStep(0);
+            setAgentFormData({});
+            setAgentEditValue("");
+            return;
+        }
+
+        setAgentFormData(newFormData);
+        setAgentFormStep((s) => s + 1);
+        setAgentEditValue("");
+        return;
+      }
+      if (key.backspace || key.delete) {
+        setAgentEditValue((v) => v.slice(0, -1));
+        return;
+      }
+      if (ch) {
+        setAgentEditValue((v) => v + ch);
+        return;
+      }
+      return;
+    }
+
+    // AI description input
+    if (mode === "agents" && agentMenuMode === "ai_description") {
+      if (key.escape) {
+        setAgentMenuMode("creation_method");
+        setAgentEditValue("");
         return;
       }
       if (key.return) {
@@ -1450,115 +1595,7 @@ Call agent_draft with these parameters. Show me the preview but DO NOT call agen
         pushLines({ kind: "system", text: "Creating agent from description..." });
         sendTurn(aiPrompt, { echoUser: false });
         setMode("chat");
-        setAgentCreationMode("none");
-        setAgentEditValue("");
-        return;
-      }
-      if (key.backspace || key.delete) {
-        setAgentEditValue((v) => v.slice(0, -1));
-        return;
-      }
-      if (ch) {
-        setAgentEditValue((v) => v + ch);
-        return;
-      }
-      return;
-    }
-
-    // Check for 'f' or 'a' to start form/AI mode from agents list
-    if (mode === "agents" && agentCreationMode === "none") {
-      if (ch === "f") {
-        // Start manual form mode
-        setAgentCreationMode("manual");
-        setAgentFormStep(0);
-        setAgentFormData({
-          id: "",
-          name: "",
-          description: "",
-          mode: "auto",
-          systemPromptAddition: "",
-          allowedTools: undefined,
-          deniedTools: undefined,
-          maxTurns: undefined,
-          tags: undefined
-        });
-        setAgentEditValue("");
-        pushLines({ kind: "system", text: "Agent Form: Step 1/5 - Enter Agent ID (lowercase, 2-64 chars, a-z0-9_-)" });
-        return;
-      }
-      if (ch === "a") {
-        // Start AI mode
-        setAgentCreationMode("ai");
-        setAgentEditValue("");
-        pushLines({ kind: "system", text: "Describe the agent you want to create (press Enter when done, Esc to cancel):" });
-        return;
-      }
-    }
-
-    // Agents manual form mode
-    if (mode === "agents" && agentCreationMode === "manual") {
-      if (key.escape) {
-        setAgentCreationMode("none");
-        setAgentFormStep(0);
-        setAgentFormData({});
-        setAgentEditValue("");
-        pushLines({ kind: "system", text: "Cancelled form. Back to agent list." });
-        return;
-      }
-      if (key.return) {
-        const value = agentEditValue.trim();
-        if (!value && agentFormStep < 4) {
-          // Steps 0-4 are required
-          pushLines({ kind: "system", text: "This field is required." });
-          return;
-        }
-
-        // Validate and save form step
-        let newFormData = { ...agentFormData };
-        const opModes = ["auto", "confirm", "read_only", "planning"];
-
-        switch (agentFormStep) {
-          case 0: // agent_id
-            if (!/^[a-z0-9_-]{2,64}$/.test(value)) {
-              pushLines({ kind: "system", text: "Invalid agent ID. Must be 2-64 chars of a-z, 0-9, _, -" });
-              return;
-            }
-            newFormData.id = value;
-            setAgentFormStep(1);
-            pushLines({ kind: "system", text: "Step 2/5 - Enter Agent Name (display name)" });
-            break;
-          case 1: // name
-            newFormData.name = value;
-            setAgentFormStep(2);
-            pushLines({ kind: "system", text: "Step 3/5 - Enter Description (one-line summary)" });
-            break;
-          case 2: // description
-            newFormData.description = value;
-            setAgentFormStep(3);
-            pushLines({
-              kind: "system",
-              text: "Step 4/5 - Choose Mode (auto/confirm/read_only/planning, default: auto)"
-            });
-            break;
-          case 3: // mode
-            const selectedMode = value.toLowerCase() as any;
-            if (value && !opModes.includes(selectedMode)) {
-              pushLines({ kind: "system", text: "Invalid mode. Choose: auto, confirm, read_only, or planning" });
-              return;
-            }
-            newFormData.mode = selectedMode || "auto";
-            setAgentFormStep(4);
-            pushLines({ kind: "system", text: "Step 5/5 - Enter System Prompt Addition (instructions for the agent)" });
-            break;
-          case 4: // systemPromptAddition
-            newFormData.systemPromptAddition = value;
-            setAgentFormStep(5);
-            // Save the agent config and create draft
-            saveAgentFromForm(newFormData);
-            setAgentCreationMode("none");
-            return;
-        }
-        setAgentFormData(newFormData);
+        setAgentMenuMode("list");
         setAgentEditValue("");
         return;
       }
@@ -1706,9 +1743,9 @@ After creating the draft, I can apply it with skill_apply to make it active.`;
 
           if (command === "agents") {
             setMode("agents");
+            setAgentMenuMode("list");
             setAgentsIndex(0);
             setAgentsRefresh((n) => n + 1);
-            pushLines({ kind: "system", text: "Agents: Esc to exit • ↑/↓ to select • Enter to view • t to view templates • n to create new" });
             setInputValue("");
             return;
           }
@@ -1928,11 +1965,11 @@ After creating the draft, I can apply it with skill_apply to make it active.`;
         agentRows={agentRows}
         agentsIndex={agentsIndex}
         agentTemplates={agentTemplates}
-        agentCreationMode={agentCreationMode}
+        agentMenuMode={agentMenuMode}
+        agentCreationMethodIndex={agentCreationMethodIndex}
         agentTemplateIndex={agentTemplateIndex}
         agentFormStep={agentFormStep}
         agentFormData={agentFormData}
-        agentEditingField={agentEditingField}
         agentEditValue={agentEditValue}
       />
       <Transcript lines={lines} />
