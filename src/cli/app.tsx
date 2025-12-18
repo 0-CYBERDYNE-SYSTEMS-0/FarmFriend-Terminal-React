@@ -688,24 +688,60 @@ const MainView = memo(function MainView(props: MainViewProps) {
     // Manual form mode
     if (agentMenuMode === "form") {
       const formSteps = [
-        { label: "Agent ID", hint: "lowercase alphanumeric, 2-64 chars (a-z0-9_-)" },
-        { label: "Display Name", hint: "user-friendly name for the agent" },
-        { label: "Description", hint: "one-line summary of the agent's purpose" },
-        { label: "Operation Mode", hint: "auto / confirm / read_only / planning" },
-        { label: "System Prompt", hint: "detailed instructions for the agent" }
+        { label: "Agent ID", hint: "lowercase alphanumeric, 2-64 chars (a-z0-9_-)", required: true },
+        { label: "Display Name", hint: "user-friendly name for the agent", required: true },
+        { label: "Description", hint: "one-line summary of the agent's purpose", required: true },
+        { label: "Operation Mode", hint: "auto / confirm / read_only / planning", required: true },
+        { label: "System Prompt", hint: "detailed instructions for the agent", required: true },
+        { label: "Allowed Tools", hint: "comma-separated (e.g., read_file,write_file) [press Enter to skip]", required: false },
+        { label: "Denied Tools", hint: "comma-separated tools to block [press Enter to skip]", required: false },
+        { label: "Max Turns", hint: "max iterations (number) [press Enter to skip]", required: false },
+        { label: "Tags", hint: "comma-separated tags [press Enter to skip]", required: false },
+        { label: "Review & Save", hint: "Enter to create, 'e' to edit, Esc to cancel", required: false }
       ];
 
       const currentStep = formSteps[agentFormStep];
+      if (!currentStep) return null;
+
+      // Final step is preview
+      if (agentFormStep === 9) {
+        return (
+          <Box flexDirection="column">
+            <Text>Agent Configuration Preview</Text>
+            <Text dimColor>Review the agent configuration below</Text>
+            <Box flexDirection="column" marginTop={1}>
+              <Text>ID: {agentFormData.id || "(not set)"}</Text>
+              <Text>Name: {agentFormData.name || "(not set)"}</Text>
+              <Text>Description: {agentFormData.description || "(not set)"}</Text>
+              <Text>Mode: {agentFormData.mode || "auto"}</Text>
+              <Text dimColor>System Prompt: {agentFormData.systemPromptAddition?.slice(0, 50) || "(not set)"}...</Text>
+              <Box marginTop={1}>
+                <Text dimColor>Allowed Tools: {Array.isArray(agentFormData.allowedTools) ? agentFormData.allowedTools.join(", ") : "(AI will generate)"}</Text>
+              </Box>
+              <Text dimColor>Denied Tools: {Array.isArray(agentFormData.deniedTools) ? agentFormData.deniedTools.join(", ") : "(AI will generate)"}</Text>
+              <Text dimColor>Max Turns: {agentFormData.maxTurns || "(AI will generate)"}</Text>
+              <Text dimColor>Tags: {Array.isArray(agentFormData.tags) ? agentFormData.tags.join(", ") : "(AI will generate)"}</Text>
+            </Box>
+            <Box marginTop={1}>
+              <Text dimColor>Press Enter to create, 'e' to edit, Esc to cancel</Text>
+            </Box>
+          </Box>
+        );
+      }
 
       return (
         <Box flexDirection="column">
           <Text>Create Agent - Step {agentFormStep + 1}/{formSteps.length}</Text>
-          <Text dimColor>Enter value • Esc: cancel</Text>
+          <Text dimColor>
+            {currentStep.required ? "" : "[optional - press Enter to skip] "}
+            Esc: cancel
+          </Text>
           <Box flexDirection="column" marginTop={1}>
-            <Text>{currentStep?.label}</Text>
-            <Text dimColor>{currentStep?.hint}</Text>
+            <Text>{currentStep.label}</Text>
+            <Text dimColor>{currentStep.hint}</Text>
             <Box marginTop={1}>
-              <Text>{agentEditValue || "(empty)"}</Text>
+              <Text color="green">{"› "}</Text>
+              <Text>{agentEditValue}</Text>
             </Box>
           </Box>
         </Box>
@@ -1799,6 +1835,9 @@ After the draft is created, use command_apply to apply it and save the command.`
 
     // Manual form mode - text input
     if (mode === "agents" && agentMenuMode === "form") {
+      const requiredSteps = [0, 1, 2, 3, 4]; // Steps 0-4 are required
+      const fieldKeys = ["id", "name", "description", "mode", "systemPromptAddition", "allowedTools", "deniedTools", "maxTurns", "tags"];
+
       if (key.escape) {
         setAgentMenuMode("creation_method");
         setAgentFormStep(0);
@@ -1806,61 +1845,116 @@ After the draft is created, use command_apply to apply it and save the command.`
         setAgentEditValue("");
         return;
       }
-      if (key.return) {
-        const value = agentEditValue.trim();
-        if (!value && agentFormStep < 4) {
-          pushLines({ kind: "system", text: "This field is required." });
+
+      // Steps 0-8 are input steps, step 9 is preview
+      if (agentFormStep < 9) {
+        if (key.return) {
+          const value = agentEditValue.trim();
+          const isRequired = requiredSteps.includes(agentFormStep);
+
+          // Validate required fields
+          if (isRequired && !value) {
+            pushLines({ kind: "system", text: "This field is required." });
+            return;
+          }
+
+          let newFormData = { ...agentFormData };
+          const opModes = ["auto", "confirm", "read_only", "planning"];
+          const currentFieldKey = fieldKeys[agentFormStep];
+
+          switch (agentFormStep) {
+            case 0: // agent_id
+              if (value && !/^[a-z0-9_-]{2,64}$/.test(value)) {
+                pushLines({ kind: "system", text: "Invalid agent ID. Must be 2-64 chars of a-z, 0-9, _, -" });
+                return;
+              }
+              newFormData.id = value;
+              break;
+            case 1: // name
+              newFormData.name = value;
+              break;
+            case 2: // description
+              newFormData.description = value;
+              break;
+            case 3: // mode
+              const selectedMode = value.toLowerCase() as any;
+              if (value && !opModes.includes(selectedMode)) {
+                pushLines({ kind: "system", text: "Invalid mode. Choose: auto, confirm, read_only, or planning" });
+                return;
+              }
+              newFormData.mode = selectedMode || "auto";
+              break;
+            case 4: // systemPromptAddition
+              newFormData.systemPromptAddition = value;
+              break;
+            case 5: // allowedTools (optional)
+              if (value) {
+                newFormData.allowedTools = value.split(",").map((s) => s.trim()).filter(Boolean);
+              }
+              break;
+            case 6: // deniedTools (optional)
+              if (value) {
+                newFormData.deniedTools = value.split(",").map((s) => s.trim()).filter(Boolean);
+              }
+              break;
+            case 7: // maxTurns (optional)
+              if (value) {
+                const num = parseInt(value, 10);
+                if (!isNaN(num) && num > 0) {
+                  newFormData.maxTurns = num;
+                }
+              }
+              break;
+            case 8: // tags (optional)
+              if (value) {
+                newFormData.tags = value.split(",").map((s) => s.trim()).filter(Boolean);
+              }
+              break;
+          }
+
+          setAgentFormData(newFormData);
+          setAgentFormStep((s) => s + 1);
+          setAgentEditValue("");
           return;
         }
 
-        let newFormData = { ...agentFormData };
-        const opModes = ["auto", "confirm", "read_only", "planning"];
-
-        switch (agentFormStep) {
-          case 0: // agent_id
-            if (!/^[a-z0-9_-]{2,64}$/.test(value)) {
-              pushLines({ kind: "system", text: "Invalid agent ID. Must be 2-64 chars of a-z, 0-9, _, -" });
-              return;
-            }
-            newFormData.id = value;
-            break;
-          case 1: // name
-            newFormData.name = value;
-            break;
-          case 2: // description
-            newFormData.description = value;
-            break;
-          case 3: // mode
-            const selectedMode = value.toLowerCase() as any;
-            if (value && !opModes.includes(selectedMode)) {
-              pushLines({ kind: "system", text: "Invalid mode. Choose: auto, confirm, read_only, or planning" });
-              return;
-            }
-            newFormData.mode = selectedMode || "auto";
-            break;
-          case 4: // systemPromptAddition
-            newFormData.systemPromptAddition = value;
-            saveAgentFromForm(newFormData);
-            setAgentMenuMode("list");
-            setAgentFormStep(0);
-            setAgentFormData({});
-            setAgentEditValue("");
-            return;
+        if (key.backspace || key.delete) {
+          setAgentEditValue((v) => v.slice(0, -1));
+          return;
         }
 
-        setAgentFormData(newFormData);
-        setAgentFormStep((s) => s + 1);
-        setAgentEditValue("");
-        return;
+        if (ch) {
+          setAgentEditValue((v) => v + ch);
+          return;
+        }
       }
-      if (key.backspace || key.delete) {
-        setAgentEditValue((v) => v.slice(0, -1));
-        return;
+
+      // Step 9 - Preview & Save
+      if (agentFormStep === 9) {
+        if (key.return) {
+          saveAgentFromForm(agentFormData);
+          setAgentMenuMode("list");
+          setAgentFormStep(0);
+          setAgentFormData({});
+          setAgentEditValue("");
+          return;
+        }
+
+        if (ch === "e") {
+          setAgentFormStep(0);
+          setAgentEditValue("");
+          return;
+        }
+
+        if (key.escape) {
+          setAgentMenuMode("creation_method");
+          setAgentFormStep(0);
+          setAgentFormData({});
+          setAgentEditValue("");
+          return;
+        }
       }
-      if (ch) {
-        setAgentEditValue((v) => v + ch);
-        return;
-      }
+
       return;
     }
 
