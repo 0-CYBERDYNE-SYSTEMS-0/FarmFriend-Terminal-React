@@ -32,7 +32,7 @@ export async function startDaemon(): Promise<void> {
   const server = http.createServer();
   const wss = new WebSocketServer({ server });
 
-  const workspaceDir = process.env.FF_WORKSPACE_DIR || defaultWorkspaceDir(repoRoot);
+  const workspaceDir = process.env.FF_WORKSPACE_DIR || defaultWorkspaceDir();
   const registry = new ToolRegistry();
   registerAllTools(registry, { workspaceDir });
 

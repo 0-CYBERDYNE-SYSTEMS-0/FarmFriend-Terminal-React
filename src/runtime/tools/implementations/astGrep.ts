@@ -116,7 +116,7 @@ export async function astGrepTool(argsRaw: unknown, signal: AbortSignal): Promis
 
   const ctx = getToolContext();
   const repoRoot = path.resolve(ctx?.repoRoot ?? findRepoRoot());
-  const workspaceDir = path.resolve(ctx?.workspaceDir ?? defaultWorkspaceDir(repoRoot));
+  const workspaceDir = path.resolve(ctx?.workspaceDir ?? defaultWorkspaceDir());
 
   const targetAbs = resolveTargetPath(args?.path, repoRoot);
   if (!fs.existsSync(targetAbs)) throw new Error(`ast_grep: path not found: ${targetAbs}`);

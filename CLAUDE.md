@@ -16,6 +16,21 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Note for development**: This is a private package, so use `pnpm run` or `npm run` commands to execute commands. The `ff-terminal` command is only available after `pnpm build` and global installation.
 
+### Testing & Debugging
+- **Run tests**: `pnpm test` or `npm test`
+- **Run tests with UI**: `pnpm test:ui` or `npm run test:ui`
+- **Test coverage**: `pnpm test:coverage` or `npm run test:coverage`
+- **Run a single turn**: `pnpm dev -- run --prompt "your prompt here"` or `npm run dev -- run --prompt "your prompt here"`
+- **Start scheduler**: `pnpm dev:daemon` then check `~/.config/ff-terminal/` for scheduled tasks
+- **Web server** (alternative UI): `pnpm dev:web` or `npm run dev:web` on port 8787
+
+### Build Verification
+After making changes, always run:
+```bash
+npm run build
+```
+This catches TypeScript errors before deployment.
+
 ### Native Dependencies & Build Scripts
 
 The project has optional native dependencies:
@@ -27,18 +42,6 @@ If pnpm shows a warning about "Ignored build scripts", you can safely ignore it 
 ```bash
 pnpm approve-builds
 ```
-
-### Testing & Debugging
-- **Run a single turn**: `pnpm dev -- run --prompt "your prompt here"` or `npm run dev -- run --prompt "your prompt here"`
-- **Start scheduler**: `pnpm dev:daemon` then check `~/.config/ff-terminal/` for scheduled tasks
-- **Web server** (alternative UI): `pnpm dev:web` or `npm run dev:web` on port 8787
-
-### Build Verification
-After making changes, always run:
-```bash
-npm run build
-```
-This catches TypeScript errors before deployment.
 
 ### Logging & Observability
 - Structured JSONL session logs are written to `ff-terminal-workspace/logs/sessions/<session>.jsonl` (rotated, level-controlled via `log_level` in config). Per-run headless logs live in `ff-terminal-workspace/logs/runs/`.
@@ -332,6 +335,11 @@ The default workspace is determined by:
 1. Runtime override (FF_MODEL, FF_SUBAGENT_MODEL)
 2. Profile-specific model
 3. Default from config
+
+### System Message Variants
+The system supports multiple system message variants (A, B, C) for different agent behaviors:
+- Variant C is the simplified version that reduces tool obsession
+- Configured via `system_message_variant` in settings
 
 ### Debugging Agent Execution
 Enable JSONL logging of tool calls:

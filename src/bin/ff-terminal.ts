@@ -276,7 +276,8 @@ async function run(): Promise<void> {
     const sessionId = pickArg(rest, "--session") || newId("session");
 
     const repoRoot = findRepoRoot();
-    const workspaceDir = process.env.FF_WORKSPACE_DIR || defaultWorkspaceDir(repoRoot);
+    const workspaceDir = process.env.FF_WORKSPACE_DIR || defaultWorkspaceDir();
+
 
     // Load profile if specified
     if (profileName) {
@@ -447,7 +448,8 @@ async function run(): Promise<void> {
   if (cmd === "schedule") {
     const action = rest[0];
     const repoRoot = findRepoRoot();
-    const workspaceDir = process.env.FF_WORKSPACE_DIR || defaultWorkspaceDir(repoRoot);
+    const workspaceDir = process.env.FF_WORKSPACE_DIR || defaultWorkspaceDir();
+
 
     if (action === "list") {
       const store = loadTaskStore(workspaceDir);

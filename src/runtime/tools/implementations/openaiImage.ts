@@ -59,7 +59,7 @@ export async function generateImageOpenAITool(argsRaw: unknown, signal: AbortSig
 
   const ctx = getToolContext();
   const repoRoot = path.resolve(ctx?.repoRoot ?? findRepoRoot());
-  const workspaceDir = path.resolve(ctx?.workspaceDir ?? defaultWorkspaceDir(repoRoot));
+  const workspaceDir = path.resolve(ctx?.workspaceDir ?? defaultWorkspaceDir());
   const outDir = path.join(workspaceDir, "generated-images");
   fs.mkdirSync(outDir, { recursive: true });
 

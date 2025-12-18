@@ -58,7 +58,7 @@ export async function projectTemplateTool(argsRaw: unknown): Promise<string> {
 
   const ctx = getToolContext();
   const repoRoot = path.resolve(ctx?.repoRoot ?? findRepoRoot());
-  const workspaceDir = path.resolve(ctx?.workspaceDir ?? defaultWorkspaceDir(repoRoot));
+  const workspaceDir = path.resolve(ctx?.workspaceDir ?? defaultWorkspaceDir());
   const targetWorkspace = resolveWorkspace({ workspacePath: customWorkspace, repoRoot, workspaceDir });
 
   const outDir = path.join(targetWorkspace, "projects", projectName);

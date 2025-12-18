@@ -17,6 +17,15 @@ export function defaultConfigPath(): string {
   return path.join(home, ".config", "ff-terminal", "config.json");
 }
 
-export function defaultWorkspaceDir(cwd = process.cwd()): string {
-  return path.join(cwd, "ff-terminal-workspace");
+export function defaultWorkspaceDir(): string {
+  /**
+   * BEST PRACTICES: Use a single global workspace directory in the user's home folder.
+   * This ensures all projects, logs, generated images, and thoughts are stored in one location,
+   * preventing data fragmentation and making backups easier.
+   *
+   * Previous behavior: Created project-specific workspaces, causing data scattering
+   * across multiple directories and confusing state management.
+   */
+  const home = os.homedir();
+  return path.join(home, "ff-terminal-workspace");
 }

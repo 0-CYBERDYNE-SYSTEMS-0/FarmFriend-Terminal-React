@@ -45,7 +45,7 @@ const PORT = Number(process.env.FF_WEB_PORT || 8787);
 export async function startWebServer(): Promise<void> {
   const repoRoot = findRepoRoot();
   loadDefaultDotenv({ repoRoot });
-  const workspaceDir = process.env.FF_WORKSPACE_DIR || defaultWorkspaceDir(repoRoot);
+  const workspaceDir = process.env.FF_WORKSPACE_DIR || defaultWorkspaceDir();
   const frontendDistDir = path.join(
     repoRoot,
     "reference source code python ver",

@@ -12,7 +12,7 @@ export async function writeFileTool(args: unknown): Promise<string> {
 
   const ctx = getToolContext();
   const repoRoot = path.resolve(ctx?.repoRoot ?? findRepoRoot());
-  const workspaceDir = path.resolve(ctx?.workspaceDir ?? defaultWorkspaceDir(repoRoot));
+  const workspaceDir = path.resolve(ctx?.workspaceDir ?? defaultWorkspaceDir());
 
   const abs = path.isAbsolute(filePath) ? path.resolve(filePath) : path.resolve(repoRoot, filePath);
   const allowedRoots = [repoRoot, workspaceDir].map((p) => (p.endsWith(path.sep) ? p : p + path.sep));

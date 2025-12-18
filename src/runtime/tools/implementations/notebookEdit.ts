@@ -50,7 +50,7 @@ export async function notebookEditTool(argsRaw: unknown): Promise<string> {
   const abs = path.resolve(notebookPath);
   const ctx = getToolContext();
   const repoRoot = path.resolve(ctx?.repoRoot ?? findRepoRoot());
-  const workspaceDir = path.resolve(ctx?.workspaceDir ?? defaultWorkspaceDir(repoRoot));
+  const workspaceDir = path.resolve(ctx?.workspaceDir ?? defaultWorkspaceDir());
   ensureAllowedWriteTarget(abs, repoRoot, workspaceDir);
 
   if (!fs.existsSync(abs)) throw new Error(`notebook_edit: notebook not found: ${abs}`);

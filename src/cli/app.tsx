@@ -930,8 +930,11 @@ function App(props: { port: number }) {
   );
 
   const workspaceDir = useMemo(() => {
-    const repoRoot = findRepoRoot();
-    return String(process.env.FF_WORKSPACE_DIR || defaultWorkspaceDir(repoRoot)).trim() || defaultWorkspaceDir(repoRoot);
+    const workspaceFromEnv = process.env.FF_WORKSPACE_DIR;
+    if (workspaceFromEnv) {
+      return String(workspaceFromEnv).trim();
+    }
+    return defaultWorkspaceDir();
   }, []);
 
   const discoverProjects = (): ProjectStub[] => {

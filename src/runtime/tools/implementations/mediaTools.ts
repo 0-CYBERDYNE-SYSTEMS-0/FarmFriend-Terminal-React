@@ -86,7 +86,7 @@ export async function generateImageGeminiTool(argsRaw: unknown, signal: AbortSig
 
   const ctx = getToolContext();
   const repoRoot = ctx?.repoRoot ? ctx.repoRoot : findRepoRoot();
-  const workspaceDir = ctx?.workspaceDir ? ctx.workspaceDir : defaultWorkspaceDir(repoRoot);
+  const workspaceDir = ctx?.workspaceDir ? ctx.workspaceDir : defaultWorkspaceDir();
 
   const filenameBase = (String(args?.filename || "").trim() || `gemini_${safeFilenameBase(prompt)}_${timestamp()}`).replace(/\.[a-z0-9]+$/i, "");
   const fullPrompt = details ? `${prompt}\n\nAdditional details:\n${details}` : prompt;
@@ -142,7 +142,7 @@ export async function analyzeImageGeminiTool(argsRaw: unknown, signal: AbortSign
 
   const ctx = getToolContext();
   const repoRoot = ctx?.repoRoot ? ctx.repoRoot : findRepoRoot();
-  const workspaceDir = ctx?.workspaceDir ? ctx.workspaceDir : defaultWorkspaceDir(repoRoot);
+  const workspaceDir = ctx?.workspaceDir ? ctx.workspaceDir : defaultWorkspaceDir();
 
   const prompt =
     analysisType === "qa" && question
@@ -197,7 +197,7 @@ export async function editImageGeminiTool(argsRaw: unknown, signal: AbortSignal)
 
   const ctx = getToolContext();
   const repoRoot = ctx?.repoRoot ? ctx.repoRoot : findRepoRoot();
-  const workspaceDir = ctx?.workspaceDir ? ctx.workspaceDir : defaultWorkspaceDir(repoRoot);
+  const workspaceDir = ctx?.workspaceDir ? ctx.workspaceDir : defaultWorkspaceDir();
 
   const filenameBase =
     (String(args?.filename || "").trim() || `edited_${safeFilenameBase(path.basename(inputImagePath))}_${timestamp()}`).replace(/\.[a-z0-9]+$/i, "");
