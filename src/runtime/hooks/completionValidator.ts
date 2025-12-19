@@ -74,7 +74,11 @@ const PATTERNS: Array<{ re: RegExp; type: PromiseType }> = [
   { re: /\bFirst,?\s+I\s+(\w+)\s+([^.!?]+)\b/gi, type: "tool_execution" },
   { re: /\bI\s+need\s+to\s+(\w+)\s+([^.!?]+)\b/gi, type: "tool_execution" },
 
-  { re: /\bI\s*(?:'|’)?ll\s+(read|write|edit|create|modify|update|delete|save)\s+([^.!?]+)\b/gi, type: "file_operation" },
+  // Continuation patterns (catch "then open", "and then verify", etc.)
+  { re: /\b(?:then|and\s+then)\s+(\w+)\s+([^.!?]+)\b/gi, type: "tool_execution" },
+  { re: /\band\s+(\w+)\s+(it|the\s+\w+|[^.!?]+)\b/gi, type: "tool_execution" },
+
+  { re: /\bI\s*(?:'|')?ll\s+(read|write|edit|create|modify|update|delete|save)\s+([^.!?]+)\b/gi, type: "file_operation" },
   { re: /\bI\s+will\s+(read|write|edit|create|modify|update|delete|save)\s+([^.!?]+)\b/gi, type: "file_operation" },
   { re: /\bI\s+will\s+(verify|validate|test|check)\s+([^.!?]+)\b/gi, type: "verification" },
   { re: /\bLet\s+me\s+(search|find|investigate|research|browse)\s+([^.!?]+)\b/gi, type: "research" }
