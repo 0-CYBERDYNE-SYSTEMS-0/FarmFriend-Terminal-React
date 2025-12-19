@@ -363,10 +363,11 @@ export async function* runAgentTurn(params: {
     }
   };
 
-  for (let i = 0; i < maxIterations; i += 1) {
-    iterationCount = i + 1;
-    logger.log("debug", "iteration_start", { session_id: sessionId, turn_id: turnId, iteration: i + 1 });
-    yield { kind: "status", message: `Provider: ${provider.name} | Model: ${model}` };
+  try {
+    for (let i = 0; i < maxIterations; i += 1) {
+      iterationCount = i + 1;
+      logger.log("debug", "iteration_start", { session_id: sessionId, turn_id: turnId, iteration: i + 1 });
+      yield { kind: "status", message: `Provider: ${provider.name} | Model: ${model}` };
 
     let toolCalls: { id: string; name: string; arguments: unknown }[] = [];
     let assistantContent = "";
@@ -628,21 +629,20 @@ export async function* runAgentTurn(params: {
       });
       saveSession(session);
     }
+    }
+  } finally {
+    // CRITICAL: Always log turn_complete, even if interrupted by AbortSignal
+    // This ensures session logs are complete and we can track interrupted turns
+    logger.log("info", "turn_complete", {
+      session_id: sessionId,
+      turn_id: turnId,
+      duration_ms: Date.now() - runStartedAt,
+      iterations: iterationCount,
+      tool_calls_executed: toolCallsExecuted,
+      aborted: signal.aborted,
+      final_content_preview: smartTruncate(finalAssistantContent, 800)
+    });
+
+    yield { kind: "task_completed" };
   }
-
-  // If the model already ended with stop token, we still end the turn explicitly here.
-  if (finalAssistantContent.includes("[AWAITING_INPUT]")) {
-    // No-op; token already stripped from output.
-  }
-
-  logger.log("info", "turn_complete", {
-    session_id: sessionId,
-    turn_id: turnId,
-    duration_ms: Date.now() - runStartedAt,
-    iterations: iterationCount,
-    tool_calls_executed: toolCallsExecuted,
-    final_content_preview: smartTruncate(finalAssistantContent, 800)
-  });
-
-  yield { kind: "task_completed" };
 }
