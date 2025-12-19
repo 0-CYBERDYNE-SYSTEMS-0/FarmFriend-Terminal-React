@@ -351,48 +351,48 @@ export async function* runAgentTurn(params: {
       logger.log("debug", "iteration_start", { session_id: sessionId, turn_id: turnId, iteration: i + 1 });
       yield { kind: "status", message: `Provider: ${provider.name} | Model: ${model}` };
 
-    let toolCalls: { id: string; name: string; arguments: unknown }[] = [];
-    let assistantContent = "";
-    let emittedAnyContent = false;
-    let emittedAnyThinking = false;
+      let toolCalls: { id: string; name: string; arguments: unknown }[] = [];
+      let assistantContent = "";
+      let emittedAnyContent = false;
+      let emittedAnyThinking = false;
 
-    for await (const ev of provider.streamChat({
-      model,
-      messages,
-      tools,
-      temperature: Number((cfg as any).temperature ?? 0.7),
-      maxTokens: Number((cfg as any).max_tokens ?? 12000),
-      signal
-    })) {
-      if (ev.type === "content") {
-        // Hide stop token from UI if it appears.
-        const cleaned = ev.delta.replace("[AWAITING_INPUT]", "");
-        if (cleaned) {
-          emittedAnyContent = true;
-          yield { kind: "content", delta: cleaned };
-          logger.log("debug", "assistant_delta", {
+      for await (const ev of provider.streamChat({
+        model,
+        messages,
+        tools,
+        temperature: Number((cfg as any).temperature ?? 0.7),
+        maxTokens: Number((cfg as any).max_tokens ?? 12000),
+        signal
+      })) {
+        if (ev.type === "content") {
+          // Hide stop token from UI if it appears.
+          const cleaned = ev.delta.replace("[AWAITING_INPUT]", "");
+          if (cleaned) {
+            emittedAnyContent = true;
+            yield { kind: "content", delta: cleaned };
+            logger.log("debug", "assistant_delta", {
+              session_id: sessionId,
+              turn_id: turnId,
+              iteration: i + 1,
+              delta_preview: truncateForLog(cleaned, 400)
+            });
+          }
+        } else if (ev.type === "thinking") {
+          emittedAnyThinking = true;
+          yield { kind: "thinking", delta: ev.delta };
+        } else if (ev.type === "error") {
+          yield { kind: "error", message: ev.message };
+          logger.log("error", "provider_error", {
             session_id: sessionId,
             turn_id: turnId,
             iteration: i + 1,
-            delta_preview: truncateForLog(cleaned, 400)
+            message: ev.message
           });
+        } else if (ev.type === "final") {
+          assistantContent = ev.content.replace("[AWAITING_INPUT]", "");
+          toolCalls = ev.toolCalls;
         }
-      } else if (ev.type === "thinking") {
-        emittedAnyThinking = true;
-        yield { kind: "thinking", delta: ev.delta };
-      } else if (ev.type === "error") {
-        yield { kind: "error", message: ev.message };
-        logger.log("error", "provider_error", {
-          session_id: sessionId,
-          turn_id: turnId,
-          iteration: i + 1,
-          message: ev.message
-        });
-      } else if (ev.type === "final") {
-        assistantContent = ev.content.replace("[AWAITING_INPUT]", "");
-        toolCalls = ev.toolCalls;
       }
-    }
 
     // Some gateways do not stream deltas; ensure final content is displayed at least once.
     if (!emittedAnyContent && assistantContent) {
@@ -600,7 +600,6 @@ export async function* runAgentTurn(params: {
       // Note: Tool outputs are not added to session.conversation to keep UI clean
       // They're only in messages[] for LLM context
     }
-    }
     // If we've reached the last iteration, run a final stop-check to avoid silent exit with open promises.
     if (iterationCount === maxIterations - 1) {
       const finalStop = await hookRegistry.runAgentStop({
@@ -630,6 +629,7 @@ export async function* runAgentTurn(params: {
           maxIterations + 1; // no-op, documentation only
         }
       }
+    }
     }
   } finally {
     // CRITICAL: Always log turn_complete, even if interrupted by AbortSignal

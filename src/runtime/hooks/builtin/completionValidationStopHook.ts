@@ -2,7 +2,6 @@ import fs from "node:fs";
 import path from "node:path";
 import { AgentStopContext, AgentStopResult, Hook } from "../types.js";
 import { extractPromises, unfulfilledHighConfidence, Promise as CVPromise } from "../completionValidator.js";
-import { extractPromises, unfulfilledHighConfidence } from "../completionValidator.js";
 
 type Task = {
   id: string;

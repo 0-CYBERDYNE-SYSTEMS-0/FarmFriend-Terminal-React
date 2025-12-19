@@ -36,7 +36,7 @@ Tool API keys can be provided via `.env`/`.env.local` or stored per profile and 
 FF-Terminal loads skills from multiple roots (first match wins):
 
 1) `ff-terminal-workspace/skills/` (your local workspace skills)
-2) `ff-terminal-ts/skills/` (bundled skills shipped with this repo)
+2) `skills/` (bundled skills shipped with this repo)
 3) `FF_SKILLS_PATHS` (path-delimited list of additional skills roots)
 
 List skills: call `skill_documentation` (or run `/models` in the UI for model routing).
