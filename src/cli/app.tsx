@@ -1479,6 +1479,8 @@ ${fullContext}`;
         }
 
         if (msg.type === "chunk") {
+          // Defensive: if we somehow lost the processing flag (e.g., user queued/resumed), re-enable spinner on any incoming chunk.
+          if (!processing) setProcessing(true);
           const parsed = parseWireChunk(msg.chunk, displayMode);
           if (!parsed) return;
           if (parsed.kind === "assistant" || parsed.kind === "thinking") {
