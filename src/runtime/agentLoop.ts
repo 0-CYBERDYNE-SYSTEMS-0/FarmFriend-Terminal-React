@@ -11,12 +11,7 @@ import { OpenAIMessage } from "./providers/types.js";
 import fs from "node:fs";
 import path from "node:path";
 import { getToolContext } from "./tools/context.js";
-import {
-  ExecutionRecord,
-  extractPromises,
-  markFulfilled,
-  Promise as CompletionPromise
-} from "./hooks/completionValidator.js";
+import { ExecutionRecord } from "./hooks/completionValidator.js";
 import { listSkillStubs } from "./tools/implementations/skills.js";
 import { HookRegistry } from "./hooks/registry.js";
 import { createCompletionValidationStopHook } from "./hooks/builtin/completionValidationStopHook.js";
@@ -335,7 +330,6 @@ export async function* runAgentTurn(params: {
     }
   };
 
-  const promisesThisTurn: CompletionPromise[] = [];
   const executionsThisTurn: ExecutionRecord[] = [];
   const hookRegistry = new HookRegistry();
   let iterationCount = 0;
@@ -345,23 +339,10 @@ export async function* runAgentTurn(params: {
       createCompletionValidationStopHook({
         enabled: true,
         maxAttempts: completionValidationMaxAttempts,
-        getPromises: () => promisesThisTurn,
-        getExecutions: () => executionsThisTurn
+        workspaceDir: toolCtx?.workspaceDir
       })
     );
   }
-
-  const mergePromises = (incoming: CompletionPromise[]) => {
-    for (const p of incoming) {
-      const key = `${p.promiseType}::${p.extractedAction.toLowerCase()}::${p.extractedTarget.toLowerCase()}`;
-      const idx = promisesThisTurn.findIndex(
-        (q) =>
-          `${q.promiseType}::${q.extractedAction.toLowerCase()}::${q.extractedTarget.toLowerCase()}` === key
-      );
-      if (idx === -1) promisesThisTurn.push(p);
-      else if (p.confidence > promisesThisTurn[idx]!.confidence) promisesThisTurn[idx] = p;
-    }
-  };
 
   try {
     for (let i = 0; i < maxIterations; i += 1) {
@@ -425,14 +406,6 @@ export async function* runAgentTurn(params: {
       content_preview: smartTruncate(assistantContent, 800),
       tool_calls_count: toolCalls.length
     });
-
-    if (completionValidationEnabled) {
-      const extracted = extractPromises(assistantContent);
-      if (extracted.length) {
-        mergePromises(extracted);
-        markFulfilled(promisesThisTurn, executionsThisTurn);
-      }
-    }
 
     // Record assistant content (even if empty; tool-calling turns often have little text).
     session.conversation.push({
@@ -574,7 +547,6 @@ export async function* runAgentTurn(params: {
           resultSummary: String(r.output || "").slice(0, 200)
         });
       }
-      markFulfilled(promisesThisTurn, executionsThisTurn);
     }
 
     for (const r of results) {
