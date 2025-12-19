@@ -1,6 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import { AgentStopContext, AgentStopResult, Hook } from "../types.js";
+import { extractPromises, unfulfilledHighConfidence, Promise as CVPromise } from "../completionValidator.js";
+import { extractPromises, unfulfilledHighConfidence } from "../completionValidator.js";
 
 type Task = {
   id: string;
@@ -37,7 +39,31 @@ export function createCompletionValidationStopHook(params: {
     const store = readTaskStore(params.workspaceDir);
     const openTasks = store.tasks.filter((t) => t.status === "open");
 
-    if (!openTasks.length) return { action: "allow" };
+    // Promise-based validation (long-horizon autonomy): look at the assistant's latest message
+    const promises = extractPromises(_ctx.assistantContent || "");
+
+    // Heuristic: if no tools ran this turn but assistant text contains hallucinated tool tags,
+    // synthesize a high-confidence promise to force a retry instead of silently stopping.
+    const syntheticPromises: CVPromise[] = [];
+    if (_ctx.toolExecutionsCount === 0) {
+      const matches = [...(_ctx.assistantContent || "").matchAll(/\[tool:([^\]\s]+)\]/gi)];
+      for (const m of matches.slice(0, 4)) {
+        syntheticPromises.push({
+          id: `promise_synth_${m[1] || "tool"}`,
+          content: `[tool:${m[1]}] (no execution observed)`,
+          promiseType: "tool_execution",
+          extractedAction: "execute",
+          extractedTarget: m[1] || "tool_call",
+          confidence: 0.9,
+          fulfilled: false,
+          fulfillmentEvidence: []
+        });
+      }
+    }
+
+    const openPromises = unfulfilledHighConfidence([...promises, ...syntheticPromises]);
+
+    if (!openTasks.length && !openPromises.length) return { action: "allow" };
 
     // ONE-SHOT NUDGE: Single gentle reminder, then allow stop
     // This catches ~80% of "forgot to finish" cases without creating loops
@@ -50,16 +76,32 @@ export function createCompletionValidationStopHook(params: {
         .map((t) => `- [${t.id}] ${t.description}`)
         .join("\n");
 
+      const promiseList = openPromises
+        .slice(0, 5)
+        .map((p) => `- (${p.promiseType}) ${p.content}`)
+        .join("\n");
+
+      const sections = [] as string[];
+      if (openTasks.length) {
+        sections.push(
+          `Tasks still marked as open in tasks.json (${openTasks.length}):\n${taskList}`
+        );
+      }
+      if (openPromises.length) {
+        sections.push(
+          `Commitments detected in your last reply that are not yet fulfilled (${openPromises.length}):\n${promiseList}`
+        );
+      }
+
       const systemPrompt =
-        `Observation: The following tasks are still marked as "open" in your task list:\n` +
-        `${taskList}\n\n` +
-        `If these tasks are complete, use manage_task to mark them as completed. ` +
-        `If they are no longer needed, please explain why and stop. Otherwise, please continue with the work.`;
+        `Observation: You attempted to stop with outstanding work.\n\n` +
+        sections.join("\n\n") +
+        `\n\nIf tasks are done, close them with manage_task. If promises cannot be completed, explicitly explain why (environmental limits, missing context, etc.). Otherwise, continue and fulfill them.`;
 
       return {
         action: "block",
-        reason: "completion_validation: open tasks remain (one nudge allowed)",
-        statusMessage: `completion_validation: ${openTasks.length} open task(s) - complete or explain`,
+        reason: "completion_validation: outstanding tasks/promises (one nudge allowed)",
+        statusMessage: `completion_validation: ${openTasks.length} tasks, ${openPromises.length} promises open - complete or explain`,
         systemPrompt
       };
     }

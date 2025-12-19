@@ -277,7 +277,8 @@ export async function* runAgentTurn(params: {
     messages.push({ role: m.role === "assistant" ? "assistant" : "user", content: m.content });
   }
 
-  const maxIterations = Number((cfg as any).max_iterations || 8);
+  // Allow very long runs; default 500, overridable via config/env.
+  const maxIterations = Number((process.env.FF_MAX_ITERATIONS || (cfg as any).max_iterations || 500));
   let finalAssistantContent = "";
   const toolLimitTotal = Number((cfg as any).tool_limit_total ?? 5000);
   let toolCallsExecuted = 0;
@@ -429,7 +430,7 @@ export async function* runAgentTurn(params: {
         toolExecutionsCount: executionsThisTurn.length
       });
       const stopReason = stop.action === "allow" ? undefined : (stop as any).reason ?? (stop as any).statusMessage;
-      logger.log("debug", "agent_stop_decision", {
+      logger.log("info", "agent_stop_decision", {
         session_id: sessionId,
         turn_id: turnId,
         iteration: i + 1,
@@ -446,6 +447,8 @@ export async function* runAgentTurn(params: {
       }
       break;
     }
+    // Guard: if we are at the final iteration and toolCalls exist, we'll still process them,
+    // but after that, if maxIterations reached, we will run stop hook once more before exit.
     if (toolCallsExecuted + toolCalls.length > toolLimitTotal) {
       yield { kind: "error", message: `Tool call limit exceeded (${toolLimitTotal}). Refusing to execute more tools.` };
       logger.log("warn", "tool_limit_reached", {
@@ -597,6 +600,36 @@ export async function* runAgentTurn(params: {
       // Note: Tool outputs are not added to session.conversation to keep UI clean
       // They're only in messages[] for LLM context
     }
+    }
+    // If we've reached the last iteration, run a final stop-check to avoid silent exit with open promises.
+    if (iterationCount === maxIterations - 1) {
+      const finalStop = await hookRegistry.runAgentStop({
+        sessionId,
+        repoRoot,
+        workspaceDir: toolCtx?.workspaceDir,
+        userInput,
+        assistantContent: finalAssistantContent,
+        iteration: i,
+        maxIterations,
+        toolExecutionsCount: executionsThisTurn.length
+      });
+      const stopReason = finalStop.action === "allow" ? undefined : (finalStop as any).reason ?? (finalStop as any).statusMessage;
+      logger.log("info", "agent_stop_decision", {
+        session_id: sessionId,
+        turn_id: turnId,
+        iteration: i + 1,
+        action: finalStop.action,
+        reason: stopReason,
+        phase: "final_iteration_stop_check"
+      });
+      if (finalStop.action === "block") {
+        if (finalStop.statusMessage) yield { kind: "status", message: finalStop.statusMessage };
+        messages.push({ role: "system", content: finalStop.systemPrompt });
+        // Allow one extra loop beyond nominal max to honor the block.
+        if (i >= maxIterations - 1) {
+          maxIterations + 1; // no-op, documentation only
+        }
+      }
     }
   } finally {
     // CRITICAL: Always log turn_complete, even if interrupted by AbortSignal

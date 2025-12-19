@@ -74,6 +74,10 @@ const PATTERNS: Array<{ re: RegExp; type: PromiseType }> = [
   { re: /\bFirst,?\s+I\s+(\w+)\s+([^.!?]+)\b/gi, type: "tool_execution" },
   { re: /\bI\s+need\s+to\s+(\w+)\s+([^.!?]+)\b/gi, type: "tool_execution" },
 
+  // Future-intent patterns frequently used in progress updates / hallucinated tool blocks
+  { re: /\b(?:going|gonna)\s+to\s+(\w+)\s+([^.!?]+)\b/gi, type: "tool_execution" },
+  { re: /\b(?:plan|planning|intend|aim|trying|try|want)\s+to\s+(\w+)\s+([^.!?]+)\b/gi, type: "tool_execution" },
+
   // Continuation patterns (catch "then open", "and then verify", etc.)
   { re: /\b(?:then|and\s+then)\s+(\w+)\s+([^.!?]+)\b/gi, type: "tool_execution" },
   { re: /\band\s+(\w+)\s+(it|the\s+\w+|[^.!?]+)\b/gi, type: "tool_execution" },

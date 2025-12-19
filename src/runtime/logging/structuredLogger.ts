@@ -29,7 +29,9 @@ export function parseLogLevel(raw?: unknown): LogLevel {
 }
 
 export function redactValue(value: unknown): unknown {
-  const KEY_RE = /(api_?key|token|password|secret|authorization|cookie|credential|bearer|session|jwt)/i;
+  // Only redact when the entire key is sensitive (not just containing the substring),
+  // so nested objects like `credentials.api_key` remain traversable and get redacted at the leaf.
+  const KEY_RE = /^(api_?key|token|password|secret|authorization|cookie|credential|bearer|session|jwt)$/i;
 
   if (value == null) return value;
   if (typeof value === "string") {
