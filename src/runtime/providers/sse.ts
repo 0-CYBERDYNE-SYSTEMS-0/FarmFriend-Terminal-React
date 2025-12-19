@@ -27,4 +27,17 @@ export async function* readSSEDataLines(body: ReadableStream<Uint8Array>): Async
       yield dataLines.join("\n");
     }
   }
+
+  // Flush any trailing event that didn't end with a blank line.
+  if (buf.trim().length) {
+    const rawEvent = buf.replace(/\r\n/g, "\n");
+    const dataLines = rawEvent
+      .split("\n")
+      .map((l) => l.trimEnd())
+      .filter((l) => l.startsWith("data:"))
+      .map((l) => l.slice("data:".length).trimStart());
+    if (dataLines.length) {
+      yield dataLines.join("\n");
+    }
+  }
 }

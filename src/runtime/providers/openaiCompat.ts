@@ -128,10 +128,12 @@ export function openAICompatProvider(params: {
   extraHeaders?: Record<string, string>;
   mapModel?: (requested: string) => string;
   appendV1?: boolean;
+  preferStream?: boolean;
 }): Provider {
   const baseUrl = normalizeBaseUrl(params.baseUrl, params.appendV1 ?? true);
   const extraHeaders = params.extraHeaders ?? {};
   const mapModel = params.mapModel ?? ((m: string) => m);
+  const preferStream = params.preferStream ?? true;
 
   return {
     name: params.name,
@@ -144,13 +146,123 @@ export function openAICompatProvider(params: {
         console.error(`[ff-terminal][provider:${params.name}]`, ...args);
       };
 
-      const payload = {
+      const payloadBase = {
         model: mapModel(model),
         messages,
         tools: tools?.length ? tools : undefined,
         temperature,
-        max_tokens: maxTokens,
-        stream: true
+        max_tokens: maxTokens
+      };
+
+      let localRetryUsed = false;
+      const canRetryEmptyStream = () => !localRetryUsed;
+      const markRetryUsed = () => {
+        localRetryUsed = true;
+      };
+
+      const requestOnce = async (stream: boolean) => {
+        return fetch(url, {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            ...authHeader(params.apiKey),
+            ...extraHeaders
+          },
+          body: JSON.stringify({ ...payloadBase, stream }),
+          signal
+        });
+      };
+
+      const consumeSSE = async (body: ReadableStream<Uint8Array>) => {
+        let content = "";
+        const toolCallDeltas: any[] = [];
+        let messageToolCalls: ToolCall[] = [];
+        let rawModel: string | undefined;
+        const anthropicToolByIndex = new Map<number, { id?: string; name?: string; args: string }>();
+        let sawAnyEvent = false;
+
+        for await (const data of readSSEDataLines(body)) {
+          if (data === "[DONE]") break;
+          const obj: any = safeJsonParse(data);
+          if (!obj) continue;
+          sawAnyEvent = true;
+
+          rawModel = typeof obj.model === "string" ? obj.model : rawModel;
+
+          if (obj.error) {
+            const msg =
+              typeof obj.error?.message === "string"
+                ? obj.error.message
+                : typeof obj.error === "string"
+                  ? obj.error
+                  : JSON.stringify(obj.error);
+            return { content: "", toolCalls: [], rawModel, sawAnyEvent, error: `Provider error (stream) at ${url}: ${msg}` };
+          }
+
+          const choice = obj.choices?.[0];
+          const delta = choice?.delta;
+          const deltaContentText = extractTextContent(delta?.content);
+          if (deltaContentText) content += deltaContentText;
+          else {
+            const full = extractTextContent(choice?.message?.content);
+            if (full) {
+              if (full.startsWith(content)) content = full;
+              else if (full !== content) content = full;
+            }
+          }
+
+          const tc = Array.isArray(delta?.tool_calls) ? delta.tool_calls : null;
+          if (tc && tc.length) toolCallDeltas.push(...tc);
+          const messageToolCallSet = toolCallsFromMessage(choice?.message);
+          if (messageToolCallSet.length) messageToolCalls = messageToolCallSet;
+
+          const t = typeof obj.type === "string" ? obj.type : "";
+          if (t === "content_block_delta") {
+            const text = typeof obj.delta?.text === "string" ? obj.delta.text : "";
+            if (text) content += text;
+            const partial = typeof obj.delta?.partial_json === "string" ? obj.delta.partial_json : "";
+            if (partial) {
+              const idx = typeof obj.index === "number" ? obj.index : 0;
+              const prev = anthropicToolByIndex.get(idx) ?? { args: "" };
+              anthropicToolByIndex.set(idx, { ...prev, args: prev.args + partial });
+            }
+          }
+          if (t === "content_block_start") {
+            const block = obj.content_block;
+            if (block?.type === "text" && typeof block.text === "string" && block.text) {
+              content += block.text;
+            }
+            if (block?.type === "tool_use") {
+              const idx = typeof obj.index === "number" ? obj.index : 0;
+              const id = typeof block.id === "string" ? block.id : undefined;
+              const name = typeof block.name === "string" ? block.name : undefined;
+              const input = block.input;
+              const prev = anthropicToolByIndex.get(idx) ?? { args: "" };
+              if (input && typeof input === "object") {
+                anthropicToolByIndex.set(idx, { id: id ?? prev.id, name: name ?? prev.name, args: JSON.stringify(input) });
+              } else {
+                anthropicToolByIndex.set(idx, { id: id ?? prev.id, name: name ?? prev.name, args: prev.args });
+              }
+            }
+          }
+        }
+
+        const toolCalls = [
+          ...toolCallsFromDeltas(toolCallDeltas),
+          ...messageToolCalls,
+          ...(() => {
+            const out: ToolCall[] = [];
+            for (const [idx, v] of [...anthropicToolByIndex.entries()].sort((a, b) => a[0] - b[0])) {
+              const id = v.id || `tool_${idx}`;
+              const name = v.name || "";
+              const parsedArgs = safeJsonParse(v.args) ?? v.args;
+              if (name) out.push({ id, name, arguments: parsedArgs });
+            }
+            return out;
+          })()
+        ];
+
+        return { content, toolCalls, rawModel, sawAnyEvent };
       };
 
       const res = await fetch(url, {
@@ -160,9 +272,12 @@ export function openAICompatProvider(params: {
           ...authHeader(params.apiKey),
           ...extraHeaders
         },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({ ...payloadBase, stream: preferStream }),
         signal
       });
+
+      const initialRequestId = res.headers.get("x-openrouter-id") || res.headers.get("x-request-id") || "";
+      if (initialRequestId) debugLog("request_id", { url, requestId: initialRequestId });
 
       if (!res.ok) {
         const text = await res.text().catch(() => "");
@@ -182,7 +297,7 @@ export function openAICompatProvider(params: {
       const isEventStream = contentType.toLowerCase().includes("text/event-stream");
       debugLog("HTTP 200", { url, contentType });
 
-      // Some “OpenAI-compatible” gateways ignore `stream:true` and return a normal JSON response.
+      // If we requested non-stream or the gateway returns JSON, parse as non-stream.
       if (!isEventStream) {
         const raw = await new Response(res.body).text().catch(() => "");
         const obj: any = safeJsonParse(raw.trim());
@@ -245,6 +360,7 @@ export function openAICompatProvider(params: {
 
       let content = "";
       const toolCallDeltas: any[] = [];
+      let messageToolCalls: ToolCall[] = [];
       let rawModel: string | undefined;
       const anthropicToolByIndex = new Map<number, { id?: string; name?: string; args: string }>();
 
@@ -305,6 +421,8 @@ export function openAICompatProvider(params: {
 
         const tc = Array.isArray(delta?.tool_calls) ? delta.tool_calls : null;
         if (tc && tc.length) toolCallDeltas.push(...tc);
+        const messageToolCallSet = toolCallsFromMessage(choice?.message);
+        if (messageToolCallSet.length) messageToolCalls = messageToolCallSet;
 
         // Anthropic-style SSE (some “anthropic gateways” stream these events even for chat-completions).
         const t = typeof obj.type === "string" ? obj.type : "";
@@ -356,6 +474,7 @@ export function openAICompatProvider(params: {
 
       const toolCalls = [
         ...toolCallsFromDeltas(toolCallDeltas),
+        ...messageToolCalls,
         ...(() => {
           const out: ToolCall[] = [];
           for (const [idx, v] of [...anthropicToolByIndex.entries()].sort((a, b) => a[0] - b[0])) {
@@ -368,10 +487,60 @@ export function openAICompatProvider(params: {
         })()
       ];
 
-      if (!sawAnyEvent && !content && toolCalls.length === 0) {
+      const isEmpty = !content && toolCalls.length === 0;
+      if (isEmpty && canRetryEmptyStream()) {
+        markRetryUsed();
+        yield { type: "status", message: `Empty stream from ${params.name}; retrying once with non-stream request.` };
+        debugLog("empty_stream_retry_start", { url });
+        try {
+          const retryRes = await requestOnce(false);
+          const retryRequestId = retryRes.headers.get("x-openrouter-id") || retryRes.headers.get("x-request-id") || "";
+          if (retryRequestId) debugLog("retry_request_id", { url, requestId: retryRequestId });
+          if (!retryRes.ok) {
+            const text = await retryRes.text().catch(() => "");
+            debugLog("empty_stream_retry_failed", { status: retryRes.status, message: text || retryRes.statusText });
+          } else {
+            const retryContentType = retryRes.headers.get("content-type") || "";
+            if (retryContentType.toLowerCase().includes("text/event-stream") && retryRes.body) {
+              debugLog("empty_stream_retry_sse", { url, contentType: retryContentType });
+              const sseResult = await consumeSSE(retryRes.body);
+              if (sseResult.error) {
+                debugLog("empty_stream_retry_failed", { message: sseResult.error });
+              } else if (sseResult.content || sseResult.toolCalls.length) {
+                if (sseResult.content) yield { type: "content", delta: sseResult.content };
+                yield { type: "final", content: sseResult.content, toolCalls: sseResult.toolCalls, rawModel: sseResult.rawModel };
+                return;
+              }
+            } else {
+              const raw = await retryRes.text().catch(() => "");
+              const obj: any = safeJsonParse(raw.trim());
+              const extracted = extractFromJsonResponse(obj);
+              if (extracted) {
+                if (extracted.content) yield { type: "content", delta: extracted.content };
+                yield { type: "final", ...extracted };
+                return;
+              }
+              debugLog("empty_stream_retry_failed", { message: `Non-stream response was not recognized JSON at ${url}` });
+            }
+          }
+        } catch (err) {
+          debugLog("empty_stream_retry_failed", { message: String(err || "unknown error") });
+        }
+      }
+
+      if (isEmpty && debug) {
+        debugLog("empty_stream_stats", {
+          sawAnyEvent,
+          contentLength: content.length,
+          toolCallDeltas: toolCallDeltas.length,
+          messageToolCalls: messageToolCalls.length,
+          anthropicToolBlocks: anthropicToolByIndex.size
+        });
+      }
+      if (!sawAnyEvent && isEmpty) {
         yield { type: "error", message: `No streaming events received from ${url} (content-type: ${contentType || "unknown"})` };
       }
-      if (sawAnyEvent && !content && toolCalls.length === 0) {
+      if (sawAnyEvent && isEmpty) {
         yield {
           type: "error",
           message: `Empty response from ${url} (no content/tool calls). Try a different base URL or set FF_DEBUG_PROVIDER=1.`
