@@ -4,10 +4,11 @@ import WebSocket, { WebSocketServer } from "ws";
 import fs from "node:fs";
 import type { Socket } from "node:net";
 import path from "node:path";
+import os from "node:os";
 
 import { ToolRegistry } from "../runtime/tools/registry.js";
 import { registerAllTools } from "../runtime/registerDefaultTools.js";
-import { defaultWorkspaceDir } from "../runtime/config/paths.js";
+import { resolveWorkspaceDir } from "../runtime/config/paths.js";
 import { runAgentTurn } from "../runtime/agentLoop.js";
 import { findRepoRoot } from "../runtime/config/repoRoot.js";
 import { createSession, loadSession, saveSession } from "../runtime/session/sessionStore.js";
@@ -45,8 +46,19 @@ const PORT = Number(process.env.FF_WEB_PORT || 8787);
 export async function startWebServer(): Promise<void> {
   const repoRoot = findRepoRoot();
   loadDefaultDotenv({ repoRoot });
-  const workspaceDir = process.env.FF_WORKSPACE_DIR || defaultWorkspaceDir();
-  const frontendDistDir = path.join(
+  const workspaceDir = resolveWorkspaceDir(process.env.FF_WORKSPACE_DIR ?? undefined);
+  const localWs = path.join(repoRoot, "ff-terminal-workspace");
+  if (path.normalize(localWs) !== path.normalize(workspaceDir) && fs.existsSync(localWs)) {
+    // eslint-disable-next-line no-console
+    console.warn(
+      `Warning: found repo-local workspace at ${localWs} but using canonical workspace ${workspaceDir}. Files in the repo-local copy will be ignored.`
+    );
+  }
+  const frontendDistDirRaw = process.env.FF_FRONTEND_DIST_DIR;
+  const frontendDistDir = frontendDistDirRaw && frontendDistDirRaw.trim()
+    ? path.resolve(frontendDistDirRaw.trim().replace(/^~(?=$|\/)/, os.homedir()))
+    : path.join(repoRoot, "web-frontend-dist");
+  const bundledFrontendDistDir = path.join(
     repoRoot,
     "reference source code python ver",
     "ff_terminal",
@@ -66,15 +78,21 @@ export async function startWebServer(): Promise<void> {
       return;
     }
 
-    // Serve the existing React frontend build if present (from the Python reference tree).
-    if (fs.existsSync(frontendDistDir) && fs.statSync(frontendDistDir).isDirectory()) {
+    // Serve the existing React frontend build if present.
+    const selectedDistDir =
+      fs.existsSync(frontendDistDir) && fs.statSync(frontendDistDir).isDirectory()
+        ? frontendDistDir
+        : fs.existsSync(bundledFrontendDistDir) && fs.statSync(bundledFrontendDistDir).isDirectory()
+          ? bundledFrontendDistDir
+          : null;
+    if (selectedDistDir) {
       const url = new URL(req.url ?? "/", `http://${req.headers.host ?? "localhost"}`);
       const pathname = decodeURIComponent(url.pathname);
       const rel = pathname === "/" ? "/index.html" : pathname;
-      const filePath = path.join(frontendDistDir, rel);
+      const filePath = path.join(selectedDistDir, rel);
 
       // Prevent path traversal.
-      if (!filePath.startsWith(frontendDistDir)) {
+      if (!filePath.startsWith(selectedDistDir)) {
         res.writeHead(400);
         res.end();
         return;
@@ -82,7 +100,7 @@ export async function startWebServer(): Promise<void> {
 
       let actualPath = filePath;
       if (!fs.existsSync(actualPath) || fs.statSync(actualPath).isDirectory()) {
-        actualPath = path.join(frontendDistDir, "index.html");
+        actualPath = path.join(selectedDistDir, "index.html");
       }
 
       try {

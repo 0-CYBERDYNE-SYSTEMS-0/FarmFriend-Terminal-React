@@ -35,6 +35,7 @@
   "show_thinking": true,
   "reasoning_effort": "medium",
   "show_reasoning": false,
+  "max_iterations": 500,
   "debug": false,
   "log_level": "INFO",
   "log_max_bytes": 5242880,

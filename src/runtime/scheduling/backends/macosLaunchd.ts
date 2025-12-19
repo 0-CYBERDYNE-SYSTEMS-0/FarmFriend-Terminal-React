@@ -46,7 +46,7 @@ function plistStringifyValue(v: unknown): string {
 function generatePlist(params: { taskName: string; taskId: string; schedule: ScheduleSpec }): string {
   const repoRoot = findRepoRoot();
   const node = process.execPath;
-  const cli = path.join(repoRoot, "ff-terminal-ts", "dist", "bin", "ff-terminal.js");
+  const cli = path.join(repoRoot, "dist", "bin", "ff-terminal.js");
 
   if (!fs.existsSync(cli)) {
     // Caller will surface this message; still generate a plist-like string for debugging.
@@ -118,9 +118,9 @@ export function macosLaunchdBackend(): SchedulerBackend {
       if (process.platform !== "darwin") return { ok: false, message: "launchd backend only supports macOS" };
 
       const repoRoot = findRepoRoot();
-      const cli = path.join(repoRoot, "ff-terminal-ts", "dist", "bin", "ff-terminal.js");
+      const cli = path.join(repoRoot, "dist", "bin", "ff-terminal.js");
       if (!fs.existsSync(cli)) {
-        return { ok: false, message: `Build required: missing ${cli}. Run \"npm run build\" in ff-terminal-ts.` };
+        return { ok: false, message: `Build required: missing ${cli}. Run \"npm run build\" in this repo.` };
       }
 
       fs.mkdirSync(launchAgentsDir(), { recursive: true });
@@ -171,4 +171,3 @@ export function macosLaunchdBackend(): SchedulerBackend {
     }
   };
 }
-

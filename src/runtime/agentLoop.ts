@@ -11,12 +11,7 @@ import { OpenAIMessage } from "./providers/types.js";
 import fs from "node:fs";
 import path from "node:path";
 import { getToolContext } from "./tools/context.js";
-import {
-  ExecutionRecord,
-  extractPromises,
-  markFulfilled,
-  Promise as CompletionPromise
-} from "./hooks/completionValidator.js";
+import { ExecutionRecord } from "./hooks/completionValidator.js";
 import { listSkillStubs } from "./tools/implementations/skills.js";
 import { HookRegistry } from "./hooks/registry.js";
 import { createCompletionValidationStopHook } from "./hooks/builtin/completionValidationStopHook.js";
@@ -282,7 +277,8 @@ export async function* runAgentTurn(params: {
     messages.push({ role: m.role === "assistant" ? "assistant" : "user", content: m.content });
   }
 
-  const maxIterations = Number((cfg as any).max_iterations || 8);
+  // Allow very long runs; default 500, overridable via config/env.
+  const maxIterations = Number((process.env.FF_MAX_ITERATIONS || (cfg as any).max_iterations || 500));
   let finalAssistantContent = "";
   const toolLimitTotal = Number((cfg as any).tool_limit_total ?? 5000);
   let toolCallsExecuted = 0;
@@ -292,7 +288,7 @@ export async function* runAgentTurn(params: {
   const hooksLogDirectory = String((cfg as any).hooks_log_directory || "logs/hooks");
   const completionValidationEnabled =
     hooksEnabled && (cfg as any).hooks_completion_validation !== false && String(process.env.FF_DISABLE_COMPLETION_VALIDATION || "") !== "1";
-  const completionValidationMaxAttempts = Number((cfg as any).hooks_completion_validation_max_attempts ?? 2);
+  const completionValidationMaxAttempts = Number((cfg as any).hooks_completion_validation_max_attempts ?? 1);
   logger.log("info", "turn_start", {
     session_id: sessionId,
     turn_id: turnId,
@@ -335,7 +331,6 @@ export async function* runAgentTurn(params: {
     }
   };
 
-  const promisesThisTurn: CompletionPromise[] = [];
   const executionsThisTurn: ExecutionRecord[] = [];
   const hookRegistry = new HookRegistry();
   let iterationCount = 0;
@@ -345,23 +340,10 @@ export async function* runAgentTurn(params: {
       createCompletionValidationStopHook({
         enabled: true,
         maxAttempts: completionValidationMaxAttempts,
-        getPromises: () => promisesThisTurn,
-        getExecutions: () => executionsThisTurn
+        workspaceDir: toolCtx?.workspaceDir
       })
     );
   }
-
-  const mergePromises = (incoming: CompletionPromise[]) => {
-    for (const p of incoming) {
-      const key = `${p.promiseType}::${p.extractedAction.toLowerCase()}::${p.extractedTarget.toLowerCase()}`;
-      const idx = promisesThisTurn.findIndex(
-        (q) =>
-          `${q.promiseType}::${q.extractedAction.toLowerCase()}::${q.extractedTarget.toLowerCase()}` === key
-      );
-      if (idx === -1) promisesThisTurn.push(p);
-      else if (p.confidence > promisesThisTurn[idx]!.confidence) promisesThisTurn[idx] = p;
-    }
-  };
 
   try {
     for (let i = 0; i < maxIterations; i += 1) {
@@ -369,48 +351,48 @@ export async function* runAgentTurn(params: {
       logger.log("debug", "iteration_start", { session_id: sessionId, turn_id: turnId, iteration: i + 1 });
       yield { kind: "status", message: `Provider: ${provider.name} | Model: ${model}` };
 
-    let toolCalls: { id: string; name: string; arguments: unknown }[] = [];
-    let assistantContent = "";
-    let emittedAnyContent = false;
-    let emittedAnyThinking = false;
+      let toolCalls: { id: string; name: string; arguments: unknown }[] = [];
+      let assistantContent = "";
+      let emittedAnyContent = false;
+      let emittedAnyThinking = false;
 
-    for await (const ev of provider.streamChat({
-      model,
-      messages,
-      tools,
-      temperature: Number((cfg as any).temperature ?? 0.7),
-      maxTokens: Number((cfg as any).max_tokens ?? 12000),
-      signal
-    })) {
-      if (ev.type === "content") {
-        // Hide stop token from UI if it appears.
-        const cleaned = ev.delta.replace("[AWAITING_INPUT]", "");
-        if (cleaned) {
-          emittedAnyContent = true;
-          yield { kind: "content", delta: cleaned };
-          logger.log("debug", "assistant_delta", {
+      for await (const ev of provider.streamChat({
+        model,
+        messages,
+        tools,
+        temperature: Number((cfg as any).temperature ?? 0.7),
+        maxTokens: Number((cfg as any).max_tokens ?? 12000),
+        signal
+      })) {
+        if (ev.type === "content") {
+          // Hide stop token from UI if it appears.
+          const cleaned = ev.delta.replace("[AWAITING_INPUT]", "");
+          if (cleaned) {
+            emittedAnyContent = true;
+            yield { kind: "content", delta: cleaned };
+            logger.log("debug", "assistant_delta", {
+              session_id: sessionId,
+              turn_id: turnId,
+              iteration: i + 1,
+              delta_preview: truncateForLog(cleaned, 400)
+            });
+          }
+        } else if (ev.type === "thinking") {
+          emittedAnyThinking = true;
+          yield { kind: "thinking", delta: ev.delta };
+        } else if (ev.type === "error") {
+          yield { kind: "error", message: ev.message };
+          logger.log("error", "provider_error", {
             session_id: sessionId,
             turn_id: turnId,
             iteration: i + 1,
-            delta_preview: truncateForLog(cleaned, 400)
+            message: ev.message
           });
+        } else if (ev.type === "final") {
+          assistantContent = ev.content.replace("[AWAITING_INPUT]", "");
+          toolCalls = ev.toolCalls;
         }
-      } else if (ev.type === "thinking") {
-        emittedAnyThinking = true;
-        yield { kind: "thinking", delta: ev.delta };
-      } else if (ev.type === "error") {
-        yield { kind: "error", message: ev.message };
-        logger.log("error", "provider_error", {
-          session_id: sessionId,
-          turn_id: turnId,
-          iteration: i + 1,
-          message: ev.message
-        });
-      } else if (ev.type === "final") {
-        assistantContent = ev.content.replace("[AWAITING_INPUT]", "");
-        toolCalls = ev.toolCalls;
       }
-    }
 
     // Some gateways do not stream deltas; ensure final content is displayed at least once.
     if (!emittedAnyContent && assistantContent) {
@@ -425,14 +407,6 @@ export async function* runAgentTurn(params: {
       content_preview: smartTruncate(assistantContent, 800),
       tool_calls_count: toolCalls.length
     });
-
-    if (completionValidationEnabled) {
-      const extracted = extractPromises(assistantContent);
-      if (extracted.length) {
-        mergePromises(extracted);
-        markFulfilled(promisesThisTurn, executionsThisTurn);
-      }
-    }
 
     // Record assistant content (even if empty; tool-calling turns often have little text).
     session.conversation.push({
@@ -456,7 +430,7 @@ export async function* runAgentTurn(params: {
         toolExecutionsCount: executionsThisTurn.length
       });
       const stopReason = stop.action === "allow" ? undefined : (stop as any).reason ?? (stop as any).statusMessage;
-      logger.log("debug", "agent_stop_decision", {
+      logger.log("info", "agent_stop_decision", {
         session_id: sessionId,
         turn_id: turnId,
         iteration: i + 1,
@@ -473,6 +447,8 @@ export async function* runAgentTurn(params: {
       }
       break;
     }
+    // Guard: if we are at the final iteration and toolCalls exist, we'll still process them,
+    // but after that, if maxIterations reached, we will run stop hook once more before exit.
     if (toolCallsExecuted + toolCalls.length > toolLimitTotal) {
       yield { kind: "error", message: `Tool call limit exceeded (${toolLimitTotal}). Refusing to execute more tools.` };
       logger.log("warn", "tool_limit_reached", {
@@ -574,7 +550,6 @@ export async function* runAgentTurn(params: {
           resultSummary: String(r.output || "").slice(0, 200)
         });
       }
-      markFulfilled(promisesThisTurn, executionsThisTurn);
     }
 
     for (const r of results) {
@@ -622,12 +597,38 @@ export async function* runAgentTurn(params: {
         name: r.name,
         content: r.output
       });
-      session.conversation.push({
-        role: "assistant",
-        content: `[tool:${r.name}] ${r.ok ? "ok" : "error"}\n${r.output}`,
-        created_at: new Date().toISOString()
+      // Note: Tool outputs are not added to session.conversation to keep UI clean
+      // They're only in messages[] for LLM context
+    }
+    // If we've reached the last iteration, run a final stop-check to avoid silent exit with open promises.
+    if (iterationCount === maxIterations - 1) {
+      const finalStop = await hookRegistry.runAgentStop({
+        sessionId,
+        repoRoot,
+        workspaceDir: toolCtx?.workspaceDir,
+        userInput,
+        assistantContent: finalAssistantContent,
+        iteration: i,
+        maxIterations,
+        toolExecutionsCount: executionsThisTurn.length
       });
-      saveSession(session);
+      const stopReason = finalStop.action === "allow" ? undefined : (finalStop as any).reason ?? (finalStop as any).statusMessage;
+      logger.log("info", "agent_stop_decision", {
+        session_id: sessionId,
+        turn_id: turnId,
+        iteration: i + 1,
+        action: finalStop.action,
+        reason: stopReason,
+        phase: "final_iteration_stop_check"
+      });
+      if (finalStop.action === "block") {
+        if (finalStop.statusMessage) yield { kind: "status", message: finalStop.statusMessage };
+        messages.push({ role: "system", content: finalStop.systemPrompt });
+        // Allow one extra loop beyond nominal max to honor the block.
+        if (i >= maxIterations - 1) {
+          maxIterations + 1; // no-op, documentation only
+        }
+      }
     }
     }
   } finally {

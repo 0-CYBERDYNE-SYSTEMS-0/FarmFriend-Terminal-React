@@ -1,6 +1,6 @@
 # Python → TypeScript Port Map (Working Notes)
 
-This repo contains the Python reference implementation under `reference source code python ver/` and a TS/Ink runtime WIP under `ff-terminal-ts/`.
+This repo contains the Python reference implementation under `reference source code python ver/` and the TS/Ink runtime in the repo root.
 
 ## Source of truth (Python)
 
@@ -33,9 +33,8 @@ This repo contains the Python reference implementation under `reference source c
 
 ## Current TS status
 
-- Daemon + WS protocol: `ff-terminal-ts/src/daemon/*`
-- Minimal agent turn + tool executor: `ff-terminal-ts/src/runtime/*`
-- Scheduling persistence (tasks.json): `ff-terminal-ts/src/runtime/scheduling/*`
+- Daemon + WS protocol: `src/daemon/*`
+- Minimal agent turn + tool executor: `src/runtime/*`
+- Scheduling persistence (tasks.json): `src/runtime/scheduling/*`
 
 Next: implement real provider(s) + session persistence + “web frontend compatible” WS adapter.
-

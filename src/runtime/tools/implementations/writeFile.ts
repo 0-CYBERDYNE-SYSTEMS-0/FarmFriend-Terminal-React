@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { getToolContext } from "../context.js";
 import { findRepoRoot } from "../../config/repoRoot.js";
-import { defaultWorkspaceDir } from "../../config/paths.js";
+import { defaultWorkspaceDir, resolveWorkspaceDir } from "../../config/paths.js";
 
 export async function writeFileTool(args: unknown): Promise<string> {
   const filePath = typeof (args as any)?.path === "string" ? String((args as any).path) : null;
@@ -12,9 +12,17 @@ export async function writeFileTool(args: unknown): Promise<string> {
 
   const ctx = getToolContext();
   const repoRoot = path.resolve(ctx?.repoRoot ?? findRepoRoot());
-  const workspaceDir = path.resolve(ctx?.workspaceDir ?? defaultWorkspaceDir());
+  // Canonicalize workspace hints to the home workspace to prevent scatter.
+  const workspaceDir = resolveWorkspaceDir(ctx?.workspaceDir ?? process.env.FF_WORKSPACE_DIR ?? undefined);
 
-  const abs = path.isAbsolute(filePath) ? path.resolve(filePath) : path.resolve(repoRoot, filePath);
+  let abs: string;
+  if (!path.isAbsolute(filePath) && (filePath === "ff-terminal-workspace" || filePath.startsWith(`ff-terminal-workspace${path.sep}`))) {
+    // Treat relative ff-terminal-workspace hints as referring to the canonical home workspace.
+    const suffix = filePath.slice("ff-terminal-workspace".length);
+    abs = path.join(workspaceDir, suffix);
+  } else {
+    abs = path.isAbsolute(filePath) ? path.resolve(filePath) : path.resolve(repoRoot, filePath);
+  }
   const allowedRoots = [repoRoot, workspaceDir].map((p) => (p.endsWith(path.sep) ? p : p + path.sep));
   const isAllowed = allowedRoots.some((r) => abs === r.slice(0, -1) || abs.startsWith(r));
   if (!isAllowed) {

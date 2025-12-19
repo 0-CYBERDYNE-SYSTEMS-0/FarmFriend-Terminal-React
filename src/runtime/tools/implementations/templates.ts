@@ -3,7 +3,7 @@ import path from "node:path";
 
 import { getToolContext } from "../context.js";
 import { findRepoRoot } from "../../config/repoRoot.js";
-import { defaultWorkspaceDir } from "../../config/paths.js";
+import { defaultWorkspaceDir, resolveWorkspaceDir } from "../../config/paths.js";
 
 type ProjectTemplateType = "web-app" | "research" | "automation";
 
@@ -58,7 +58,7 @@ export async function projectTemplateTool(argsRaw: unknown): Promise<string> {
 
   const ctx = getToolContext();
   const repoRoot = path.resolve(ctx?.repoRoot ?? findRepoRoot());
-  const workspaceDir = path.resolve(ctx?.workspaceDir ?? defaultWorkspaceDir());
+  const workspaceDir = resolveWorkspaceDir(ctx?.workspaceDir ?? process.env.FF_WORKSPACE_DIR ?? undefined);
   const targetWorkspace = resolveWorkspace({ workspacePath: customWorkspace, repoRoot, workspaceDir });
 
   const outDir = path.join(targetWorkspace, "projects", projectName);
@@ -96,4 +96,3 @@ export async function projectTemplateTool(argsRaw: unknown): Promise<string> {
 
   return JSON.stringify({ ok: true, template_type: templateType, project_name: projectName, project_dir: outDir, created_files: created }, null, 2);
 }
-

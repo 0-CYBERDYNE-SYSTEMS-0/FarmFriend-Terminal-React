@@ -431,10 +431,16 @@ export function listSkillStubs(params: { workspaceDir?: string; repoRoot?: strin
 }
 
 export async function skillImportTool(argsRaw: unknown): Promise<string> {
-  const args = argsRaw as ImportArgs;
-  const sourcePath = typeof args?.source_path === "string" ? args.source_path.trim() : "";
-  const overwrite = !!args?.overwrite;
-  if (!sourcePath) throw new Error("skill_import: missing args.source_path");
+  const args = argsRaw as ImportArgs & { source?: string; force_overwrite?: boolean; skill_name?: string };
+  const sourcePath =
+    typeof args?.source_path === "string"
+      ? args.source_path.trim()
+      : typeof args?.source === "string"
+        ? args.source.trim()
+        : "";
+  const overwrite = typeof args?.overwrite === "boolean" ? args.overwrite : !!args?.force_overwrite;
+  const requestedName = typeof args?.skill_name === "string" ? args.skill_name.trim() : "";
+  if (!sourcePath) throw new Error("skill_import: missing args.source_path or args.source");
 
   const ctx = getToolContext();
   const workspaceDir = ctx?.workspaceDir ? ctx.workspaceDir : process.cwd();
@@ -451,7 +457,10 @@ export async function skillImportTool(argsRaw: unknown): Promise<string> {
 
   const raw = fs.readFileSync(srcSkill, "utf8");
   const { meta } = splitFrontmatter(raw);
-  const slug = typeof meta.slug === "string" && meta.slug.trim() ? meta.slug.trim() : path.basename(src);
+  const slug =
+    requestedName ||
+    (typeof meta.slug === "string" && meta.slug.trim() ? meta.slug.trim() : path.basename(src));
+  if (!slug) throw new Error("skill_import: missing skill slug (skill_name or frontmatter slug)");
 
   const destDir = path.join(destRoot, slug);
   if (fs.existsSync(destDir)) {
