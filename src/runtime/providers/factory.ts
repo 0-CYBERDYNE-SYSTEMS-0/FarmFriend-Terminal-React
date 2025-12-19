@@ -41,7 +41,7 @@ export function createProvider(params?: { repoRoot?: string; modelOverride?: str
     if (override === "zai") {
       const apiKey = String(process.env.ANTHROPIC_AUTH_TOKEN || cfg.zai_api_key || "");
       if (!apiKey) throw new Error("FF_PROVIDER=zai but ANTHROPIC_AUTH_TOKEN is not set");
-      const baseUrl = String(process.env.ANTHROPIC_BASE_URL || cfg.anthropic_base_url || "https://open.bigmodel.cn/api/anthropic");
+      const baseUrl = String(process.env.ANTHROPIC_BASE_URL || cfg.anthropic_base_url || "https://api.z.ai/api/anthropic");
       return { provider: zaiProvider({ apiKey, baseUrl }), model };
     }
     if (override === "minimax") {
@@ -84,7 +84,7 @@ export function createProvider(params?: { repoRoot?: string; modelOverride?: str
   if (isEnabled(cfg.use_zai)) {
     const apiKey = String(process.env.ANTHROPIC_AUTH_TOKEN || cfg.zai_api_key || cfg.anthropic_auth_token || "");
     if (!apiKey) throw new Error("Z.ai enabled but zai_api_key is missing (or ANTHROPIC_AUTH_TOKEN not set)");
-    const baseUrl = String(process.env.ANTHROPIC_BASE_URL || cfg.anthropic_base_url || cfg.anthropic_api_base || "https://open.bigmodel.cn/api/anthropic");
+    const baseUrl = String(process.env.ANTHROPIC_BASE_URL || cfg.anthropic_base_url || cfg.anthropic_api_base || "https://api.z.ai/api/anthropic");
     return { provider: zaiProvider({ apiKey, baseUrl }), model };
   }
 
