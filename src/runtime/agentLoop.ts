@@ -292,7 +292,7 @@ export async function* runAgentTurn(params: {
   const hooksLogDirectory = String((cfg as any).hooks_log_directory || "logs/hooks");
   const completionValidationEnabled =
     hooksEnabled && (cfg as any).hooks_completion_validation !== false && String(process.env.FF_DISABLE_COMPLETION_VALIDATION || "") !== "1";
-  const completionValidationMaxAttempts = Number((cfg as any).hooks_completion_validation_max_attempts ?? 2);
+  const completionValidationMaxAttempts = Number((cfg as any).hooks_completion_validation_max_attempts ?? 1);
   logger.log("info", "turn_start", {
     session_id: sessionId,
     turn_id: turnId,

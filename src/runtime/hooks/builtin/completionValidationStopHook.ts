@@ -32,9 +32,35 @@ export function createCompletionValidationStopHook(params: {
     markFulfilled(promises, executions);
 
     const unfulfilled = unfulfilledHighConfidence(promises);
-    // ADVISORY MODE: Always allow agent to stop naturally
-    // The previous blocking logic created adversarial tension that caused loops
-    // If agent says it's done, trust it - thoroughness comes from model quality, not force
+    if (!unfulfilled.length) return { action: "allow" };
+
+    // ONE-SHOT NUDGE: Single gentle reminder, then allow stop
+    // This catches ~80% of "forgot to finish" cases without creating loops
+    if (blockAttempts < params.maxAttempts) {
+      blockAttempts += 1;
+      lastGuardSignature = signatureOf(unfulfilled);
+      lastGuardExecutions = executions.length;
+
+      // Non-adversarial observation prompt (not "you MUST")
+      const itemList = unfulfilled
+        .slice(0, 5)
+        .map((p) => `- ${p.promiseType}: "${p.content}" (target: ${p.extractedTarget})`)
+        .join("\n");
+
+      const systemPrompt =
+        `Observation: The following items mentioned earlier do not appear to be resolved yet:\n` +
+        `${itemList}\n\n` +
+        `If these are done or no longer needed, please explain why and stop. Otherwise, please continue with the work.`;
+
+      return {
+        action: "block",
+        reason: "completion_validation: unfulfilled items (one nudge allowed)",
+        statusMessage: `completion_validation: 1 nudge offered - continue or explain why items are complete`,
+        systemPrompt
+      };
+    }
+
+    // Second stop attempt: always allow (agent wins)
     return { action: "allow" };
   };
 
