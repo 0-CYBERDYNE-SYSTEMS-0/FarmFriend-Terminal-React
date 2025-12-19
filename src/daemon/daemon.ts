@@ -11,6 +11,7 @@ import { toWire } from "../runtime/streamProtocol.js";
 import { findRepoRoot } from "../runtime/config/repoRoot.js";
 import { withToolContext } from "../runtime/tools/context.js";
 import { loadDefaultDotenv } from "../runtime/config/dotenv.js";
+import { quickHealthCheck } from "../runtime/workspace/healthCheck.js";
 import {
   ClientMessage,
   ServerMessage,
@@ -42,6 +43,17 @@ export async function startDaemon(): Promise<void> {
       `Warning: found repo-local workspace at ${localWs} but using canonical workspace ${workspaceDir}. Files in the repo-local copy will be ignored.`
     );
   }
+
+  const healthIssues = await quickHealthCheck(workspaceDir);
+  if (healthIssues.length > 0) {
+    // eslint-disable-next-line no-console
+    console.warn(`⚠️  Workspace health issues detected. Run '/doctor' to fix.`);
+    healthIssues.forEach((issue) => {
+      // eslint-disable-next-line no-console
+      console.warn(`   - ${issue.message}`);
+    });
+  }
+
   const registry = new ToolRegistry();
   registerAllTools(registry, { workspaceDir });
 

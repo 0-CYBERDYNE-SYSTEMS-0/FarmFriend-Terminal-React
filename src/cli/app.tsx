@@ -15,6 +15,8 @@ import { loadAgentConfigs, listAgentConfigs, getAllTemplates } from "../runtime/
 import { parseCommand } from "../runtime/commands/parser.js";
 import type { Command } from "../runtime/commands/types.js";
 import type { AgentConfig, AgentTemplate } from "../runtime/agents/types.js";
+import { validateWorkspace, generateReport } from "../runtime/workspace/doctor.js";
+import { planMigration, executeMigration } from "../runtime/workspace/migration.js";
 
 type ServerMessage =
   | { type: "hello"; daemonVersion: string }
@@ -1080,6 +1082,9 @@ function App(props: { port: number }) {
 
   const [showThinking, setShowThinking] = useState(true);
   const [showTodoPanel, setShowTodoPanel] = useState(false);
+
+  const [doctorRunning, setDoctorRunning] = useState(false);
+  const [doctorWaitingForConfirm, setDoctorWaitingForConfirm] = useState(false);
 
   const mountsCfg = useMemo(() => readMountsConfig(), [mountsRefresh]);
   const mountRows = useMemo(
@@ -2363,6 +2368,7 @@ Use skill_draft first to create the draft, then skill_apply to create the final 
         { kind: "system", text: "" },
         { kind: "system", text: "Other:" },
         { kind: "system", text: "  /clear           Clear transcript" },
+        { kind: "system", text: "  /doctor          Check workspace health and fix issues" },
         { kind: "system", text: "  /theme (/colors) Print color-role samples" },
         { kind: "system", text: "  /quit (/exit)    Exit" },
         { kind: "system", text: "  //text           Send a literal prompt starting with '/'" },
@@ -2451,6 +2457,59 @@ Use skill_draft first to create the draft, then skill_apply to create the final 
       const currentInput = inputStore.current.value;
       let trimmed = currentInput.trim();
       if (trimmed.length) {
+        // Check if waiting for doctor confirmation
+        if (doctorWaitingForConfirm) {
+          const response = trimmed.toLowerCase();
+          if (response === "y" || response === "yes") {
+            setDoctorWaitingForConfirm(false);
+            setDoctorRunning(true);
+            pushLines({ kind: "system", text: "Fixing workspace issues..." });
+            setInputValue("");
+
+            (async () => {
+              try {
+                const result = await validateWorkspace(workspaceDir);
+                if (result.issues.length > 0) {
+                  const plan = planMigration(workspaceDir, result.issues);
+                  const migrationResult = await executeMigration(plan, { backup: true });
+
+                  const resultLines: Line[] = [
+                    { kind: "system", text: migrationResult.summary }
+                  ];
+
+                  if (migrationResult.failed.length > 0) {
+                    resultLines.push({
+                      kind: "error",
+                      text: `Failed operations: ${migrationResult.failed.map((f) => f.error).join(", ")}`
+                    });
+                  } else {
+                    resultLines.push({ kind: "system", text: "✓ All issues fixed successfully!" });
+                  }
+
+                  pushLines(resultLines);
+                }
+              } catch (err) {
+                pushLines({
+                  kind: "error",
+                  text: `Fix error: ${err instanceof Error ? err.message : String(err)}`
+                });
+              } finally {
+                setDoctorRunning(false);
+              }
+            })();
+            return;
+          } else if (response === "n" || response === "no") {
+            setDoctorWaitingForConfirm(false);
+            pushLines({ kind: "system", text: "Fix cancelled." });
+            setInputValue("");
+            return;
+          } else {
+            pushLines({ kind: "system", text: "Please answer 'y' or 'n'" });
+            setInputValue("");
+            return;
+          }
+        }
+
         // Allow users to send a literal prompt starting with "/" via "//...".
         if (trimmed.startsWith("//")) {
           trimmed = trimmed.slice(1);
@@ -2644,6 +2703,46 @@ Use skill_draft first to create the draft, then skill_apply to create the final 
             setInputValue("");
             setProcessing(true);
             setTimeout(() => setProcessing(false), 1200);
+            return;
+          }
+
+          if (command === "doctor") {
+            if (doctorRunning) {
+              pushLines({ kind: "system", text: "Doctor is already running..." });
+              setInputValue("");
+              return;
+            }
+
+            setDoctorRunning(true);
+            pushLines({ kind: "system", text: "Scanning workspace health..." });
+
+            (async () => {
+              try {
+                const result = await validateWorkspace(workspaceDir);
+                const report = generateReport(result);
+                pushLines({ kind: "system", text: report });
+
+                if (result.issues.length > 0) {
+                  pushLines({
+                    kind: "system",
+                    text: "Fix issues now? (y/n)"
+                  });
+                  setDoctorWaitingForConfirm(true);
+                } else {
+                  setDoctorWaitingForConfirm(false);
+                }
+              } catch (err) {
+                pushLines({
+                  kind: "error",
+                  text: `Doctor error: ${err instanceof Error ? err.message : String(err)}`
+                });
+                setDoctorWaitingForConfirm(false);
+              } finally {
+                setDoctorRunning(false);
+              }
+            })();
+
+            setInputValue("");
             return;
           }
 
