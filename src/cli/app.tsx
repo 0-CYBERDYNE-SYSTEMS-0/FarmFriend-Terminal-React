@@ -31,6 +31,12 @@ type InputStore = {
   value: string;
   subscribers: Set<() => void>;
 };
+type Todo = {
+  id: string;
+  content: string;
+  status: "pending" | "in_progress" | "completed";
+  priority: "high" | "medium" | "low";
+};
 
 function parseWireChunk(chunk: string, displayMode: string = "clean"): Line | null {
   // Hide verbose metadata in clean mode
@@ -209,6 +215,9 @@ const ChatPrompt = memo(function ChatPrompt(props: {
   inputStore: InputStore;
   operationMode: OperationMode;
   processing: boolean;
+  showThinking: boolean;
+  showTodoPanel: boolean;
+  thinkingCount: number;
 }) {
   const value = useSyncExternalStore(
     (cb) => {
@@ -220,23 +229,33 @@ const ChatPrompt = memo(function ChatPrompt(props: {
     () => props.inputStore.value,
     () => props.inputStore.value
   );
+
+  const thinkingText = props.showThinking
+    ? "visible"
+    : `hidden (${props.thinkingCount})`;
+  const todosText = props.showTodoPanel ? "shown" : "hidden";
+
   return (
     <>
       <Text>› {value}</Text>
       <Box gap={1}>
         <Spinner active={props.processing} />
         <Text color="gray">
-          Enter to send • Ctrl+C to cancel • Shift+Tab: mode={props.operationMode} • /help
+          Enter to send • Ctrl+C to cancel • Shift+Tab: mode={props.operationMode} • Ctrl+T: thinking {thinkingText} • Ctrl+D: todos {todosText} • /help
         </Text>
       </Box>
     </>
   );
 });
 
-const Transcript = memo(function Transcript(props: { lines: LineEntry[] }) {
+const Transcript = memo(function Transcript(props: { lines: LineEntry[]; showThinking: boolean }) {
+  const filteredLines = props.showThinking
+    ? props.lines
+    : props.lines.filter(l => l.kind !== "thinking");
+
   return (
     <Box flexDirection="column">
-      {props.lines.slice(-40).map((l, i) => (
+      {filteredLines.slice(-40).map((l, i) => (
         <Text
           key={l.id}
           color={
@@ -258,6 +277,143 @@ const Transcript = memo(function Transcript(props: { lines: LineEntry[] }) {
           {l.kind === "user" ? `› ${l.text}` : l.text}
         </Text>
       ))}
+    </Box>
+  );
+});
+
+const TodoPanel = memo(function TodoPanel(props: {
+  sessionId: string | null;
+  workspaceDir: string;
+  visible: boolean;
+}) {
+  const [todos, setTodos] = useState<Todo[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [lastModified, setLastModified] = useState<number>(0);
+
+  useEffect(() => {
+    if (!props.visible || !props.sessionId) return;
+
+    const todoPath = path.join(
+      props.workspaceDir,
+      "todos",
+      "sessions",
+      `${props.sessionId}.json`
+    );
+
+    try {
+      if (!fs.existsSync(todoPath)) {
+        setTodos([]);
+        setError(null);
+        return;
+      }
+
+      const content = fs.readFileSync(todoPath, "utf8");
+      const data = JSON.parse(content);
+      setTodos(Array.isArray(data.todos) ? data.todos : []);
+      setError(null);
+
+      const stat = fs.statSync(todoPath);
+      setLastModified(stat.mtimeMs);
+    } catch (err) {
+      setError(`Failed to load todos: ${(err as Error).message}`);
+      setTodos([]);
+    }
+  }, [props.visible, props.sessionId, props.workspaceDir, lastModified]);
+
+  useEffect(() => {
+    if (!props.visible || !props.sessionId) return;
+
+    const interval = setInterval(() => {
+      const todoPath = path.join(
+        props.workspaceDir,
+        "todos",
+        "sessions",
+        `${props.sessionId}.json`
+      );
+
+      try {
+        if (fs.existsSync(todoPath)) {
+          const stat = fs.statSync(todoPath);
+          if (stat.mtimeMs !== lastModified) {
+            setLastModified(stat.mtimeMs);
+          }
+        }
+      } catch {
+        // Ignore refresh errors
+      }
+    }, 2000);
+
+    return () => clearInterval(interval);
+  }, [props.visible, props.sessionId, props.workspaceDir, lastModified]);
+
+  if (!props.visible) return null;
+
+  if (error) {
+    return (
+      <Box flexDirection="column" borderStyle="single" borderColor="red">
+        <Text color="red">Todo Panel - Error</Text>
+        <Text dimColor>{error}</Text>
+      </Box>
+    );
+  }
+
+  if (todos.length === 0) {
+    return (
+      <Box flexDirection="column" borderStyle="single" borderColor="gray">
+        <Text color="yellow">Todo Panel</Text>
+        <Text dimColor>No todos for this session. Use manage_task tool to create.</Text>
+      </Box>
+    );
+  }
+
+  const pending = todos.filter(t => t.status === "pending");
+  const inProgress = todos.filter(t => t.status === "in_progress");
+  const completed = todos.filter(t => t.status === "completed");
+
+  return (
+    <Box flexDirection="column" borderStyle="single" borderColor="cyan">
+      <Text color="cyan" bold>
+        Todo Panel ({todos.length} total)
+      </Text>
+
+      {inProgress.length > 0 && (
+        <Box flexDirection="column" marginTop={1}>
+          <Text color="yellow">▶ In Progress ({inProgress.length})</Text>
+          {inProgress.slice(0, 3).map(t => (
+            <Text key={t.id} dimColor={false}>
+              • {t.content.slice(0, 60)}
+              {t.content.length > 60 ? "..." : ""}
+            </Text>
+          ))}
+        </Box>
+      )}
+
+      {pending.length > 0 && (
+        <Box flexDirection="column" marginTop={1}>
+          <Text color="gray">○ Pending ({pending.length})</Text>
+          {pending.slice(0, 3).map(t => (
+            <Text key={t.id} dimColor>
+              • {t.content.slice(0, 60)}
+              {t.content.length > 60 ? "..." : ""}
+            </Text>
+          ))}
+          {pending.length > 3 && (
+            <Text dimColor>  ... and {pending.length - 3} more</Text>
+          )}
+        </Box>
+      )}
+
+      {completed.length > 0 && (
+        <Box flexDirection="column" marginTop={1}>
+          <Text color="green">✓ Completed ({completed.length})</Text>
+        </Box>
+      )}
+
+      <Box marginTop={1}>
+        <Text dimColor>
+          Press Ctrl+D to hide • Auto-refreshes every 2s
+        </Text>
+      </Box>
     </Box>
   );
 });
@@ -911,6 +1067,9 @@ function App(props: { port: number }) {
   const [commandFormData, setCommandFormData] = useState<Record<string, any>>({});
   const [commandSkippedFields, setCommandSkippedFields] = useState<Set<string>>(new Set());
   const [commandEditValue, setCommandEditValue] = useState("");
+
+  const [showThinking, setShowThinking] = useState(true);
+  const [showTodoPanel, setShowTodoPanel] = useState(false);
 
   const mountsCfg = useMemo(() => readMountsConfig(), [mountsRefresh]);
   const mountRows = useMemo(
@@ -2200,7 +2359,9 @@ Use skill_draft first to create the draft, then skill_apply to create the final 
         { kind: "system", text: "  //text           Send a literal prompt starting with '/'" },
         { kind: "system", text: "" },
         { kind: "system", text: "Shortcuts:" },
-        { kind: "system", text: "  Shift+Tab        Cycle operation mode" }
+        { kind: "system", text: "  Shift+Tab        Cycle operation mode" },
+        { kind: "system", text: "  Ctrl+T           Toggle thinking visibility" },
+        { kind: "system", text: "  Ctrl+D           Toggle todo panel" }
       ]);
     };
 
@@ -2249,6 +2410,31 @@ Use skill_draft first to create the draft, then skill_apply to create the final 
         }
         ctrlCPressTime.current = now;
       }
+      return;
+    }
+
+    if (key.ctrl && ch === "t") {
+      setShowThinking(prev => {
+        const next = !prev;
+        const thinkingLines = lines.filter(l => l.kind === "thinking");
+        pushLines({
+          kind: "system",
+          text: `Thinking ${next ? "shown" : "hidden"} (${thinkingLines.length} chunks)`
+        });
+        return next;
+      });
+      return;
+    }
+
+    if (key.ctrl && ch === "d") {
+      setShowTodoPanel(prev => {
+        const next = !prev;
+        pushLines({
+          kind: "system",
+          text: `Todo panel ${next ? "shown" : "hidden"}`
+        });
+        return next;
+      });
       return;
     }
 
@@ -2526,9 +2712,21 @@ Use skill_draft first to create the draft, then skill_apply to create the final 
         commandSkippedFields={commandSkippedFields}
         commandEditValue={commandEditValue}
       />
-      <Transcript lines={lines} />
+      <TodoPanel
+        sessionId={sessionId}
+        workspaceDir={defaultWorkspaceDir()}
+        visible={showTodoPanel}
+      />
+      <Transcript lines={lines} showThinking={showThinking} />
       {mode === "chat" ? (
-        <ChatPrompt inputStore={inputStore.current} operationMode={operationMode} processing={processing} />
+        <ChatPrompt
+          inputStore={inputStore.current}
+          operationMode={operationMode}
+          processing={processing}
+          showThinking={showThinking}
+          showTodoPanel={showTodoPanel}
+          thinkingCount={lines.filter(l => l.kind === "thinking").length}
+        />
       ) : null}
     </Box>
   );
