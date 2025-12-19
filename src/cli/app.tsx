@@ -9,7 +9,7 @@ import type { Profile } from "../runtime/profiles/types.js";
 import { loadToolSchemas } from "../runtime/tools/toolSchemas.js";
 import { readMountsConfig, setMountEnabled } from "../runtime/config/mounts.js";
 import { findRepoRoot } from "../runtime/config/repoRoot.js";
-import { defaultWorkspaceDir } from "../runtime/config/paths.js";
+import { defaultWorkspaceDir, resolveWorkspaceDir } from "../runtime/config/paths.js";
 import { loadCommands, listCommands, getCommand } from "../runtime/commands/loader.js";
 import { loadAgentConfigs, listAgentConfigs, getAllTemplates } from "../runtime/agents/loader.js";
 import { parseCommand } from "../runtime/commands/parser.js";
@@ -1101,10 +1101,7 @@ function App(props: { port: number }) {
 
   const workspaceDir = useMemo(() => {
     const workspaceFromEnv = process.env.FF_WORKSPACE_DIR;
-    if (workspaceFromEnv) {
-      return String(workspaceFromEnv).trim();
-    }
-    return defaultWorkspaceDir();
+    return resolveWorkspaceDir(workspaceFromEnv ?? undefined);
   }, []);
 
   const discoverProjects = (): ProjectStub[] => {

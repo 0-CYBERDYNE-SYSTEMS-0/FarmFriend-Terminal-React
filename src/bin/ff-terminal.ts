@@ -5,7 +5,7 @@ import { startWebServer } from "../web/server.js";
 import { startInkUi } from "../cli/app.js";
 import { ToolRegistry } from "../runtime/tools/registry.js";
 import { registerAllTools } from "../runtime/registerDefaultTools.js";
-import { defaultWorkspaceDir } from "../runtime/config/paths.js";
+import { defaultWorkspaceDir, resolveWorkspaceDir } from "../runtime/config/paths.js";
 import { findRepoRoot } from "../runtime/config/repoRoot.js";
 import { resolveConfig } from "../runtime/config/loadConfig.js";
 import { runAgentTurn } from "../runtime/agentLoop.js";
@@ -41,6 +41,17 @@ function usage(): void {
   ff-terminal profile tool-keys
 `);
 }
+
+const warnIfLocalWorkspace = (workspaceDir: string, repoRoot: string | null): void => {
+  if (!repoRoot) return;
+  const localWs = path.join(repoRoot, "ff-terminal-workspace");
+  if (path.normalize(localWs) !== path.normalize(workspaceDir) && fs.existsSync(localWs)) {
+    // eslint-disable-next-line no-console
+    console.warn(
+      `Warning: found repo-local workspace at ${localWs} but using canonical workspace ${workspaceDir}. Files in the repo-local copy will be ignored.`
+    );
+  }
+};
 
 function pickArg(args: string[], flag: string): string | null {
   const i = args.findIndex((a) => a === flag);
@@ -276,7 +287,8 @@ async function run(): Promise<void> {
     const sessionId = pickArg(rest, "--session") || newId("session");
 
     const repoRoot = findRepoRoot();
-    const workspaceDir = process.env.FF_WORKSPACE_DIR || defaultWorkspaceDir();
+    const workspaceDir = resolveWorkspaceDir(process.env.FF_WORKSPACE_DIR ?? undefined);
+    warnIfLocalWorkspace(workspaceDir, repoRoot);
 
 
     // Load profile if specified
@@ -448,7 +460,8 @@ async function run(): Promise<void> {
   if (cmd === "schedule") {
     const action = rest[0];
     const repoRoot = findRepoRoot();
-    const workspaceDir = process.env.FF_WORKSPACE_DIR || defaultWorkspaceDir();
+    const workspaceDir = resolveWorkspaceDir(process.env.FF_WORKSPACE_DIR ?? undefined);
+    warnIfLocalWorkspace(workspaceDir, repoRoot);
 
 
     if (action === "list") {

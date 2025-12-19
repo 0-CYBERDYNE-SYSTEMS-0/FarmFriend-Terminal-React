@@ -1,9 +1,11 @@
 import http from "node:http";
+import fs from "node:fs";
+import path from "node:path";
 import { pathToFileURL } from "node:url";
 import WebSocket, { WebSocketServer } from "ws";
 import { ToolRegistry } from "../runtime/tools/registry.js";
 import { registerAllTools } from "../runtime/registerDefaultTools.js";
-import { defaultWorkspaceDir } from "../runtime/config/paths.js";
+import { defaultWorkspaceDir, resolveWorkspaceDir } from "../runtime/config/paths.js";
 import { runAgentTurn } from "../runtime/agentLoop.js";
 import { toWire } from "../runtime/streamProtocol.js";
 import { findRepoRoot } from "../runtime/config/repoRoot.js";
@@ -32,7 +34,14 @@ export async function startDaemon(): Promise<void> {
   const server = http.createServer();
   const wss = new WebSocketServer({ server });
 
-  const workspaceDir = process.env.FF_WORKSPACE_DIR || defaultWorkspaceDir();
+  const workspaceDir = resolveWorkspaceDir(process.env.FF_WORKSPACE_DIR ?? undefined);
+  const localWs = repoRoot ? path.join(repoRoot, "ff-terminal-workspace") : null;
+  if (localWs && path.normalize(localWs) !== path.normalize(workspaceDir) && fs.existsSync(localWs)) {
+    // eslint-disable-next-line no-console
+    console.warn(
+      `Warning: found repo-local workspace at ${localWs} but using canonical workspace ${workspaceDir}. Files in the repo-local copy will be ignored.`
+    );
+  }
   const registry = new ToolRegistry();
   registerAllTools(registry, { workspaceDir });
 

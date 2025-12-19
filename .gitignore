@@ -400,6 +400,9 @@ ff-terminal-workspace/
 # Explicitly allow some workspace files if needed
 !ff-terminal-workspace/.gitkeep
 
+# Local cached web UI build (copied from reference frontend dist)
+web-frontend-dist/
+
 # Session artifacts (thoughts, todos, memories)
 ff-terminal-workspace/thoughts/
 ff-terminal-workspace/todos/
