@@ -594,12 +594,8 @@ export async function* runAgentTurn(params: {
         name: r.name,
         content: r.output
       });
-      session.conversation.push({
-        role: "assistant",
-        content: `[tool:${r.name}] ${r.ok ? "ok" : "error"}\n${r.output}`,
-        created_at: new Date().toISOString()
-      });
-      saveSession(session);
+      // Note: Tool outputs are not added to session.conversation to keep UI clean
+      // They're only in messages[] for LLM context
     }
     }
   } finally {
