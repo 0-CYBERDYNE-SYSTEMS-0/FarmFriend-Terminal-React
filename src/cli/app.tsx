@@ -281,6 +281,11 @@ const Transcript = memo(function Transcript(props: { lines: LineEntry[]; showThi
   );
 });
 
+const isValidSessionId = (sessionId: string): boolean => {
+  if (!sessionId || sessionId.length === 0) return false;
+  return /^[a-zA-Z0-9_-]+$/.test(sessionId);
+};
+
 const TodoPanel = memo(function TodoPanel(props: {
   sessionId: string | null;
   workspaceDir: string;
@@ -292,6 +297,10 @@ const TodoPanel = memo(function TodoPanel(props: {
 
   useEffect(() => {
     if (!props.visible || !props.sessionId) return;
+    if (!isValidSessionId(props.sessionId)) {
+      setError("Invalid session ID format");
+      return;
+    }
 
     const todoPath = path.join(
       props.workspaceDir,
@@ -322,6 +331,7 @@ const TodoPanel = memo(function TodoPanel(props: {
 
   useEffect(() => {
     if (!props.visible || !props.sessionId) return;
+    if (!isValidSessionId(props.sessionId)) return;
 
     const interval = setInterval(() => {
       const todoPath = path.join(
