@@ -8,7 +8,7 @@ import os from "node:os";
 
 import { ToolRegistry } from "../runtime/tools/registry.js";
 import { registerAllTools } from "../runtime/registerDefaultTools.js";
-import { defaultWorkspaceDir, resolveWorkspaceDir } from "../runtime/config/paths.js";
+import { resolveWorkspaceDir } from "../runtime/config/paths.js";
 import { runAgentTurn } from "../runtime/agentLoop.js";
 import { findRepoRoot } from "../runtime/config/repoRoot.js";
 import { createSession, loadSession, saveSession } from "../runtime/session/sessionStore.js";
