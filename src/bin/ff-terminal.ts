@@ -41,6 +41,8 @@ function usage(): void {
   ff-terminal profile default <name>
   ff-terminal profile delete <name>
   ff-terminal profile tool-keys
+  --allow-macos-control       Enable macOS automation tool (FF_ALLOW_MACOS_CONTROL=1)
+  --allow-browser-use         Enable browser-use automation (FF_ALLOW_BROWSER_USE=1)
 `);
 }
 
@@ -63,6 +65,15 @@ function pickArg(args: string[], flag: string): string | null {
 
 function hasFlag(args: string[], flag: string): boolean {
   return args.includes(flag);
+}
+
+function applyToolAllowFlags(args: string[]): void {
+  if (hasFlag(args, "--allow-macos-control")) {
+    process.env.FF_ALLOW_MACOS_CONTROL = "1";
+  }
+  if (hasFlag(args, "--allow-browser-use")) {
+    process.env.FF_ALLOW_BROWSER_USE = "1";
+  }
 }
 
 function sanitizeEnvInPlace(): void {
@@ -133,6 +144,7 @@ async function run(): Promise<void> {
   }
 
   if (cmd === "daemon") {
+    applyToolAllowFlags(rest);
     await startDaemon();
     return;
   }
@@ -161,6 +173,7 @@ async function run(): Promise<void> {
 
     // Apply profile-selected env + config path to this process (daemon + Ink UI run together here).
     sanitizeEnvInPlace();
+    applyToolAllowFlags(rest);
 
     process.env.FF_PROFILE = profile.name;
     process.env.FF_PROVIDER = profile.provider;
@@ -273,11 +286,13 @@ async function run(): Promise<void> {
   }
 
   if (cmd === "web") {
+    applyToolAllowFlags(rest);
     await startWebServer();
     return;
   }
 
   if (cmd === "acp") {
+    applyToolAllowFlags(rest);
     const profileName = pickArg(rest, "--profile");
     const repoRoot = findRepoRoot();
     const workspaceDir = resolveWorkspaceDir(process.env.FF_WORKSPACE_DIR ?? undefined);
@@ -329,6 +344,7 @@ async function run(): Promise<void> {
   }
 
   if (cmd === "run") {
+    applyToolAllowFlags(rest);
     const userPrompt = pickArg(rest, "--prompt") || "";
     const scheduledTaskRef = pickArg(rest, "--scheduled-task");
     const headless = hasFlag(rest, "--headless");
