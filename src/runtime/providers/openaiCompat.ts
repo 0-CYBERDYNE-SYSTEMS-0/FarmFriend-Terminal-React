@@ -490,7 +490,7 @@ export function openAICompatProvider(params: {
       const isEmpty = !content && toolCalls.length === 0;
       if (isEmpty && canRetryEmptyStream()) {
         markRetryUsed();
-        yield { type: "status", message: `Empty stream from ${params.name}; retrying once with non-stream request.` };
+        debugLog("empty_stream_retry_notice", { url, provider: params.name });
         debugLog("empty_stream_retry_start", { url });
         try {
           const retryRes = await requestOnce(false);

@@ -127,4 +127,3 @@ export async function macosControlTool(argsRaw: unknown, signal: AbortSignal): P
   if (waitTime > 0) await sleep(waitTime * 1000);
   return JSON.stringify(result, null, 2);
 }
-

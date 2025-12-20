@@ -16,11 +16,16 @@ type SkillMeta = {
   description?: string;
   version?: string;
   author?: string;
+  license?: string;
+  compatibility?: string;
+  metadata?: Record<string, string>;
+  allowed_tools?: string[];
   priority?: string;
   tags?: string[];
   triggers?: string[];
   assets?: string[];
   recommended_tools?: string[];
+  validation_warnings?: string[];
 };
 
 export type SkillStub = {
@@ -28,6 +33,10 @@ export type SkillStub = {
   name?: string;
   summary?: string;
   description?: string;
+  tags?: string[];
+  triggers?: string[];
+  priority?: string;
+  allowed_tools?: string[];
   path: string;
   source_root: string;
   source: string;
@@ -159,54 +168,177 @@ function splitFrontmatter(markdown: string): { meta: Record<string, any>; body: 
   if (end === -1) return { meta: {}, body: markdown };
   const fm = normalized.slice(4, end).trim();
   const body = normalized.slice(end + "\n---\n".length);
-
-  // Minimal YAML-ish parser for the SKILL.md frontmatter (supports scalars + simple lists).
-  const meta: Record<string, any> = {};
-  let currentListKey: string | null = null;
-  let currentScalarKey: string | null = null;
-  for (const rawLine of fm.split("\n")) {
-    const line = rawLine.trimEnd();
-    if (!line.trim()) continue;
-
-    // Support basic multiline scalar values by appending indented continuation lines.
-    // Example:
-    // description: |
-    //   line 1
-    //   line 2
-    if (currentScalarKey && /^\s{2,}\S/.test(rawLine) && !line.trimStart().startsWith("- ")) {
-      const prev = typeof meta[currentScalarKey] === "string" ? meta[currentScalarKey] : "";
-      meta[currentScalarKey] = (prev ? prev + "\n" : "") + rawLine.trim();
-      continue;
-    }
-
-    if (line.startsWith("- ") && currentListKey) {
-      meta[currentListKey] = Array.isArray(meta[currentListKey]) ? meta[currentListKey] : [];
-      meta[currentListKey].push(line.slice(2).trim());
-      continue;
-    }
-    const m = line.match(/^([A-Za-z0-9_/-]+):\s*(.*)$/);
-    if (!m) continue;
-    const [, k, vRaw] = m;
-    const v = vRaw.trim();
-    if (v === "") {
-      // list starts on next lines
-      meta[k] = [];
-      currentListKey = k;
-      currentScalarKey = null;
-      continue;
-    }
-    currentScalarKey = k;
-    currentListKey = null;
-    // Strip surrounding quotes
-    const unquoted = (v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'")) ? v.slice(1, -1) : v;
-    meta[k] = unquoted;
-  }
-
-  return { meta, body };
+  return { meta: parseFrontmatterYaml(fm), body };
 }
 
 function looksLikeSkillSlug(s: string): boolean {
-  return /^[a-z0-9-]{2,64}$/.test(s);
+  return /^[a-z0-9-]{1,64}$/.test(s);
+}
+
+function looksLikeSpecName(s: string): boolean {
+  if (!/^[a-z0-9-]{1,64}$/.test(s)) return false;
+  if (s.startsWith("-") || s.endsWith("-")) return false;
+  if (s.includes("--")) return false;
+  return true;
+}
+
+function parseFrontmatterYaml(fm: string): Record<string, any> {
+  const lines = fm.replace(/\r\n/g, "\n").split("\n");
+  const out: Record<string, any> = {};
+
+  const peekNextNonEmpty = (start: number): { line: string; indent: number } | null => {
+    for (let i = start; i < lines.length; i += 1) {
+      const raw = lines[i];
+      if (!raw.trim()) continue;
+      const indent = raw.match(/^\s*/)?.[0]?.length ?? 0;
+      return { line: raw, indent };
+    }
+    return null;
+  };
+
+  const parseScalar = (raw: string): string => {
+    const v = raw.trim();
+    if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) return v.slice(1, -1);
+    return v;
+  };
+
+  const parseMultiline = (start: number, baseIndent: number, style: "|" | ">"): { value: string; next: number } => {
+    const parts: string[] = [];
+    let i = start;
+    let minIndent: number | null = null;
+    for (; i < lines.length; i += 1) {
+      const raw = lines[i];
+      if (!raw.trim()) {
+        parts.push("");
+        continue;
+      }
+      const indent = raw.match(/^\s*/)?.[0]?.length ?? 0;
+      if (indent <= baseIndent) break;
+      if (minIndent === null || indent < minIndent) minIndent = indent;
+      parts.push(raw);
+    }
+    const trimIndent = minIndent ?? baseIndent + 1;
+    const normalized = parts.map((line) => (line ? line.slice(trimIndent).trimEnd() : ""));
+    const value = style === ">" ? normalized.join(" ").trim() : normalized.join("\n").replace(/\s+$/g, "");
+    return { value, next: i };
+  };
+
+  const parseList = (start: number, baseIndent: number): { value: string[]; next: number } => {
+    const items: string[] = [];
+    let i = start;
+    for (; i < lines.length; i += 1) {
+      const raw = lines[i];
+      if (!raw.trim()) continue;
+      const indent = raw.match(/^\s*/)?.[0]?.length ?? 0;
+      if (indent <= baseIndent) break;
+      const trimmed = raw.trimStart();
+      if (!trimmed.startsWith("- ")) break;
+      items.push(parseScalar(trimmed.slice(2)));
+    }
+    return { value: items, next: i };
+  };
+
+  const parseMap = (start: number, baseIndent: number): { value: Record<string, string>; next: number } => {
+    const obj: Record<string, string> = {};
+    let i = start;
+    for (; i < lines.length; i += 1) {
+      const raw = lines[i];
+      if (!raw.trim()) continue;
+      const indent = raw.match(/^\s*/)?.[0]?.length ?? 0;
+      if (indent <= baseIndent) break;
+      const line = raw.trimEnd();
+      const m = line.match(/^([A-Za-z0-9_/-]+):\s*(.*)$/);
+      if (!m) continue;
+      const [, k, vRaw] = m;
+      obj[k] = parseScalar(vRaw);
+    }
+    return { value: obj, next: i };
+  };
+
+  for (let i = 0; i < lines.length; i += 1) {
+    const raw = lines[i];
+    if (!raw.trim()) continue;
+    const indent = raw.match(/^\s*/)?.[0]?.length ?? 0;
+    if (indent > 0) continue;
+    const line = raw.trimEnd();
+    const m = line.match(/^([A-Za-z0-9_/-]+):\s*(.*)$/);
+    if (!m) continue;
+    const [, key, vRaw] = m;
+    const v = vRaw.trim();
+    if (v === "|" || v === ">") {
+      const multi = parseMultiline(i + 1, indent, v as "|" | ">");
+      out[key] = multi.value;
+      i = multi.next - 1;
+      continue;
+    }
+    if (v === "") {
+      const next = peekNextNonEmpty(i + 1);
+      if (!next || next.indent <= indent) {
+        out[key] = "";
+        continue;
+      }
+      if (next.line.trimStart().startsWith("- ")) {
+        const list = parseList(i + 1, indent);
+        out[key] = list.value;
+        i = list.next - 1;
+        continue;
+      }
+      const map = parseMap(i + 1, indent);
+      out[key] = map.value;
+      i = map.next - 1;
+      continue;
+    }
+    out[key] = parseScalar(v);
+  }
+
+  return out;
+}
+
+function normalizeAllowedTools(raw: unknown): string[] | undefined {
+  if (Array.isArray(raw)) {
+    const out = raw.map((v) => String(v).trim()).filter(Boolean);
+    return out.length ? out : undefined;
+  }
+  if (typeof raw === "string") {
+    const out = raw
+      .split(/\s+/)
+      .map((v) => v.trim())
+      .filter(Boolean);
+    return out.length ? out : undefined;
+  }
+  return undefined;
+}
+
+function normalizeMetadata(raw: unknown): Record<string, string> | undefined {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(raw)) {
+    if (typeof v === "string") out[String(k)] = v;
+  }
+  return Object.keys(out).length ? out : undefined;
+}
+
+function validateSkillMeta(meta: SkillMeta, dirName?: string): string[] {
+  const warnings: string[] = [];
+  const name = typeof meta.name === "string" ? meta.name.trim() : "";
+  const desc = typeof meta.description === "string" ? meta.description.trim() : "";
+
+  if (!name) warnings.push("Missing required frontmatter field: name");
+  if (name && !looksLikeSpecName(name)) {
+    warnings.push("Frontmatter name does not meet spec (1-64 chars, lowercase alnum + hyphen, no leading/trailing or consecutive hyphens)");
+  }
+  if (name && dirName && name !== dirName) warnings.push("Frontmatter name does not match parent directory name");
+
+  if (!desc) warnings.push("Missing required frontmatter field: description");
+  if (desc && desc.length > 1024) warnings.push("Description exceeds 1024 characters");
+
+  if (meta.compatibility && meta.compatibility.length > 500) warnings.push("Compatibility exceeds 500 characters");
+
+  if (meta.metadata && Object.values(meta.metadata).some((v) => typeof v !== "string")) {
+    warnings.push("Metadata should be a map of string keys to string values");
+  }
+  if (meta.allowed_tools && meta.allowed_tools.length === 0) warnings.push("allowed-tools is present but empty");
+  return warnings;
 }
 
 function parseSkillAtDir(params: { root: string; rootLabel: string; dir: string }): SkillRecord | null {
@@ -218,6 +350,10 @@ function parseSkillAtDir(params: { root: string; rootLabel: string; dir: string 
   const fmName = typeof meta.name === "string" ? meta.name : undefined;
   const dirName = path.basename(params.dir);
   const resolvedSlug = fmSlug || (fmName && looksLikeSkillSlug(fmName) ? fmName : undefined) || dirName;
+  const allowedTools = normalizeAllowedTools(meta["allowed-tools"] ?? meta["allowed_tools"]);
+  const metadata = normalizeMetadata(meta.metadata);
+  const compatibility = typeof meta.compatibility === "string" ? meta.compatibility : undefined;
+  const license = typeof meta.license === "string" ? meta.license : undefined;
   const out: SkillMeta = {
     name: typeof meta.name === "string" ? meta.name : undefined,
     slug: resolvedSlug,
@@ -225,12 +361,18 @@ function parseSkillAtDir(params: { root: string; rootLabel: string; dir: string 
     description: typeof meta.description === "string" ? meta.description : undefined,
     version: typeof meta.version === "string" ? meta.version : undefined,
     author: typeof meta.author === "string" ? meta.author : undefined,
+    license,
+    compatibility,
+    metadata,
+    allowed_tools: allowedTools,
     priority: typeof meta.priority === "string" ? meta.priority : undefined,
     tags: Array.isArray(meta.tags) ? meta.tags : undefined,
     triggers: Array.isArray(meta.triggers) ? meta.triggers : undefined,
     assets: Array.isArray(meta.assets) ? meta.assets : undefined,
     recommended_tools: Array.isArray(meta.recommended_tools) ? meta.recommended_tools : undefined
   };
+  const warnings = validateSkillMeta(out, dirName);
+  if (warnings.length) out.validation_warnings = warnings;
   return { root: params.root, rootLabel: params.rootLabel, rootKind: "skills", dir: params.dir, skillPath, meta: out, body };
 }
 
@@ -252,6 +394,10 @@ function parseMarkdownCommandFile(params: { root: string; rootLabel: string; fil
       : typeof meta.description === "string"
         ? meta.description
         : undefined;
+  const allowedTools = normalizeAllowedTools(meta["allowed-tools"] ?? meta["allowed_tools"]);
+  const metadata = normalizeMetadata(meta.metadata);
+  const compatibility = typeof meta.compatibility === "string" ? meta.compatibility : undefined;
+  const license = typeof meta.license === "string" ? meta.license : undefined;
   const out: SkillMeta = {
     name,
     slug,
@@ -259,12 +405,18 @@ function parseMarkdownCommandFile(params: { root: string; rootLabel: string; fil
     description: typeof meta.description === "string" ? meta.description : undefined,
     version: typeof meta.version === "string" ? meta.version : undefined,
     author: typeof meta.author === "string" ? meta.author : undefined,
+    license,
+    compatibility,
+    metadata,
+    allowed_tools: allowedTools,
     priority: typeof meta.priority === "string" ? meta.priority : undefined,
     tags: Array.isArray(meta.tags) ? meta.tags : undefined,
     triggers: Array.isArray(meta.triggers) ? meta.triggers : undefined,
     assets: Array.isArray(meta.assets) ? meta.assets : undefined,
     recommended_tools: Array.isArray(meta.recommended_tools) ? meta.recommended_tools : undefined
   };
+  const warnings = validateSkillMeta(out, path.basename(path.dirname(params.filePath)));
+  if (warnings.length) out.validation_warnings = warnings;
   return {
     root: params.root,
     rootLabel: params.rootLabel,
@@ -372,6 +524,14 @@ export async function skillDocumentationTool(argsRaw: unknown): Promise<string> 
     slug: String(s.meta.slug || ""),
     name: s.meta.name,
     summary: s.meta.summary,
+    description: s.meta.description,
+    tags: s.meta.tags,
+    triggers: s.meta.triggers,
+    priority: s.meta.priority,
+    allowed_tools: s.meta.allowed_tools,
+    compatibility: s.meta.compatibility,
+    license: s.meta.license,
+    validation_warnings: s.meta.validation_warnings,
     path: s.skillPath,
     source_root: s.root,
     source: s.rootLabel,
@@ -423,6 +583,10 @@ export function listSkillStubs(params: { workspaceDir?: string; repoRoot?: strin
     name: s.meta.name,
     summary: s.meta.summary,
     description: s.meta.description,
+    tags: s.meta.tags,
+    triggers: s.meta.triggers,
+    priority: s.meta.priority,
+    allowed_tools: s.meta.allowed_tools,
     path: s.skillPath,
     source_root: s.root,
     source: s.rootLabel,

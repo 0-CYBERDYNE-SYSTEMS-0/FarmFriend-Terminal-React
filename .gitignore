@@ -395,6 +395,8 @@ pnpm-lock.yaml
 # ================================
 # FF-Terminal Workspace (Runtime)
 # ================================
+# Local runtime home (sessions, state)
+.ff-terminal/
 # All workspace-generated files should be local-only
 ff-terminal-workspace/
 # Explicitly allow some workspace files if needed
