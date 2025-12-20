@@ -3,6 +3,12 @@ import path from "node:path";
 import { getToolContext } from "../context.js";
 import { newId } from "../../../shared/ids.js";
 import { resolveWorkspaceDir } from "../../config/paths.js";
+import {
+  loadSessionTaskStore,
+  saveSessionTaskStore,
+  Task,
+  TaskStore
+} from "../../session/sessionTaskStore.js";
 
 type Args = {
   action?: "create" | "update" | "complete" | "list" | string;
@@ -10,36 +16,12 @@ type Args = {
   task_id?: string;
 };
 
-type Task = {
-  id: string;
-  description: string;
-  status: "open" | "completed";
-  created_at: string;
-  updated_at: string;
-};
-
-type Store = { tasks: Task[] };
-
 type Todo = {
   id: string;
   content: string;
   status: "pending" | "in_progress" | "completed";
   priority: "high" | "medium" | "low";
 };
-
-function readStore(p: string): Store {
-  if (!fs.existsSync(p)) return { tasks: [] };
-  try {
-    return JSON.parse(fs.readFileSync(p, "utf8")) as Store;
-  } catch {
-    return { tasks: [] };
-  }
-}
-
-function writeStore(p: string, store: Store): void {
-  fs.mkdirSync(path.dirname(p), { recursive: true });
-  fs.writeFileSync(p, JSON.stringify(store, null, 2) + "\n", "utf8");
-}
 
 function syncTodosForSession(params: {
   tasks: Task[];
@@ -66,10 +48,12 @@ export async function manageTaskTool(argsRaw: unknown): Promise<string> {
   if (!action) throw new Error("manage_task: missing args.action");
 
   const ctx = getToolContext();
-  const workspaceDir = resolveWorkspaceDir(ctx?.workspaceDir ?? process.env.FF_WORKSPACE_DIR ?? undefined);
-  const sessionId = ctx?.sessionId ?? null;
-  const storePath = path.join(workspaceDir, "tasks.json");
-  const store = readStore(storePath);
+  const workspaceDir = resolveWorkspaceDir(
+    ctx?.workspaceDir ?? process.env.FF_WORKSPACE_DIR ?? undefined,
+    { repoRoot: ctx?.repoRoot, cwd: process.cwd() }
+  );
+  const sessionId = ctx?.sessionId ?? "session_unknown";
+  const { store, storePath } = loadSessionTaskStore({ workspaceDir, sessionId });
   const now = new Date().toISOString();
 
   if (action === "list") {
@@ -81,7 +65,7 @@ export async function manageTaskTool(argsRaw: unknown): Promise<string> {
     if (!desc) throw new Error("manage_task:create missing task_description");
     const task: Task = { id: newId("task"), description: desc, status: "open", created_at: now, updated_at: now };
     store.tasks.push(task);
-    writeStore(storePath, store);
+    saveSessionTaskStore({ workspaceDir, sessionId }, store as TaskStore);
     syncTodosForSession({ tasks: store.tasks, workspaceDir, sessionId });
     return JSON.stringify({ ok: true, action, task, path: storePath }, null, 2);
   }
@@ -95,7 +79,7 @@ export async function manageTaskTool(argsRaw: unknown): Promise<string> {
     if (!task) throw new Error(`manage_task:update task not found: ${id}`);
     task.description = desc;
     task.updated_at = now;
-    writeStore(storePath, store);
+    saveSessionTaskStore({ workspaceDir, sessionId }, store as TaskStore);
     syncTodosForSession({ tasks: store.tasks, workspaceDir, sessionId });
     return JSON.stringify({ ok: true, action, task, path: storePath }, null, 2);
   }
@@ -107,7 +91,7 @@ export async function manageTaskTool(argsRaw: unknown): Promise<string> {
     if (!task) throw new Error(`manage_task:complete task not found: ${id}`);
     task.status = "completed";
     task.updated_at = now;
-    writeStore(storePath, store);
+    saveSessionTaskStore({ workspaceDir, sessionId }, store as TaskStore);
     syncTodosForSession({ tasks: store.tasks, workspaceDir, sessionId });
     return JSON.stringify({ ok: true, action, task, path: storePath }, null, 2);
   }

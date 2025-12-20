@@ -1,6 +1,4 @@
 import http from "node:http";
-import fs from "node:fs";
-import path from "node:path";
 import { pathToFileURL } from "node:url";
 import WebSocket, { WebSocketServer } from "ws";
 import { ToolRegistry } from "../runtime/tools/registry.js";
@@ -37,14 +35,10 @@ export async function startDaemon(): Promise<void> {
   const wss = new WebSocketServer({ server });
 
   const runtimeCfg = resolveConfig({ repoRoot });
-  const workspaceDir = resolveWorkspaceDir((runtimeCfg as any).workspace_dir ?? process.env.FF_WORKSPACE_DIR ?? undefined);
-  const localWs = repoRoot ? path.join(repoRoot, "ff-terminal-workspace") : null;
-  if (localWs && path.normalize(localWs) !== path.normalize(workspaceDir) && fs.existsSync(localWs)) {
-    // eslint-disable-next-line no-console
-    console.warn(
-      `Warning: found repo-local workspace at ${localWs} but using canonical workspace ${workspaceDir}. Files in the repo-local copy will be ignored.`
-    );
-  }
+  const workspaceDir = resolveWorkspaceDir(
+    (runtimeCfg as any).workspace_dir ?? process.env.FF_WORKSPACE_DIR ?? undefined,
+    { repoRoot }
+  );
 
   const healthIssues = await quickHealthCheck(workspaceDir);
   if (healthIssues.length > 0) {

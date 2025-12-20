@@ -48,15 +48,11 @@ export async function startWebServer(): Promise<void> {
   const repoRoot = findRepoRoot();
   loadDefaultDotenv({ repoRoot });
   const runtimeCfg = resolveConfig({ repoRoot });
-  const workspaceDir = resolveWorkspaceDir((runtimeCfg as any).workspace_dir ?? process.env.FF_WORKSPACE_DIR ?? undefined);
+  const workspaceDir = resolveWorkspaceDir(
+    (runtimeCfg as any).workspace_dir ?? process.env.FF_WORKSPACE_DIR ?? undefined,
+    { repoRoot }
+  );
   const sessionDir = path.join(workspaceDir, "sessions");
-  const localWs = path.join(repoRoot, "ff-terminal-workspace");
-  if (path.normalize(localWs) !== path.normalize(workspaceDir) && fs.existsSync(localWs)) {
-    // eslint-disable-next-line no-console
-    console.warn(
-      `Warning: found repo-local workspace at ${localWs} but using canonical workspace ${workspaceDir}. Files in the repo-local copy will be ignored.`
-    );
-  }
   const frontendDistDirRaw = process.env.FF_FRONTEND_DIST_DIR;
   const frontendDistDir = frontendDistDirRaw && frontendDistDirRaw.trim()
     ? path.resolve(frontendDistDirRaw.trim().replace(/^~(?=$|\/)/, os.homedir()))

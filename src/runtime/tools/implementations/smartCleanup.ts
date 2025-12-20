@@ -71,6 +71,7 @@ export async function smartCleanupTool(argsRaw: unknown): Promise<string> {
     const rel = path.relative(root, filePath).replace(/\\/g, "/");
     // Preserve core workspace state.
     if (rel === "tasks.json" || rel === "memory_core/session_summary.md") return;
+    if (rel.startsWith("sessions/tasks/") && rel.endsWith(".json")) return;
     if (rel.startsWith("skills/") && rel.includes("/SKILL.md")) return;
 
     const st = fs.statSync(filePath);

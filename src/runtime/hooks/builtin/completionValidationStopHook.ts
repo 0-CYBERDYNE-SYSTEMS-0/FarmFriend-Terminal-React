@@ -1,7 +1,6 @@
-import fs from "node:fs";
-import path from "node:path";
 import { AgentStopContext, AgentStopResult, Hook } from "../types.js";
 import { extractPromises, unfulfilledHighConfidence, Promise as CVPromise } from "../completionValidator.js";
+import { loadSessionTaskStore } from "../../session/sessionTaskStore.js";
 
 type Task = {
   id: string;
@@ -10,18 +9,6 @@ type Task = {
   created_at: string;
   updated_at: string;
 };
-
-type TaskStore = { tasks: Task[] };
-
-function readTaskStore(workspaceDir: string): TaskStore {
-  const storePath = path.join(workspaceDir, "tasks.json");
-  if (!fs.existsSync(storePath)) return { tasks: [] };
-  try {
-    return JSON.parse(fs.readFileSync(storePath, "utf8")) as TaskStore;
-  } catch {
-    return { tasks: [] };
-  }
-}
 
 export function createCompletionValidationStopHook(params: {
   enabled: boolean;
@@ -34,8 +21,8 @@ export function createCompletionValidationStopHook(params: {
     if (!params.enabled) return { action: "allow" };
     if (!params.workspaceDir) return { action: "allow" }; // No workspace, can't check tasks
 
-    // Read actual task status from tasks.json
-    const store = readTaskStore(params.workspaceDir);
+    // Read actual task status for this session.
+    const { store } = loadSessionTaskStore({ workspaceDir: params.workspaceDir, sessionId: _ctx.sessionId });
     const openTasks = store.tasks.filter((t) => t.status === "open");
 
     // Promise-based validation (long-horizon autonomy): look at the assistant's latest message
@@ -69,7 +56,7 @@ export function createCompletionValidationStopHook(params: {
     if (blockAttempts < params.maxAttempts) {
       blockAttempts += 1;
 
-      // Show exact task descriptions from tasks.json
+      // Show exact task descriptions for this session.
       const taskList = openTasks
         .slice(0, 5)
         .map((t) => `- [${t.id}] ${t.description}`)
@@ -83,7 +70,7 @@ export function createCompletionValidationStopHook(params: {
       const sections = [] as string[];
       if (openTasks.length) {
         sections.push(
-          `Tasks still marked as open in tasks.json (${openTasks.length}):\n${taskList}`
+          `Tasks still marked as open for this session (${openTasks.length}):\n${taskList}`
         );
       }
       if (openPromises.length) {

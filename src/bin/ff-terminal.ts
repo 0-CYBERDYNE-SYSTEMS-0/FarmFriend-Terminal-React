@@ -48,16 +48,7 @@ function usage(): void {
 `);
 }
 
-const warnIfLocalWorkspace = (workspaceDir: string, repoRoot: string | null): void => {
-  if (!repoRoot) return;
-  const localWs = path.join(repoRoot, "ff-terminal-workspace");
-  if (path.normalize(localWs) !== path.normalize(workspaceDir) && fs.existsSync(localWs)) {
-    // eslint-disable-next-line no-console
-    console.warn(
-      `Warning: found repo-local workspace at ${localWs} but using canonical workspace ${workspaceDir}. Files in the repo-local copy will be ignored.`
-    );
-  }
-};
+const LOCAL_WORKSPACE_DIRNAME = "ff-terminal-workspace";
 
 function pickArg(args: string[], flag: string): string | null {
   const i = args.findIndex((a) => a === flag);
@@ -362,7 +353,7 @@ async function run(): Promise<void> {
     if (profile.videoModel?.trim()) process.env.FF_VIDEO_MODEL = profile.videoModel.trim();
 
     // LOCAL MODE: Set workspace to current directory
-    const localWorkspaceDir = path.join(process.cwd(), "ff-terminal-workspace");
+    const localWorkspaceDir = path.join(process.cwd(), LOCAL_WORKSPACE_DIRNAME);
     process.env.FF_WORKSPACE_DIR = localWorkspaceDir;
 
     // Create workspace directory if it doesn't exist
@@ -451,8 +442,10 @@ async function run(): Promise<void> {
     const profileName = pickArg(rest, "--profile");
     const repoRoot = findRepoRoot();
     const runtimeCfg = resolveConfig({ repoRoot });
-    const workspaceDir = resolveWorkspaceDir((runtimeCfg as any).workspace_dir ?? process.env.FF_WORKSPACE_DIR ?? undefined);
-    warnIfLocalWorkspace(workspaceDir, repoRoot);
+    const workspaceDir = resolveWorkspaceDir(
+      (runtimeCfg as any).workspace_dir ?? process.env.FF_WORKSPACE_DIR ?? undefined,
+      { repoRoot }
+    );
 
     if (profileName) {
       const config = readConfig();
@@ -513,8 +506,10 @@ async function run(): Promise<void> {
 
     const repoRoot = findRepoRoot();
     const runtimeCfg = resolveConfig({ repoRoot });
-    const workspaceDir = resolveWorkspaceDir((runtimeCfg as any).workspace_dir ?? process.env.FF_WORKSPACE_DIR ?? undefined);
-    warnIfLocalWorkspace(workspaceDir, repoRoot);
+    const workspaceDir = resolveWorkspaceDir(
+      (runtimeCfg as any).workspace_dir ?? process.env.FF_WORKSPACE_DIR ?? undefined,
+      { repoRoot }
+    );
 
 
     // Load profile if specified
@@ -686,8 +681,10 @@ async function run(): Promise<void> {
     const action = rest[0];
     const repoRoot = findRepoRoot();
     const runtimeCfg = resolveConfig({ repoRoot });
-    const workspaceDir = resolveWorkspaceDir((runtimeCfg as any).workspace_dir ?? process.env.FF_WORKSPACE_DIR ?? undefined);
-    warnIfLocalWorkspace(workspaceDir, repoRoot);
+    const workspaceDir = resolveWorkspaceDir(
+      (runtimeCfg as any).workspace_dir ?? process.env.FF_WORKSPACE_DIR ?? undefined,
+      { repoRoot }
+    );
 
 
     if (action === "list") {
