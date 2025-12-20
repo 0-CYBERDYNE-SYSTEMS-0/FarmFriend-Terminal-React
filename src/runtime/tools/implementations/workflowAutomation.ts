@@ -4,6 +4,7 @@ import path from "node:path";
 import { getToolContext } from "../context.js";
 import { macosControlTool } from "./macosControl.js";
 import { runCommandTool } from "./runCommand.js";
+import { resolveWorkspaceDir } from "../../config/paths.js";
 
 type Args = {
   action?: string;
@@ -126,7 +127,7 @@ export async function workflowAutomationTool(argsRaw: unknown, signal: AbortSign
   if (!action) throw new Error("workflow_automation: missing args.action");
 
   const ctx = getToolContext();
-  const workspaceDir = ctx?.workspaceDir ? ctx.workspaceDir : process.cwd();
+  const workspaceDir = resolveWorkspaceDir(ctx?.workspaceDir ?? process.env.FF_WORKSPACE_DIR ?? undefined);
   const root = storageRoot(workspaceDir);
   ensureDirs(root);
 
@@ -242,4 +243,3 @@ export async function workflowAutomationTool(argsRaw: unknown, signal: AbortSign
 
   throw new Error(`workflow_automation: unknown action: ${action}`);
 }
-

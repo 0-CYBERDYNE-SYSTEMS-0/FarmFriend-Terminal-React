@@ -28,7 +28,7 @@ export function buildEnvironmentalContext(params: { workingDir: string; sessionS
     ...(params.sessionSummary
       ? [
           "## Session Summary (auto-loaded)",
-          "This is the current `ff-terminal-workspace/session_summary.md` content for cross-session continuity:",
+          "This is the current `ff-terminal-workspace/memory_core/session_summary.md` content for cross-session continuity:",
           "",
           params.sessionSummary.trim(),
           ""

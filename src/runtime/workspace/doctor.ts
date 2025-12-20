@@ -18,18 +18,28 @@ export type ValidationResult = {
   issues: ValidationIssue[];
   scannedPaths: string[];
   timestamp: string;
+  workspaceDir: string;
 };
 
 const CANONICAL_DIRECTORIES = [
-  'memory_core',
-  'memory_core/scheduled_tasks',
-  'projects',
-  'agents',
-  'commands',
-  'skills',
-  'todos/sessions',
-  'logs/sessions',
-  'logs/hooks'
+  "agents",
+  "commands",
+  "skills",
+  "memory_core",
+  "memory_core/scheduled_tasks",
+  "memory_core/workflows",
+  "projects",
+  "thoughts",
+  "todos",
+  "todos/sessions",
+  "logs",
+  "logs/sessions",
+  "logs/hooks",
+  "logs/runs",
+  "logs/scheduled_runs",
+  "generated-images",
+  "sessions",
+  "imessage_sessions"
 ];
 
 export function checkCanonicalStructure(workspaceDir: string): ValidationIssue[] {
@@ -79,7 +89,8 @@ export function checkLegacyWorkspace(workspaceDir: string): ValidationIssue[] {
   const legacyPaths = [
     { dir: 'agents', pattern: '*.json' },
     { dir: 'commands', pattern: '*.md' },
-    { dir: 'skills', pattern: null }
+    { dir: 'skills', pattern: null },
+    { dir: 'sessions', pattern: '*.json' }
   ];
 
   for (const { dir, pattern } of legacyPaths) {
@@ -158,7 +169,8 @@ export async function validateWorkspace(workspaceDir: string): Promise<Validatio
     ok,
     issues,
     scannedPaths,
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
+    workspaceDir
   };
 }
 
@@ -168,8 +180,10 @@ export function generateReport(result: ValidationResult): string {
   lines.push('Workspace Health Report');
   lines.push('======================');
   lines.push('');
+  lines.push(`Workspace: ${result.workspaceDir}`);
   lines.push(`Scanned at: ${new Date(result.timestamp).toLocaleString()}`);
   lines.push(`Status: ${result.ok ? '✓ Healthy' : '✗ Issues Found'}`);
+  lines.push(`Expected dirs: ${CANONICAL_DIRECTORIES.join(", ")}`);
   lines.push('');
 
   if (result.issues.length === 0) {

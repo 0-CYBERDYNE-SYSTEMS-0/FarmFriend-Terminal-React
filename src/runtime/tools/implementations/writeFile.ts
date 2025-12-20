@@ -3,6 +3,7 @@ import path from "node:path";
 import { getToolContext } from "../context.js";
 import { findRepoRoot } from "../../config/repoRoot.js";
 import { defaultWorkspaceDir, resolveWorkspaceDir } from "../../config/paths.js";
+import { guardWritePath } from "../guards/fsGuard.js";
 
 export async function writeFileTool(args: unknown): Promise<string> {
   const filePath = typeof (args as any)?.path === "string" ? String((args as any).path) : null;
@@ -13,36 +14,26 @@ export async function writeFileTool(args: unknown): Promise<string> {
   const ctx = getToolContext();
   const repoRoot = path.resolve(ctx?.repoRoot ?? findRepoRoot());
   // Canonicalize workspace hints to the home workspace to prevent scatter.
-  const workspaceDir = resolveWorkspaceDir(ctx?.workspaceDir ?? process.env.FF_WORKSPACE_DIR ?? undefined);
+  const workspaceDir = resolveWorkspaceDir(ctx?.workspaceDir ?? process.env.FF_WORKSPACE_DIR ?? defaultWorkspaceDir());
 
-  let abs: string;
-  if (!path.isAbsolute(filePath) && (filePath === "ff-terminal-workspace" || filePath.startsWith(`ff-terminal-workspace${path.sep}`))) {
-    // Treat relative ff-terminal-workspace hints as referring to the canonical home workspace.
-    const suffix = filePath.slice("ff-terminal-workspace".length);
-    abs = path.join(workspaceDir, suffix);
-  } else {
-    abs = path.isAbsolute(filePath) ? path.resolve(filePath) : path.resolve(repoRoot, filePath);
-  }
-  const allowedRoots = [repoRoot, workspaceDir].map((p) => (p.endsWith(path.sep) ? p : p + path.sep));
-  const isAllowed = allowedRoots.some((r) => abs === r.slice(0, -1) || abs.startsWith(r));
-  if (!isAllowed) {
-    throw new Error(`write_file: blocked (path must be under repo root or workspace)\n- repo: ${repoRoot}\n- workspace: ${workspaceDir}\n- got: ${abs}`);
-  }
+  const { absPath, location } = guardWritePath({
+    rawPath: filePath,
+    repoRoot,
+    workspaceDir,
+    reason: "write_file"
+  });
 
-  const relToRepo = abs.startsWith(repoRoot + path.sep) ? abs.slice(repoRoot.length + 1) : null;
+  const relToRepo = location === "repo" && absPath.startsWith(repoRoot + path.sep) ? absPath.slice(repoRoot.length + 1) : null;
   const warnings: string[] = [];
 
-  if (abs.includes(`${path.sep}.git${path.sep}`) || abs.endsWith(`${path.sep}.git`)) {
-    throw new Error("write_file: blocked (refusing to write under .git)");
-  }
   if (relToRepo && (relToRepo.startsWith(".env") || relToRepo.includes(`${path.sep}.env`))) {
     warnings.push("writing to .env-like file; avoid committing secrets");
   }
-  if (abs.includes(`${path.sep}node_modules${path.sep}`)) {
+  if (absPath.includes(`${path.sep}node_modules${path.sep}`)) {
     warnings.push("writing under node_modules is usually unintended");
   }
 
-  fs.mkdirSync(path.dirname(abs), { recursive: true });
-  fs.writeFileSync(abs, content, "utf8");
-  return JSON.stringify({ ok: true, path: abs, bytes: content.length, warnings: warnings.length ? warnings : undefined }, null, 2);
+  fs.mkdirSync(path.dirname(absPath), { recursive: true });
+  fs.writeFileSync(absPath, content, "utf8");
+  return JSON.stringify({ ok: true, path: absPath, bytes: content.length, warnings: warnings.length ? warnings : undefined }, null, 2);
 }

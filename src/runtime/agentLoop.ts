@@ -18,6 +18,7 @@ import { createCompletionValidationStopHook } from "./hooks/builtin/completionVa
 import { createSkillAllowedToolsHooks } from "./hooks/builtin/skillAllowedToolsHook.js";
 import { StructuredLogger, parseLogLevel, redactValue, truncateForLog } from "./logging/structuredLogger.js";
 import { newId } from "../shared/ids.js";
+import { resolveWorkspaceDir } from "./config/paths.js";
 
 function smartTruncate(text: string, maxLen: number): string {
   if (text.length <= maxLen) return text;
@@ -196,22 +197,25 @@ export async function* runAgentTurn(params: {
 
   yield { kind: "status", message: `Starting turn...` };
 
-  const session = loadSession(sessionId) ?? createSession(sessionId);
+  const toolCtx = getToolContext();
+  const workspaceDir = resolveWorkspaceDir(toolCtx?.workspaceDir ?? process.env.FF_WORKSPACE_DIR ?? undefined);
+  const sessionDir = path.join(workspaceDir, "sessions");
+
+  const session = loadSession(sessionId, sessionDir) ?? createSession(sessionId);
   session.conversation.push({ role: "user", content: userInput, created_at: new Date().toISOString() });
-  saveSession(session);
+  saveSession(session, sessionDir);
 
   const cfg = resolveConfig({ repoRoot });
-  const toolCtx = getToolContext();
   const logLevel = parseLogLevel((cfg as any).log_level);
   const logMaxBytes = Number((cfg as any).log_max_bytes ?? 5 * 1024 * 1024);
   const logRetention = Number((cfg as any).log_retention ?? 3);
-  const logBaseDir = toolCtx?.workspaceDir ?? repoRoot ?? process.cwd();
+  const logBaseDir = workspaceDir;
   const sessionLogPath = path.join(logBaseDir, "logs", "sessions", `${sessionId}.jsonl`);
   const logger = new StructuredLogger({ filePath: sessionLogPath, level: logLevel, maxBytes: logMaxBytes, retention: logRetention });
-  const workspaceDirForSummary = toolCtx?.workspaceDir;
+  const workspaceDirForSummary = workspaceDir;
   const sessionSummary = (() => {
     if (!workspaceDirForSummary) return undefined;
-    const p = path.join(workspaceDirForSummary, "session_summary.md");
+    const p = path.join(workspaceDirForSummary, "memory_core", "session_summary.md");
     try {
       if (!fs.existsSync(p) || !fs.statSync(p).isFile()) return undefined;
       const raw = fs.readFileSync(p, "utf8");
@@ -226,7 +230,7 @@ export async function* runAgentTurn(params: {
 
   const skillSections = (() => {
     // Keep this compact to avoid prompt bloat: only include top matches for the current user input.
-    const stubs = listSkillStubs({ workspaceDir: toolCtx?.workspaceDir, repoRoot });
+    const stubs = listSkillStubs({ workspaceDir, repoRoot });
     if (!stubs.length) return "";
 
     const STOP = new Set(["the", "and", "for", "with", "from", "that", "this", "you", "your", "are", "can", "will", "how", "what"]);
@@ -317,7 +321,7 @@ export async function* runAgentTurn(params: {
     user_input_preview: smartTruncate(userInput, 400),
     provider: provider.name,
     model,
-    workspace_dir: toolCtx?.workspaceDir,
+    workspace_dir: workspaceDir,
     repo_root: repoRoot,
     max_iterations: maxIterations,
     tool_limit_total: toolLimitTotal,
@@ -326,8 +330,8 @@ export async function* runAgentTurn(params: {
     completion_validation: completionValidationEnabled
   });
   const toolsLogPath =
-    toolCtx?.workspaceDir && hooksEnabled && hooksToolLogging
-      ? path.join(toolCtx.workspaceDir, hooksLogDirectory, `tools_${sessionId}.jsonl`)
+    hooksEnabled && hooksToolLogging
+      ? path.join(workspaceDir, hooksLogDirectory, `tools_${sessionId}.jsonl`)
       : null;
 
   const logToolEvent = (ev: Record<string, unknown>) => {
@@ -362,7 +366,7 @@ export async function* runAgentTurn(params: {
       createCompletionValidationStopHook({
         enabled: true,
         maxAttempts: completionValidationMaxAttempts,
-        workspaceDir: toolCtx?.workspaceDir
+        workspaceDir
       })
     );
   }
@@ -449,7 +453,7 @@ export async function* runAgentTurn(params: {
       content: assistantContent,
       created_at: new Date().toISOString()
     });
-    saveSession(session);
+    saveSession(session, sessionDir);
 
     messages.push({ role: "assistant", content: assistantContent });
 
@@ -457,7 +461,7 @@ export async function* runAgentTurn(params: {
       const stop = await hookRegistry.runAgentStop({
         sessionId,
         repoRoot,
-        workspaceDir: toolCtx?.workspaceDir,
+        workspaceDir,
         userInput,
         assistantContent,
         iteration: i,
@@ -506,7 +510,7 @@ export async function* runAgentTurn(params: {
       const pre = await hookRegistry.runPreTool({
         sessionId,
         repoRoot,
-        workspaceDir: toolCtx?.workspaceDir,
+        workspaceDir,
         call: tc as any
       });
       if (pre.action === "block") {
@@ -599,7 +603,7 @@ export async function* runAgentTurn(params: {
         await hookRegistry.runPostTool({
           sessionId,
           repoRoot,
-          workspaceDir: toolCtx?.workspaceDir,
+          workspaceDir,
           call: originalCall as any,
           ok: r.ok,
           output: r.output,
@@ -609,7 +613,7 @@ export async function* runAgentTurn(params: {
           await hookRegistry.runToolError({
             sessionId,
             repoRoot,
-            workspaceDir: toolCtx?.workspaceDir,
+            workspaceDir,
             call: originalCall as any,
             error: r.output
           });
@@ -640,7 +644,7 @@ export async function* runAgentTurn(params: {
       const finalStop = await hookRegistry.runAgentStop({
         sessionId,
         repoRoot,
-        workspaceDir: toolCtx?.workspaceDir,
+        workspaceDir,
         userInput,
         assistantContent: finalAssistantContent,
         iteration: i,

@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { resolveWorkspaceDir } from "../config/paths.js";
 
 export type Role = "system" | "developer" | "user" | "assistant" | "tool";
 
@@ -19,7 +20,12 @@ export type SessionFile = {
   meta?: Record<string, unknown>;
 };
 
-export function defaultSessionDir(): string {
+export function defaultSessionDir(workspaceDir?: string): string {
+  const workspaceRoot = resolveWorkspaceDir(workspaceDir ?? process.env.FF_WORKSPACE_DIR ?? undefined);
+  return path.join(workspaceRoot, "sessions");
+}
+
+export function legacySessionDir(): string {
   return path.join(os.homedir(), ".ff-terminal", "sessions");
 }
 
@@ -32,7 +38,12 @@ export function loadSession(sessionId: string, sessionDir = defaultSessionDir())
   try {
     return JSON.parse(fs.readFileSync(p, "utf8")) as SessionFile;
   } catch {
-    return null;
+    try {
+      const legacyPath = sessionPath(sessionId, legacySessionDir());
+      return JSON.parse(fs.readFileSync(legacyPath, "utf8")) as SessionFile;
+    } catch {
+      return null;
+    }
   }
 }
 
@@ -47,4 +58,3 @@ export function saveSession(session: SessionFile, sessionDir = defaultSessionDir
   session.updated_at = new Date().toISOString();
   fs.writeFileSync(p, JSON.stringify(session, null, 2) + "\n", "utf8");
 }
-

@@ -3,6 +3,8 @@ import path from "node:path";
 
 import { getToolContext } from "../context.js";
 import { findRepoRoot } from "../../config/repoRoot.js";
+import { resolveWorkspaceDir } from "../../config/paths.js";
+import { guardWritePath } from "../guards/fsGuard.js";
 
 type Args = {
   file_path?: string;
@@ -10,16 +12,6 @@ type Args = {
   new_string?: string;
   replace_all?: boolean;
 };
-
-function ensureAllowedPath(absPath: string): void {
-  const ctx = getToolContext();
-  const repoRoot = ctx?.repoRoot ?? findRepoRoot();
-  const normRepo = path.resolve(repoRoot) + path.sep;
-  const normFile = path.resolve(absPath);
-  if (!(normFile + path.sep).startsWith(normRepo) && !normFile.startsWith(normRepo)) {
-    throw new Error(`edit_file: path must be within repo root (${repoRoot})`);
-  }
-}
 
 export async function editFileTool(argsRaw: unknown): Promise<string> {
   const args = argsRaw as Args;
@@ -30,7 +22,10 @@ export async function editFileTool(argsRaw: unknown): Promise<string> {
 
   if (!path.isAbsolute(filePath)) throw new Error("edit_file: file_path must be absolute");
   if (oldString === newString) throw new Error("edit_file: new_string must differ from old_string");
-  ensureAllowedPath(filePath);
+  const ctx = getToolContext();
+  const repoRoot = path.resolve(ctx?.repoRoot ?? findRepoRoot());
+  const workspaceDir = resolveWorkspaceDir(ctx?.workspaceDir ?? process.env.FF_WORKSPACE_DIR ?? undefined);
+  guardWritePath({ rawPath: filePath, repoRoot, workspaceDir, reason: "edit_file" });
 
   const before = fs.readFileSync(filePath, "utf8");
   if (!before.includes(oldString)) throw new Error("edit_file: old_string not found in file");
@@ -46,4 +41,3 @@ export async function editFileTool(argsRaw: unknown): Promise<string> {
   fs.writeFileSync(filePath, after, "utf8");
   return `Edited ${filePath}`;
 }
-

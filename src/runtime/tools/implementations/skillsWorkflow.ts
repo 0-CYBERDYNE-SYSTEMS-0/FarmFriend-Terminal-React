@@ -3,6 +3,7 @@ import path from "node:path";
 
 import { getToolContext } from "../context.js";
 import { listSkillStubs } from "./skills.js";
+import { resolveWorkspaceDir } from "../../config/paths.js";
 
 type DraftArgs = {
   skill_slug?: string;
@@ -181,7 +182,7 @@ export async function skillDraftTool(argsRaw: unknown): Promise<string> {
   });
 
   const ctx = getToolContext();
-  const workspaceDir = ctx?.workspaceDir ? ctx.workspaceDir : process.cwd();
+  const workspaceDir = resolveWorkspaceDir(ctx?.workspaceDir ?? process.env.FF_WORKSPACE_DIR ?? undefined);
   fs.mkdirSync(draftsDir(workspaceDir), { recursive: true });
 
   const draft = {
@@ -226,7 +227,7 @@ export async function skillApplyTool(argsRaw: unknown): Promise<string> {
   const cleanup = !!args?.cleanup_draft;
 
   const ctx = getToolContext();
-  const workspaceDir = ctx?.workspaceDir ? ctx.workspaceDir : process.cwd();
+  const workspaceDir = resolveWorkspaceDir(ctx?.workspaceDir ?? process.env.FF_WORKSPACE_DIR ?? undefined);
   const p = draftPath(workspaceDir, draftId);
   if (!fs.existsSync(p)) throw new Error(`skill_apply: draft not found: ${p}`);
 
@@ -276,7 +277,8 @@ export async function skillSequencerTool(argsRaw: unknown): Promise<string> {
   const sequenceType = String(args?.sequence_type || "auto").trim().toLowerCase();
 
   const ctx = getToolContext();
-  const stubs = listSkillStubs({ workspaceDir: ctx?.workspaceDir, repoRoot: ctx?.repoRoot });
+  const workspaceDir = resolveWorkspaceDir(ctx?.workspaceDir ?? process.env.FF_WORKSPACE_DIR ?? undefined);
+  const stubs = listSkillStubs({ workspaceDir, repoRoot: ctx?.repoRoot });
 
   const STOP = new Set(["the", "and", "for", "with", "from", "that", "this", "you", "your", "are", "can", "will", "how", "what"]);
   const tokens = task

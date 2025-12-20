@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 import { getToolContext } from "../context.js";
+import { resolveWorkspaceDir } from "../../config/paths.js";
 
 type Args = {
   dry_run?: boolean;
@@ -57,7 +58,7 @@ export async function smartCleanupTool(argsRaw: unknown): Promise<string> {
   const deleteLogs = !!args?.delete_logs;
 
   const ctx = getToolContext();
-  const workspaceDir = ctx?.workspaceDir ? ctx.workspaceDir : process.cwd();
+  const workspaceDir = resolveWorkspaceDir(ctx?.workspaceDir ?? process.env.FF_WORKSPACE_DIR ?? undefined);
   const root = resolveWorkspace({ workspaceDir, workspacePath: args?.workspace_path });
 
   const now = Date.now();
@@ -69,7 +70,7 @@ export async function smartCleanupTool(argsRaw: unknown): Promise<string> {
   const consider = (filePath: string) => {
     const rel = path.relative(root, filePath).replace(/\\/g, "/");
     // Preserve core workspace state.
-    if (rel === "tasks.json" || rel === "session_summary.md") return;
+    if (rel === "tasks.json" || rel === "memory_core/session_summary.md") return;
     if (rel.startsWith("skills/") && rel.includes("/SKILL.md")) return;
 
     const st = fs.statSync(filePath);

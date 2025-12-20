@@ -5,11 +5,12 @@ import { pathToFileURL } from "node:url";
 import WebSocket, { WebSocketServer } from "ws";
 import { ToolRegistry } from "../runtime/tools/registry.js";
 import { registerAllTools } from "../runtime/registerDefaultTools.js";
-import { defaultWorkspaceDir, resolveWorkspaceDir } from "../runtime/config/paths.js";
+import { resolveWorkspaceDir } from "../runtime/config/paths.js";
 import { runAgentTurn } from "../runtime/agentLoop.js";
 import { toWire } from "../runtime/streamProtocol.js";
 import { findRepoRoot } from "../runtime/config/repoRoot.js";
 import { withToolContext } from "../runtime/tools/context.js";
+import { resolveConfig } from "../runtime/config/loadConfig.js";
 import { loadDefaultDotenv } from "../runtime/config/dotenv.js";
 import { quickHealthCheck } from "../runtime/workspace/healthCheck.js";
 import {
@@ -35,7 +36,8 @@ export async function startDaemon(): Promise<void> {
   const server = http.createServer();
   const wss = new WebSocketServer({ server });
 
-  const workspaceDir = resolveWorkspaceDir(process.env.FF_WORKSPACE_DIR ?? undefined);
+  const runtimeCfg = resolveConfig({ repoRoot });
+  const workspaceDir = resolveWorkspaceDir((runtimeCfg as any).workspace_dir ?? process.env.FF_WORKSPACE_DIR ?? undefined);
   const localWs = repoRoot ? path.join(repoRoot, "ff-terminal-workspace") : null;
   if (localWs && path.normalize(localWs) !== path.normalize(workspaceDir) && fs.existsSync(localWs)) {
     // eslint-disable-next-line no-console

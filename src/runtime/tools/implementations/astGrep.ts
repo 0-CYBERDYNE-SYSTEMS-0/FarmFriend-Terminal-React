@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { getToolContext } from "../context.js";
 import { findRepoRoot } from "../../config/repoRoot.js";
 import { defaultWorkspaceDir } from "../../config/paths.js";
+import { guardWritePath } from "../guards/fsGuard.js";
 
 type Args = {
   pattern?: string;
@@ -64,14 +65,7 @@ function resolveTargetPath(p: string | undefined, repoRoot: string): string {
 }
 
 function ensureAllowedRewriteTarget(targetAbs: string, repoRoot: string, workspaceDir: string): void {
-  const roots = [repoRoot, workspaceDir].map((r) => (r.endsWith(path.sep) ? r : r + path.sep));
-  const ok = roots.some((r) => targetAbs === r.slice(0, -1) || targetAbs.startsWith(r));
-  if (!ok) {
-    throw new Error(`ast_grep(rewrite): blocked (target must be under repo root or workspace)\n- repo: ${repoRoot}\n- workspace: ${workspaceDir}\n- got: ${targetAbs}`);
-  }
-  if (targetAbs.includes(`${path.sep}.git${path.sep}`) || targetAbs.endsWith(`${path.sep}.git`)) {
-    throw new Error("ast_grep(rewrite): blocked (refusing to touch .git)");
-  }
+  guardWritePath({ rawPath: targetAbs, repoRoot, workspaceDir, reason: "ast_grep(rewrite)" });
 }
 
 function snippetFor(params: { filePath: string; startLine: number; endLine: number; context: number }): string | null {

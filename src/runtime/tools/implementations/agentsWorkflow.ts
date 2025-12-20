@@ -3,6 +3,7 @@ import path from "node:path";
 import type { AgentConfig } from "../../agents/types.js";
 import { getToolContext } from "../context.js";
 import { saveAgentConfig } from "../../agents/loader.js";
+import { resolveWorkspaceDir } from "../../config/paths.js";
 
 type DraftArgs = {
   agent_id?: string;
@@ -63,7 +64,7 @@ export async function agentDraftTool(argsRaw: unknown): Promise<string> {
   const tags = Array.isArray(args?.tags) ? args.tags.map(String).map((s) => s.trim()).filter(Boolean) : undefined;
 
   const ctx = getToolContext();
-  const workspaceDir = ctx?.workspaceDir ? ctx.workspaceDir : process.cwd();
+  const workspaceDir = resolveWorkspaceDir(ctx?.workspaceDir ?? process.env.FF_WORKSPACE_DIR ?? undefined);
   fs.mkdirSync(draftsDir(workspaceDir), { recursive: true });
 
   const now = new Date().toISOString();
@@ -123,7 +124,7 @@ export async function agentApplyTool(argsRaw: unknown): Promise<string> {
   const cleanup = !!args?.cleanup_draft;
 
   const ctx = getToolContext();
-  const workspaceDir = ctx?.workspaceDir ? ctx.workspaceDir : process.cwd();
+  const workspaceDir = resolveWorkspaceDir(ctx?.workspaceDir ?? process.env.FF_WORKSPACE_DIR ?? undefined);
   const p = draftPath(workspaceDir, draftId);
 
   if (!fs.existsSync(p)) throw new Error(`agent_apply: draft not found: ${p}`);

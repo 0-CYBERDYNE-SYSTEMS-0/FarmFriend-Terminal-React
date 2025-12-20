@@ -10,6 +10,7 @@ import { loadToolSchemas } from "../runtime/tools/toolSchemas.js";
 import { readMountsConfig, setMountEnabled } from "../runtime/config/mounts.js";
 import { findRepoRoot } from "../runtime/config/repoRoot.js";
 import { defaultWorkspaceDir, resolveWorkspaceDir } from "../runtime/config/paths.js";
+import { resolveConfig } from "../runtime/config/loadConfig.js";
 import { loadCommands, listCommands, getCommand } from "../runtime/commands/loader.js";
 import { loadAgentConfigs, listAgentConfigs, getAllTemplates } from "../runtime/agents/loader.js";
 import { parseCommand } from "../runtime/commands/parser.js";
@@ -1105,8 +1106,10 @@ function App(props: { port: number }) {
   );
 
   const workspaceDir = useMemo(() => {
+    const repoRoot = findRepoRoot();
+    const runtimeCfg = resolveConfig({ repoRoot });
     const workspaceFromEnv = process.env.FF_WORKSPACE_DIR;
-    return resolveWorkspaceDir(workspaceFromEnv ?? undefined);
+    return resolveWorkspaceDir((runtimeCfg as any).workspace_dir ?? workspaceFromEnv ?? undefined);
   }, []);
 
   const discoverProjects = (): ProjectStub[] => {

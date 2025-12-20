@@ -4,15 +4,24 @@ import { ensureDir } from "../config/loadConfig.js";
 import type { ValidationIssue } from "./doctor.js";
 
 const CANONICAL_DIRECTORIES = [
-  'memory_core',
-  'memory_core/scheduled_tasks',
-  'projects',
-  'agents',
-  'commands',
-  'skills',
-  'todos/sessions',
-  'logs/sessions',
-  'logs/hooks'
+  "agents",
+  "commands",
+  "skills",
+  "memory_core",
+  "memory_core/scheduled_tasks",
+  "memory_core/workflows",
+  "projects",
+  "thoughts",
+  "todos",
+  "todos/sessions",
+  "logs",
+  "logs/sessions",
+  "logs/hooks",
+  "logs/runs",
+  "logs/scheduled_runs",
+  "generated-images",
+  "sessions",
+  "imessage_sessions"
 ];
 
 export type MigrationOperation = {

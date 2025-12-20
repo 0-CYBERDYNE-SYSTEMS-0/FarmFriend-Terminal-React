@@ -5,6 +5,7 @@ import crypto from "node:crypto";
 import { getToolContext } from "../context.js";
 import { findRepoRoot } from "../../config/repoRoot.js";
 import { defaultWorkspaceDir } from "../../config/paths.js";
+import { guardWritePath } from "../guards/fsGuard.js";
 
 type Args = {
   notebook_path?: string;
@@ -15,14 +16,7 @@ type Args = {
 };
 
 function ensureAllowedWriteTarget(absPath: string, repoRoot: string, workspaceDir: string): void {
-  const roots = [repoRoot, workspaceDir].map((r) => (r.endsWith(path.sep) ? r : r + path.sep));
-  const ok = roots.some((r) => absPath === r.slice(0, -1) || absPath.startsWith(r));
-  if (!ok) {
-    throw new Error(`notebook_edit: blocked (notebook_path must be under repo root or workspace)\n- repo: ${repoRoot}\n- workspace: ${workspaceDir}\n- got: ${absPath}`);
-  }
-  if (absPath.includes(`${path.sep}.git${path.sep}`) || absPath.endsWith(`${path.sep}.git`)) {
-    throw new Error("notebook_edit: blocked (refusing to edit under .git)");
-  }
+  guardWritePath({ rawPath: absPath, repoRoot, workspaceDir, reason: "notebook_edit" });
 }
 
 function toSourceArray(s: string): string[] {
@@ -138,4 +132,3 @@ export async function notebookEditTool(argsRaw: unknown): Promise<string> {
     2
   );
 }
-

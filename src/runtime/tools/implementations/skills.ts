@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import os from "node:os";
 import { getToolContext } from "../context.js";
 import { readMountsConfig } from "../../config/mounts.js";
+import { resolveWorkspaceDir } from "../../config/paths.js";
 
 type LoaderArgs = { skill_slug?: string; include_assets?: boolean };
 type DocArgs = { skill_slug?: string; format?: "markdown" | "html" | "json" | string; output_file?: string; include_examples?: boolean };
@@ -475,7 +476,7 @@ export async function skillLoaderTool(argsRaw: unknown): Promise<string> {
   if (!slug) throw new Error("skill_loader: missing args.skill_slug");
 
   const ctx = getToolContext();
-  const workspaceDir = ctx?.workspaceDir;
+  const workspaceDir = resolveWorkspaceDir(ctx?.workspaceDir ?? process.env.FF_WORKSPACE_DIR ?? undefined);
   const roots = getSkillRoots({ workspaceDir, repoRoot: ctx?.repoRoot });
 
   const found = findSkillBySlug(roots, slug);
@@ -515,8 +516,8 @@ export async function skillLoaderTool(argsRaw: unknown): Promise<string> {
 export async function skillDocumentationTool(argsRaw: unknown): Promise<string> {
   const args = argsRaw as DocArgs;
   const ctx = getToolContext();
-  const workspaceDir = ctx?.workspaceDir ? ctx.workspaceDir : process.cwd();
-  const roots = getSkillRoots({ workspaceDir: ctx?.workspaceDir, repoRoot: ctx?.repoRoot });
+  const workspaceDir = resolveWorkspaceDir(ctx?.workspaceDir ?? process.env.FF_WORKSPACE_DIR ?? undefined);
+  const roots = getSkillRoots({ workspaceDir, repoRoot: ctx?.repoRoot });
 
   const slug = typeof args.skill_slug === "string" ? args.skill_slug.trim() : "";
   const format = String(args.format || "markdown").trim().toLowerCase();
@@ -607,7 +608,7 @@ export async function skillImportTool(argsRaw: unknown): Promise<string> {
   if (!sourcePath) throw new Error("skill_import: missing args.source_path or args.source");
 
   const ctx = getToolContext();
-  const workspaceDir = ctx?.workspaceDir ? ctx.workspaceDir : process.cwd();
+  const workspaceDir = resolveWorkspaceDir(ctx?.workspaceDir ?? process.env.FF_WORKSPACE_DIR ?? undefined);
   const destRoot = path.join(workspaceDir, "skills");
 
   let src = path.resolve(sourcePath);

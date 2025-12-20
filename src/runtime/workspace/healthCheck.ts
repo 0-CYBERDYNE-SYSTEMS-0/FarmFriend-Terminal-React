@@ -4,10 +4,12 @@ import { ffHomeDir } from "../config/ffHome.js";
 import type { ValidationIssue } from "./doctor.js";
 
 const CRITICAL_DIRECTORIES = [
-  'memory_core',
-  'memory_core/scheduled_tasks',
-  'logs/sessions',
-  'logs/hooks'
+  "memory_core",
+  "memory_core/scheduled_tasks",
+  "logs",
+  "logs/sessions",
+  "logs/hooks",
+  "sessions"
 ];
 
 export async function quickHealthCheck(workspaceDir: string): Promise<ValidationIssue[]> {

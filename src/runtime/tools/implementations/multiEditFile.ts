@@ -3,6 +3,8 @@ import path from "node:path";
 
 import { getToolContext } from "../context.js";
 import { findRepoRoot } from "../../config/repoRoot.js";
+import { resolveWorkspaceDir } from "../../config/paths.js";
+import { guardWritePath } from "../guards/fsGuard.js";
 
 type Edit = { old_string: string; new_string: string; replace_all?: boolean };
 
@@ -10,16 +12,6 @@ type Args = {
   file_path?: string;
   edits?: unknown[];
 };
-
-function ensureAllowedPath(absPath: string): void {
-  const ctx = getToolContext();
-  const repoRoot = ctx?.repoRoot ?? findRepoRoot();
-  const normRepo = path.resolve(repoRoot) + path.sep;
-  const normFile = path.resolve(absPath);
-  if (!(normFile + path.sep).startsWith(normRepo) && !normFile.startsWith(normRepo)) {
-    throw new Error(`multi_edit_file: path must be within repo root (${repoRoot})`);
-  }
-}
 
 function parseEdit(e: unknown): Edit {
   if (typeof e === "string") {
@@ -42,7 +34,10 @@ export async function multiEditFileTool(argsRaw: unknown): Promise<string> {
   const args = argsRaw as Args;
   const filePath = typeof args?.file_path === "string" ? args.file_path : "";
   if (!path.isAbsolute(filePath)) throw new Error("multi_edit_file: file_path must be absolute");
-  ensureAllowedPath(filePath);
+  const ctx = getToolContext();
+  const repoRoot = path.resolve(ctx?.repoRoot ?? findRepoRoot());
+  const workspaceDir = resolveWorkspaceDir(ctx?.workspaceDir ?? process.env.FF_WORKSPACE_DIR ?? undefined);
+  guardWritePath({ rawPath: filePath, repoRoot, workspaceDir, reason: "multi_edit_file" });
 
   const editsRaw = Array.isArray(args.edits) ? args.edits : [];
   if (!editsRaw.length) throw new Error("multi_edit_file: missing edits");
@@ -63,4 +58,3 @@ export async function multiEditFileTool(argsRaw: unknown): Promise<string> {
   fs.writeFileSync(filePath, content, "utf8");
   return `Edited ${filePath} (${edits.length} changes)`;
 }
-

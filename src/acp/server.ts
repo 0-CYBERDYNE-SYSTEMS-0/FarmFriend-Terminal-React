@@ -1,4 +1,5 @@
 import readline from "node:readline";
+import path from "node:path";
 import { ToolRegistry } from "../runtime/tools/registry.js";
 import { registerAllTools } from "../runtime/registerDefaultTools.js";
 import { runAgentTurn } from "../runtime/agentLoop.js";
@@ -124,6 +125,7 @@ export async function startAcpServer(params: { repoRoot: string; workspaceDir: s
   registerAllTools(registry, { workspaceDir: params.workspaceDir });
 
   const sessions = new Map<string, SessionState>();
+  const sessionDir = path.join(params.workspaceDir, "sessions");
 
   const rl = readline.createInterface({ input: process.stdin, crlfDelay: Infinity });
 
@@ -229,7 +231,7 @@ export async function startAcpServer(params: { repoRoot: string; workspaceDir: s
         send(errorResponse(id ?? null, -32602, "Missing sessionId"));
         continue;
       }
-      const existing = loadSession(sessionId);
+      const existing = loadSession(sessionId, sessionDir);
       if (!existing) {
         send(errorResponse(id ?? null, -32001, `Session not found: ${sessionId}`));
         continue;

@@ -6,7 +6,7 @@ import { startAcpServer } from "../acp/server.js";
 import { startInkUi } from "../cli/app.js";
 import { ToolRegistry } from "../runtime/tools/registry.js";
 import { registerAllTools } from "../runtime/registerDefaultTools.js";
-import { defaultWorkspaceDir, resolveWorkspaceDir } from "../runtime/config/paths.js";
+import { resolveWorkspaceDir } from "../runtime/config/paths.js";
 import { findRepoRoot } from "../runtime/config/repoRoot.js";
 import { resolveConfig } from "../runtime/config/loadConfig.js";
 import { runAgentTurn } from "../runtime/agentLoop.js";
@@ -38,6 +38,7 @@ function usage(): void {
   ff-terminal schedule list
   ff-terminal schedule status <name>
   ff-terminal profile setup
+  ff-terminal profile edit [name]
   ff-terminal profile list
   ff-terminal profile default <name>
   ff-terminal profile delete <name>
@@ -449,7 +450,8 @@ async function run(): Promise<void> {
     applyToolAllowFlags(rest);
     const profileName = pickArg(rest, "--profile");
     const repoRoot = findRepoRoot();
-    const workspaceDir = resolveWorkspaceDir(process.env.FF_WORKSPACE_DIR ?? undefined);
+    const runtimeCfg = resolveConfig({ repoRoot });
+    const workspaceDir = resolveWorkspaceDir((runtimeCfg as any).workspace_dir ?? process.env.FF_WORKSPACE_DIR ?? undefined);
     warnIfLocalWorkspace(workspaceDir, repoRoot);
 
     if (profileName) {
@@ -510,7 +512,8 @@ async function run(): Promise<void> {
     const sessionId = pickArg(rest, "--session") || newId("session");
 
     const repoRoot = findRepoRoot();
-    const workspaceDir = resolveWorkspaceDir(process.env.FF_WORKSPACE_DIR ?? undefined);
+    const runtimeCfg = resolveConfig({ repoRoot });
+    const workspaceDir = resolveWorkspaceDir((runtimeCfg as any).workspace_dir ?? process.env.FF_WORKSPACE_DIR ?? undefined);
     warnIfLocalWorkspace(workspaceDir, repoRoot);
 
 
@@ -564,7 +567,6 @@ async function run(): Promise<void> {
       }
     }
 
-    const runtimeCfg = resolveConfig({ repoRoot });
     const logLevel = parseLogLevel((runtimeCfg as any).log_level);
     const logMaxBytes = Number((runtimeCfg as any).log_max_bytes ?? 5 * 1024 * 1024);
     const logRetention = Number((runtimeCfg as any).log_retention ?? 3);
@@ -683,7 +685,8 @@ async function run(): Promise<void> {
   if (cmd === "schedule") {
     const action = rest[0];
     const repoRoot = findRepoRoot();
-    const workspaceDir = resolveWorkspaceDir(process.env.FF_WORKSPACE_DIR ?? undefined);
+    const runtimeCfg = resolveConfig({ repoRoot });
+    const workspaceDir = resolveWorkspaceDir((runtimeCfg as any).workspace_dir ?? process.env.FF_WORKSPACE_DIR ?? undefined);
     warnIfLocalWorkspace(workspaceDir, repoRoot);
 
 
@@ -722,6 +725,16 @@ async function run(): Promise<void> {
 
     if (action === "setup") {
       const result = await runProfileSetupWizard({ config });
+      config = result.config;
+      writeConfig(config);
+      return;
+    }
+
+    if (action === "edit") {
+      const name = rest[1];
+      const profile = name ? getProfileByName(config, name) : await promptSelectProfile({ config });
+      if (!profile) throw new Error(`No such profile: ${name}\n`);
+      const result = await runProfileSetupWizard({ config, existingProfile: profile, mode: "edit" });
       config = result.config;
       writeConfig(config);
       return;

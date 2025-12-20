@@ -11,6 +11,7 @@ import { registerAllTools } from "../runtime/registerDefaultTools.js";
 import { resolveWorkspaceDir } from "../runtime/config/paths.js";
 import { runAgentTurn } from "../runtime/agentLoop.js";
 import { findRepoRoot } from "../runtime/config/repoRoot.js";
+import { resolveConfig } from "../runtime/config/loadConfig.js";
 import { createSession, loadSession, saveSession } from "../runtime/session/sessionStore.js";
 import { loadDefaultDotenv } from "../runtime/config/dotenv.js";
 import { withToolContext } from "../runtime/tools/context.js";
@@ -46,7 +47,9 @@ const PORT = Number(process.env.FF_WEB_PORT || 8787);
 export async function startWebServer(): Promise<void> {
   const repoRoot = findRepoRoot();
   loadDefaultDotenv({ repoRoot });
-  const workspaceDir = resolveWorkspaceDir(process.env.FF_WORKSPACE_DIR ?? undefined);
+  const runtimeCfg = resolveConfig({ repoRoot });
+  const workspaceDir = resolveWorkspaceDir((runtimeCfg as any).workspace_dir ?? process.env.FF_WORKSPACE_DIR ?? undefined);
+  const sessionDir = path.join(workspaceDir, "sessions");
   const localWs = path.join(repoRoot, "ff-terminal-workspace");
   if (path.normalize(localWs) !== path.normalize(workspaceDir) && fs.existsSync(localWs)) {
     // eslint-disable-next-line no-console
@@ -150,8 +153,8 @@ export async function startWebServer(): Promise<void> {
     const sessionId = String(info?.sessionId || "default-session");
 
     // Create or load session so that history endpoints are meaningful immediately.
-    const session = loadSession(sessionId) ?? createSession(sessionId);
-    saveSession(session);
+    const session = loadSession(sessionId, sessionDir) ?? createSession(sessionId);
+    saveSession(session, sessionDir);
 
     sendJson(ws, {
       type: "system",
@@ -180,7 +183,7 @@ export async function startWebServer(): Promise<void> {
       }
 
       if (msg.type === "get_history") {
-        const s = loadSession(sessionId) ?? createSession(sessionId);
+        const s = loadSession(sessionId, sessionDir) ?? createSession(sessionId);
         sendJson(ws, {
           type: "history",
           content: JSON.stringify(s.conversation, null, 2),
@@ -192,7 +195,7 @@ export async function startWebServer(): Promise<void> {
 
       if (msg.type === "clear_session") {
         const cleared = createSession(sessionId);
-        saveSession(cleared);
+        saveSession(cleared, sessionDir);
         sendJson(ws, {
           type: "system",
           content: "Session cleared",

@@ -1,9 +1,15 @@
 import readline from "node:readline/promises";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 
 import type { Config, Profile, ProviderKind } from "./types.js";
 import { getCredential, storeCredential } from "./storage.js";
 import { GLOBAL_TOOL_CRED_PROFILE, OPTIONAL_TOOL_ENV_KEYS } from "./toolKeys.js";
 import { promptSecret } from "./prompts.js";
+import { defaultWorkspaceDir, defaultConfigPath, resolveWorkspaceDir } from "../config/paths.js";
+import { loadConfig, writeJson } from "../config/loadConfig.js";
+import { ensureCanonicalStructure } from "../workspace/migration.js";
 
 type Preset = { provider: ProviderKind; baseUrl?: string; model?: string; credentialLabel?: string };
 type InquirerLike = {
@@ -29,6 +35,40 @@ const PRESETS: Record<string, Preset> = {
   "OpenAI-Compatible (Generic)": { provider: "openai-compatible", credentialLabel: "API_KEY" },
   "Anthropic-Compatible (Generic)": { provider: "anthropic-compatible", credentialLabel: "API_KEY" }
 };
+
+function getDesktopDir(): string | null {
+  const home = os.homedir();
+  if (process.platform === "win32") {
+    const userProfile = process.env.USERPROFILE || home;
+    return path.join(userProfile, "Desktop");
+  }
+  return path.join(home, "Desktop");
+}
+
+function ensureWorkspaceConfigured(workspaceDir: string): void {
+  const configPath = defaultConfigPath();
+  const cfg = loadConfig(configPath);
+  if ((cfg as any).workspace_dir !== workspaceDir) {
+    (cfg as any).workspace_dir = workspaceDir;
+    writeJson(configPath, cfg);
+  }
+  ensureCanonicalStructure(workspaceDir);
+}
+
+function createDesktopAlias(workspaceDir: string): { ok: boolean; path?: string; error?: string } {
+  const desktop = getDesktopDir();
+  if (!desktop) return { ok: false, error: "Desktop directory not found" };
+  if (!fs.existsSync(desktop)) return { ok: false, error: "Desktop directory not found" };
+  const linkPath = path.join(desktop, "ff-terminal-workspace");
+  if (fs.existsSync(linkPath)) return { ok: true, path: linkPath };
+  try {
+    const type = process.platform === "win32" ? "junction" : "dir";
+    fs.symlinkSync(workspaceDir, linkPath, type as fs.symlink.Type);
+    return { ok: true, path: linkPath };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : String(error) };
+  }
+}
 
 function validateBaseUrl(baseUrl: string, isGenericProvider: boolean): { valid: boolean; error?: string } {
   if (!baseUrl || baseUrl.trim() === "") {
@@ -133,25 +173,60 @@ export async function promptSelectProfile(params: {
   }
 }
 
-export async function runProfileSetupWizard(params: { config: Config }): Promise<{ config: Config; created: Profile }> {
+export async function runProfileSetupWizard(params: {
+  config: Config;
+  existingProfile?: Profile;
+  mode?: "create" | "edit";
+}): Promise<{ config: Config; created: Profile }> {
   const inquirer = await tryInquirer();
+  const isEdit = params.mode === "edit" && params.existingProfile;
+  const existing = params.existingProfile;
   if (inquirer) {
     // Inquirer path (closest to ai-claude-start UX).
     // eslint-disable-next-line no-console
     console.log("\nFF-Terminal Profile Setup Wizard\n");
 
-    const presetNames = [...Object.keys(PRESETS), "Custom"];
-    const { presetName } = await inquirer.prompt<{ presetName: string }>([
-      { type: "list", name: "presetName", message: "Choose a profile type:", choices: presetNames }
-    ]);
+    let presetName = "Custom";
+    if (!isEdit) {
+      const presetNames = [...Object.keys(PRESETS), "Custom"];
+      const selected = await inquirer.prompt<{ presetName: string }>([
+        { type: "list", name: "presetName", message: "Choose a profile type:", choices: presetNames }
+      ]);
+      presetName = selected.presetName;
+    }
 
-    const defaultName = presetName === "Custom" ? "" : presetName;
+    const defaultName = isEdit ? existing!.name : presetName === "Custom" ? "" : presetName;
     const { name } = await inquirer.prompt<{ name: string }>([
       { type: "input", name: "name", message: "Profile name:", default: defaultName, validate: (s: string) => (s.trim() ? true : "Required") }
     ]);
 
     let profile: Profile;
-    if (presetName === "Custom") {
+    let provider: ProviderKind;
+    let baseUrl: string | undefined;
+    let model: string | undefined;
+
+    if (isEdit) {
+      provider = existing!.provider;
+      const { changeProvider } = await inquirer.prompt<{ changeProvider: boolean }>([
+        { type: "confirm", name: "changeProvider", message: "Change provider?", default: false }
+      ]);
+      if (changeProvider) {
+        const ans = await inquirer.prompt<{ provider: ProviderKind }>([
+          {
+            type: "list",
+            name: "provider",
+            message: "Provider:",
+            choices: ["openrouter", "anthropic", "zai", "minimax", "lmstudio", "openai-compatible", "anthropic-compatible"]
+          }
+        ]);
+        provider = ans.provider;
+        baseUrl = undefined;
+        model = undefined;
+      } else {
+        baseUrl = existing!.baseUrl;
+        model = existing!.model;
+      }
+    } else if (presetName === "Custom") {
       const ans = await inquirer.prompt<{ provider: ProviderKind; baseUrl?: string; model?: string }>([
         {
           type: "list",
@@ -162,14 +237,12 @@ export async function runProfileSetupWizard(params: { config: Config }): Promise
         { type: "input", name: "baseUrl", message: "Base URL (optional):" },
         { type: "input", name: "model", message: "Model (optional):" }
       ]);
-      profile = {
-        name: name.trim(),
-        provider: ans.provider,
-        baseUrl: ans.baseUrl?.trim() || undefined,
-        model: ans.model?.trim() || undefined
-      };
+      provider = ans.provider;
+      baseUrl = ans.baseUrl?.trim() || undefined;
+      model = ans.model?.trim() || undefined;
     } else {
       const preset = PRESETS[presetName];
+      provider = preset.provider;
       const isGenericProvider = ["openai-compatible", "anthropic-compatible"].includes(preset.provider);
       const ans = await inquirer.prompt<{ baseUrl?: string; model?: string }>([
         ...(preset.baseUrl !== undefined || isGenericProvider
@@ -186,21 +259,34 @@ export async function runProfileSetupWizard(params: { config: Config }): Promise
           : []),
         { type: "input", name: "model", message: "Model:", default: preset.model || "" }
       ]);
-      profile = {
-        name: name.trim(),
-        provider: preset.provider,
-        baseUrl: ans.baseUrl?.trim() || preset.baseUrl || undefined,
-        model: ans.model?.trim() || preset.model
-      };
+      baseUrl = ans.baseUrl?.trim() || preset.baseUrl || undefined;
+      model = ans.model?.trim() || preset.model;
     }
 
+    profile = {
+      name: name.trim(),
+      provider,
+      baseUrl,
+      model
+    };
+
+    const providerChanged = isEdit && existing!.provider !== profile.provider;
     if (profile.provider !== "lmstudio") {
-      const label = Object.values(PRESETS).find((p) => p.provider === profile.provider)?.credentialLabel || "API key";
-      const { credential } = await inquirer.prompt<{ credential: string }>([
-        { type: "password", name: "credential", message: `Enter ${label}:`, mask: "*" }
-      ]);
-      if (!credential?.trim()) throw new Error("Credential is required");
-      await storeCredential(profile.name, label, credential.trim());
+      let shouldPromptForKey = true;
+      if (isEdit && !providerChanged) {
+        const { updateKey } = await inquirer.prompt<{ updateKey: boolean }>([
+          { type: "confirm", name: "updateKey", message: "Update provider API key?", default: false }
+        ]);
+        shouldPromptForKey = updateKey;
+      }
+      if (shouldPromptForKey) {
+        const label = Object.values(PRESETS).find((p) => p.provider === profile.provider)?.credentialLabel || "API key";
+        const { credential } = await inquirer.prompt<{ credential: string }>([
+          { type: "password", name: "credential", message: `Enter ${label}:`, mask: "*" }
+        ]);
+        if (!credential?.trim()) throw new Error("Credential is required");
+        await storeCredential(profile.name, label, credential.trim());
+      }
     }
 
     // Check which tool keys are already configured globally
@@ -289,10 +375,12 @@ export async function runProfileSetupWizard(params: { config: Config }): Promise
 
     const idx = params.config.profiles.findIndex((p) => p.name === profile.name);
     if (idx >= 0) {
-      const { overwrite } = await inquirer.prompt<{ overwrite: boolean }>([
-        { type: "confirm", name: "overwrite", message: `Profile "${profile.name}" exists. Overwrite?`, default: false }
-      ]);
-      if (!overwrite) throw new Error("Setup cancelled");
+      if (!isEdit) {
+        const { overwrite } = await inquirer.prompt<{ overwrite: boolean }>([
+          { type: "confirm", name: "overwrite", message: `Profile "${profile.name}" exists. Overwrite?`, default: false }
+        ]);
+        if (!overwrite) throw new Error("Setup cancelled");
+      }
       params.config.profiles[idx] = profile;
     } else {
       params.config.profiles.push(profile);
@@ -301,6 +389,25 @@ export async function runProfileSetupWizard(params: { config: Config }): Promise
 
     // eslint-disable-next-line no-console
     console.log(`\nSaved profile "${profile.name}" (${profile.provider}).`);
+
+    const workspaceDefault = defaultWorkspaceDir();
+    const { workspaceDirInput } = await inquirer.prompt<{ workspaceDirInput: string }>([
+      { type: "input", name: "workspaceDirInput", message: "Workspace directory:", default: workspaceDefault }
+    ]);
+    const workspaceDir = resolveWorkspaceDir(workspaceDirInput || workspaceDefault);
+    ensureWorkspaceConfigured(workspaceDir);
+    // eslint-disable-next-line no-console
+    console.log(`Workspace configured at: ${workspaceDir}`);
+
+    const { addAlias } = await inquirer.prompt<{ addAlias: boolean }>([
+      { type: "confirm", name: "addAlias", message: "Create Desktop alias to workspace?", default: true }
+    ]);
+    if (addAlias) {
+      const result = createDesktopAlias(workspaceDir);
+      // eslint-disable-next-line no-console
+      if (result.ok) console.log(`Desktop alias created: ${result.path}`);
+      else console.log(`Desktop alias not created: ${result.error}`);
+    }
     return { config: params.config, created: profile };
   }
 
@@ -309,26 +416,49 @@ export async function runProfileSetupWizard(params: { config: Config }): Promise
     // eslint-disable-next-line no-console
     console.log("\nFF-Terminal Profile Setup Wizard\n");
 
-    const presetNames = [...Object.keys(PRESETS), "Custom"];
-    // eslint-disable-next-line no-console
-    console.log("Choose a profile type:");
-    presetNames.forEach((n, i) => {
+    let presetName = "Custom";
+    if (!isEdit) {
+      const presetNames = [...Object.keys(PRESETS), "Custom"];
       // eslint-disable-next-line no-console
-      console.log(`  ${i + 1}) ${n}`);
-    });
-    const presetIndex = Number((await rl.question(`Select [1-${presetNames.length}]: `)).trim() || "1");
-    if (!Number.isFinite(presetIndex) || presetIndex < 1 || presetIndex > presetNames.length) {
-      throw new Error("Invalid selection");
+      console.log("Choose a profile type:");
+      presetNames.forEach((n, i) => {
+        // eslint-disable-next-line no-console
+        console.log(`  ${i + 1}) ${n}`);
+      });
+      const presetIndex = Number((await rl.question(`Select [1-${presetNames.length}]: `)).trim() || "1");
+      if (!Number.isFinite(presetIndex) || presetIndex < 1 || presetIndex > presetNames.length) {
+        throw new Error("Invalid selection");
+      }
+      presetName = presetNames[presetIndex - 1];
     }
-    const presetName = presetNames[presetIndex - 1];
 
-    const nameDefault = presetName === "Custom" ? "" : presetName;
+    const nameDefault = isEdit ? existing!.name : presetName === "Custom" ? "" : presetName;
     const name = (await rl.question(`Profile name${nameDefault ? ` [default: ${nameDefault}]` : ""}: `)).trim() || nameDefault;
     if (!name) throw new Error("Profile name is required");
 
     let profile: Profile;
 
-    if (presetName === "Custom") {
+    if (isEdit) {
+      let provider = existing!.provider;
+      const changeProvider = (await rl.question("Change provider? (y/N): ")).trim().toLowerCase();
+      if (changeProvider === "y" || changeProvider === "yes") {
+        const providerInput = (await rl.question(
+          "Provider (openrouter | anthropic | zai | minimax | lmstudio | openai-compatible | anthropic-compatible): "
+        )).trim() as ProviderKind;
+        if (!["openrouter", "anthropic", "zai", "minimax", "lmstudio", "openai-compatible", "anthropic-compatible"].includes(providerInput)) {
+          throw new Error("Invalid provider");
+        }
+        provider = providerInput;
+      }
+
+      const baseUrl = (await rl.question(`Base URL (optional)${existing!.baseUrl ? ` [default: ${existing!.baseUrl}]` : ""}: `)).trim()
+        || existing!.baseUrl
+        || undefined;
+      const model = (await rl.question(`Model (optional)${existing!.model ? ` [default: ${existing!.model}]` : ""}: `)).trim()
+        || existing!.model
+        || undefined;
+      profile = { name, provider, baseUrl, model };
+    } else if (presetName === "Custom") {
       const provider = (await rl.question("Provider (openrouter | anthropic | zai | minimax | lmstudio | openai-compatible | anthropic-compatible): ")).trim() as ProviderKind;
       if (!["openrouter", "anthropic", "zai", "minimax", "lmstudio", "openai-compatible", "anthropic-compatible"].includes(provider)) throw new Error("Invalid provider");
       const baseUrl = (await rl.question("Base URL (optional): ")).trim() || undefined;
@@ -367,10 +497,17 @@ export async function runProfileSetupWizard(params: { config: Config }): Promise
     // Credential (provider-specific).
     const needsCredential = profile.provider !== "lmstudio";
     if (needsCredential) {
-      const label = Object.values(PRESETS).find((p) => p.provider === profile.provider)?.credentialLabel || "API key";
-      const credential = await promptSecret(`Enter ${label}: `);
-      if (!credential.trim()) throw new Error("Credential is required");
-      await storeCredential(profile.name, label, credential.trim());
+      let shouldPromptKey = true;
+      if (isEdit && existing!.provider === profile.provider) {
+        const updateKey = (await rl.question("Update provider API key? (y/N): ")).trim().toLowerCase();
+        shouldPromptKey = updateKey === "y" || updateKey === "yes";
+      }
+      if (shouldPromptKey) {
+        const label = Object.values(PRESETS).find((p) => p.provider === profile.provider)?.credentialLabel || "API key";
+        const credential = await promptSecret(`Enter ${label}: `);
+        if (!credential.trim()) throw new Error("Credential is required");
+        await storeCredential(profile.name, label, credential.trim());
+      }
     }
 
     const addOptional = (await rl.question("Add optional API keys for tools (Tavily/Perplexity/Gemini/OpenWeather)? (y/N): ")).trim().toLowerCase();
@@ -388,8 +525,10 @@ export async function runProfileSetupWizard(params: { config: Config }): Promise
     // Upsert into config
     const idx = params.config.profiles.findIndex((p) => p.name === profile.name);
     if (idx >= 0) {
-      const overwrite = (await rl.question(`Profile "${profile.name}" exists. Overwrite? (y/N): `)).trim().toLowerCase() === "y";
-      if (!overwrite) throw new Error("Setup cancelled");
+      if (!isEdit) {
+        const overwrite = (await rl.question(`Profile "${profile.name}" exists. Overwrite? (y/N): `)).trim().toLowerCase() === "y";
+        if (!overwrite) throw new Error("Setup cancelled");
+      }
       params.config.profiles[idx] = profile;
     } else {
       params.config.profiles.push(profile);
@@ -408,6 +547,21 @@ export async function runProfileSetupWizard(params: { config: Config }): Promise
         // eslint-disable-next-line no-console
         console.log("Warning: credential store did not return a value for this profile.");
       }
+    }
+
+    const workspaceDefault = defaultWorkspaceDir();
+    const workspaceInput = (await rl.question(`Workspace directory [default: ${workspaceDefault}]: `)).trim();
+    const workspaceDir = resolveWorkspaceDir(workspaceInput || workspaceDefault);
+    ensureWorkspaceConfigured(workspaceDir);
+    // eslint-disable-next-line no-console
+    console.log(`Workspace configured at: ${workspaceDir}`);
+
+    const aliasAnswer = (await rl.question("Create Desktop alias to workspace? (Y/n): ")).trim().toLowerCase();
+    if (!aliasAnswer || aliasAnswer === "y" || aliasAnswer === "yes") {
+      const result = createDesktopAlias(workspaceDir);
+      // eslint-disable-next-line no-console
+      if (result.ok) console.log(`Desktop alias created: ${result.path}`);
+      else console.log(`Desktop alias not created: ${result.error}`);
     }
 
     return { config: params.config, created: profile };

@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { getToolContext } from "../context.js";
+import { resolveWorkspaceDir } from "../../config/paths.js";
 
 type Args = { thought?: string };
 
@@ -10,7 +11,7 @@ export async function thinkTool(argsRaw: unknown): Promise<string> {
   if (!thought.trim()) throw new Error("think: missing args.thought");
 
   const ctx = getToolContext();
-  const workspaceDir = ctx?.workspaceDir ? ctx.workspaceDir : process.cwd();
+  const workspaceDir = resolveWorkspaceDir(ctx?.workspaceDir ?? process.env.FF_WORKSPACE_DIR ?? undefined);
   const sessionId = ctx?.sessionId ? ctx.sessionId : "unknown-session";
 
   const dir = path.join(workspaceDir, "thoughts");
@@ -23,4 +24,3 @@ export async function thinkTool(argsRaw: unknown): Promise<string> {
 
   return JSON.stringify({ ok: true, sessionId, path: filePath }, null, 2);
 }
-

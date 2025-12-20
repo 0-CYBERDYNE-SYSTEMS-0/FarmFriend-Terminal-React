@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { getToolContext } from "../context.js";
 import { newId } from "../../../shared/ids.js";
+import { resolveWorkspaceDir } from "../../config/paths.js";
 
 type Args = {
   action?: "create" | "update" | "complete" | "list" | string;
@@ -39,7 +40,7 @@ export async function manageTaskTool(argsRaw: unknown): Promise<string> {
   if (!action) throw new Error("manage_task: missing args.action");
 
   const ctx = getToolContext();
-  const workspaceDir = ctx?.workspaceDir ? ctx.workspaceDir : process.cwd();
+  const workspaceDir = resolveWorkspaceDir(ctx?.workspaceDir ?? process.env.FF_WORKSPACE_DIR ?? undefined);
   const storePath = path.join(workspaceDir, "tasks.json");
   const store = readStore(storePath);
   const now = new Date().toISOString();
@@ -83,4 +84,3 @@ export async function manageTaskTool(argsRaw: unknown): Promise<string> {
 
   throw new Error(`manage_task: unknown action "${action}"`);
 }
-

@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { getToolContext } from "../context.js";
+import { resolveWorkspaceDir } from "../../config/paths.js";
 
 type Args = {
   action?: "status" | "enable" | "disable" | "stats" | "sessions" | "force_complete" | "cleanup" | "feedback_stats" | string;
@@ -34,7 +35,7 @@ export async function completionValidationTool(argsRaw: unknown): Promise<string
   if (!action) throw new Error("completion_validation: missing args.action");
 
   const ctx = getToolContext();
-  const workspaceDir = ctx?.workspaceDir ? ctx.workspaceDir : process.cwd();
+  const workspaceDir = resolveWorkspaceDir(ctx?.workspaceDir ?? process.env.FF_WORKSPACE_DIR ?? undefined);
   const storePath = path.join(workspaceDir, "completion_validation.json");
   const store = readStore(storePath);
   const now = new Date().toISOString();
@@ -88,4 +89,3 @@ export async function completionValidationTool(argsRaw: unknown): Promise<string
     2
   );
 }
-

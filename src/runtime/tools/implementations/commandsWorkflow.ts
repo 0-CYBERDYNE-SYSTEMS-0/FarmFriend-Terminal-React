@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { getToolContext } from "../context.js";
+import { resolveWorkspaceDir } from "../../config/paths.js";
 
 type DraftArgs = {
   command_slug?: string;
@@ -70,7 +71,7 @@ export async function commandDraftTool(argsRaw: unknown): Promise<string> {
   });
 
   const ctx = getToolContext();
-  const workspaceDir = ctx?.workspaceDir ? ctx.workspaceDir : process.cwd();
+  const workspaceDir = resolveWorkspaceDir(ctx?.workspaceDir ?? process.env.FF_WORKSPACE_DIR ?? undefined);
   fs.mkdirSync(draftsDir(workspaceDir), { recursive: true });
 
   const draft = {
@@ -105,7 +106,7 @@ export async function commandApplyTool(argsRaw: unknown): Promise<string> {
   const cleanup = !!args?.cleanup_draft;
 
   const ctx = getToolContext();
-  const workspaceDir = ctx?.workspaceDir ? ctx.workspaceDir : process.cwd();
+  const workspaceDir = resolveWorkspaceDir(ctx?.workspaceDir ?? process.env.FF_WORKSPACE_DIR ?? undefined);
   const p = draftPath(workspaceDir, draftId);
 
   if (!fs.existsSync(p)) throw new Error(`command_apply: draft not found: ${p}`);

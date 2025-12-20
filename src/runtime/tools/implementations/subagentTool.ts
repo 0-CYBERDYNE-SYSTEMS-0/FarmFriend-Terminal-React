@@ -3,6 +3,7 @@ import { registerDefaultTools } from "../../registerDefaultTools.js";
 import { runAgentTurn } from "../../agentLoop.js";
 import { withToolContext, getToolContext } from "../context.js";
 import { newId } from "../../../shared/ids.js";
+import { resolveWorkspaceDir } from "../../config/paths.js";
 
 type Args = {
   description?: string;
@@ -18,7 +19,7 @@ export async function subagentTool(argsRaw: unknown, signal: AbortSignal): Promi
   if (!prompt) throw new Error("subagent_tool: missing args.prompt");
 
   const parent = getToolContext();
-  const workspaceDir = parent?.workspaceDir || process.cwd();
+  const workspaceDir = resolveWorkspaceDir(parent?.workspaceDir ?? process.env.FF_WORKSPACE_DIR ?? undefined);
   const repoRoot = parent?.repoRoot || process.cwd();
 
   // Prevent recursive subagent spawning by using a registry without subagent_tool.

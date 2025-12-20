@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { getToolContext } from "../context.js";
+import { resolveWorkspaceDir } from "../../config/paths.js";
 
 type Args = {
   action?: "write" | "read" | "append" | string;
@@ -37,8 +38,8 @@ export async function sessionSummaryTool(argsRaw: unknown): Promise<string> {
   if (!action) throw new Error("session_summary: missing args.action");
 
   const ctx = getToolContext();
-  const workspaceDir = ctx?.workspaceDir ? ctx.workspaceDir : process.cwd();
-  const filePath = path.join(workspaceDir, "session_summary.md");
+  const workspaceDir = resolveWorkspaceDir(ctx?.workspaceDir ?? process.env.FF_WORKSPACE_DIR ?? undefined);
+  const filePath = path.join(workspaceDir, "memory_core", "session_summary.md");
 
   if (action === "read") {
     if (!fs.existsSync(filePath)) return "";
@@ -67,4 +68,3 @@ export async function sessionSummaryTool(argsRaw: unknown): Promise<string> {
 
   throw new Error(`session_summary: unknown action "${action}"`);
 }
-
