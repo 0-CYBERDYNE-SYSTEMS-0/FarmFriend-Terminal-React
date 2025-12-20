@@ -599,6 +599,13 @@ export async function* runAgentTurn(params: {
       yield { kind: "status", message: `tool_end:${r.name}|${durationSec}s|${status}|${preview}` };
 
       const originalCall = callById.get(r.id);
+      if (r.name === "think" && originalCall?.arguments) {
+        const thought =
+          typeof (originalCall.arguments as any)?.thought === "string"
+            ? String((originalCall.arguments as any).thought).trim()
+            : "";
+        if (thought) yield { kind: "thinking", delta: thought };
+      }
       if (originalCall) {
         await hookRegistry.runPostTool({
           sessionId,

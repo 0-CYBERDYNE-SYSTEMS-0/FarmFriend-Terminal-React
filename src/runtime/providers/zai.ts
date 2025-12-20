@@ -253,73 +253,23 @@ function zaiAnthropicProvider(params: { apiKey: string; baseUrl: string; endpoin
 }
 
 export function zaiProvider(params: { apiKey: string; baseUrl: string }): Provider {
-  const common = {
-    name: "zai" as const,
-    baseUrl: params.baseUrl,
+  const baseUrl = "https://api.z.ai/api/coding/paas/v4";
+  const provider = openAICompatProvider({
+    name: "zai",
+    baseUrl,
     apiKey: params.apiKey,
+    appendV1: false,
+    reasoningContentFallback: true,
     extraHeaders: {
       "HTTP-Referer": "https://github.com/anthropics/ff-terminal",
       "X-Title": "FF-Terminal"
     },
     mapModel: (requested: string) => mapToZaiModel(requested)
-  };
-
-  // Z.ai gateways vary: some expose `/chat/completions` under the given base URL, others require an extra `/v1`.
-  const noV1 = openAICompatProvider({ ...common, appendV1: false });
-  const withV1 = openAICompatProvider({ ...common, appendV1: true });
-  const rawAnthropic = zaiAnthropicProvider({ ...params, endpoint: "" });
-  const anthropic = zaiAnthropicProvider(params);
-
+  });
   return {
     name: "zai",
     async *streamChat(args: Parameters<Provider["streamChat"]>[0]) {
-      const preferAnthropic = params.baseUrl.toLowerCase().includes("anthropic");
-      // Try multiple shapes; Anthropic-style base URLs still get both raw and /v1/messages.
-      const attempts = preferAnthropic
-        ? [rawAnthropic, anthropic]
-        : [noV1, withV1, rawAnthropic, anthropic];
-      const discardedErrors: string[] = [];
-
-      for (let i = 0; i < attempts.length; i += 1) {
-        const p = attempts[i];
-        const buffered: ProviderStreamEvent[] = [];
-        let sawError = false;
-        let final: Extract<ProviderStreamEvent, { type: "final" }> | null = null;
-        let sawContent = false;
-
-        for await (const ev of p.streamChat(args)) {
-          buffered.push(ev);
-          if (ev.type === "error") sawError = true;
-          if (ev.type === "content") sawContent = true;
-          if (ev.type === "final") final = ev;
-        }
-
-        const ok = Boolean(sawContent || (final && ((final.content && String(final.content).length) || (final.toolCalls && final.toolCalls.length))));
-        // Treat "no error but also no content/tool_calls" as a failure and fall through to the next variant.
-        // Some gateways return 200 with an empty/unsupported shape; this otherwise looks like a silent success.
-        if (!ok && !sawError) {
-          discardedErrors.push(`Z.ai endpoint variant returned an empty response (no content/tool_calls).`);
-          if (i < attempts.length - 1) continue;
-        }
-
-        if (ok || i === attempts.length - 1) {
-          if (!ok && i === attempts.length - 1 && discardedErrors.length) {
-            const uniq = [...new Set(discardedErrors)].slice(0, 6);
-            yield {
-              type: "error",
-              message: `Z.ai failed across multiple endpoint styles. Previous errors:\n- ${uniq.join("\n- ")}`
-            };
-          }
-          for (const ev of buffered) yield ev;
-          return;
-        }
-
-        // Capture errors from this attempt so the user gets context if all variants fail.
-        for (const ev of buffered) {
-          if (ev.type === "error") discardedErrors.push(ev.message);
-        }
-        // Otherwise: discard this attempt and try the next variant.
-      }
+      yield* provider.streamChat(args);
     }
   };
 }

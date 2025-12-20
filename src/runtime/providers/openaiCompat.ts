@@ -92,14 +92,21 @@ function toolCallsFromAnthropicContentBlocks(blocks: any[]): ToolCall[] {
   return out;
 }
 
-function extractFromJsonResponse(obj: any): { content: string; toolCalls: ToolCall[]; rawModel?: string } | null {
+function extractFromJsonResponse(
+  obj: any,
+  opts?: { reasoningContentFallback?: boolean }
+): { content: string; toolCalls: ToolCall[]; rawModel?: string } | null {
   if (!obj || typeof obj !== "object") return null;
 
   // OpenAI-style: { model, choices: [{ message: { content, tool_calls } }] }
   const choice = obj.choices?.[0];
   if (choice) {
     const msg = choice.message ?? choice.delta ?? {};
-    const content = extractTextContent(msg?.content);
+    let content = extractTextContent(msg?.content);
+    if (!content && opts?.reasoningContentFallback) {
+      const reasoning = extractTextContent(msg?.reasoning_content ?? msg?.reasoning);
+      if (reasoning) content = reasoning;
+    }
     const toolCalls = toolCallsFromMessage(msg);
     return { content, toolCalls, rawModel: typeof obj.model === "string" ? obj.model : undefined };
   }
@@ -113,7 +120,11 @@ function extractFromJsonResponse(obj: any): { content: string; toolCalls: ToolCa
 
   // Some gateways nest message under `message`.
   if (obj.message && typeof obj.message === "object") {
-    const content = extractTextContent((obj.message as any).content);
+    let content = extractTextContent((obj.message as any).content);
+    if (!content && opts?.reasoningContentFallback) {
+      const reasoning = extractTextContent((obj.message as any).reasoning_content ?? (obj.message as any).reasoning);
+      if (reasoning) content = reasoning;
+    }
     const toolCalls = toolCallsFromMessage(obj.message);
     return { content, toolCalls, rawModel: typeof obj.model === "string" ? obj.model : undefined };
   }
@@ -129,11 +140,13 @@ export function openAICompatProvider(params: {
   mapModel?: (requested: string) => string;
   appendV1?: boolean;
   preferStream?: boolean;
+  reasoningContentFallback?: boolean;
 }): Provider {
   const baseUrl = normalizeBaseUrl(params.baseUrl, params.appendV1 ?? true);
   const extraHeaders = params.extraHeaders ?? {};
   const mapModel = params.mapModel ?? ((m: string) => m);
   const preferStream = params.preferStream ?? true;
+  const reasoningContentFallback = params.reasoningContentFallback ?? false;
 
   return {
     name: params.name,
@@ -301,7 +314,7 @@ export function openAICompatProvider(params: {
       if (!isEventStream) {
         const raw = await new Response(res.body).text().catch(() => "");
         const obj: any = safeJsonParse(raw.trim());
-        const extracted = extractFromJsonResponse(obj);
+        const extracted = extractFromJsonResponse(obj, { reasoningContentFallback });
         if (!extracted) {
           yield { type: "error", message: `Non-stream response was not recognized JSON at ${url}: ${raw.slice(0, 200)}` };
           return;
@@ -331,7 +344,7 @@ export function openAICompatProvider(params: {
         raw = raw.trim();
 
         const obj: any = safeJsonParse(raw);
-        const extracted = extractFromJsonResponse(obj);
+        const extracted = extractFromJsonResponse(obj, { reasoningContentFallback });
         if (!extracted) {
           yield { type: "error", message: `Non-stream response was not recognized JSON at ${url}: ${raw.slice(0, 200)}` };
           return;
@@ -362,6 +375,7 @@ export function openAICompatProvider(params: {
       const toolCallDeltas: any[] = [];
       let messageToolCalls: ToolCall[] = [];
       let rawModel: string | undefined;
+      let lastReasoningContent = "";
       const anthropicToolByIndex = new Map<number, { id?: string; name?: string; args: string }>();
 
       let sawAnyEvent = false;
@@ -389,11 +403,19 @@ export function openAICompatProvider(params: {
         const choice = obj.choices?.[0];
         const delta = choice?.delta;
         const finishReason = choice?.finish_reason;
+        if (reasoningContentFallback && typeof choice?.message?.reasoning_content === "string") {
+          const rc = choice.message.reasoning_content.trim();
+          if (rc) lastReasoningContent = rc;
+        }
 
         const deltaContentText = extractTextContent(delta?.content);
+        const deltaReasoningContent = typeof delta?.reasoning_content === "string" ? delta.reasoning_content : "";
         if (deltaContentText) {
           content += deltaContentText;
           yield { type: "content", delta: deltaContentText };
+        } else if (deltaReasoningContent && reasoningContentFallback) {
+          content += deltaReasoningContent;
+          yield { type: "content", delta: deltaReasoningContent };
         } else {
           // Some gateways emit full message objects in SSE chunks.
           const full = extractTextContent(choice?.message?.content);
@@ -416,7 +438,9 @@ export function openAICompatProvider(params: {
             ? delta.reasoning
             : typeof delta?.thinking === "string"
               ? delta.thinking
-              : "";
+              : deltaReasoningContent && !reasoningContentFallback
+                ? deltaReasoningContent
+                : "";
         if (reasoningDelta) yield { type: "thinking", delta: reasoningDelta };
 
         const tc = Array.isArray(delta?.tool_calls) ? delta.tool_calls : null;
@@ -487,6 +511,11 @@ export function openAICompatProvider(params: {
         })()
       ];
 
+      if (!content && reasoningContentFallback && lastReasoningContent) {
+        content = lastReasoningContent;
+        yield { type: "content", delta: content };
+      }
+
       const isEmpty = !content && toolCalls.length === 0;
       if (isEmpty && canRetryEmptyStream()) {
         markRetryUsed();
@@ -514,7 +543,7 @@ export function openAICompatProvider(params: {
             } else {
               const raw = await retryRes.text().catch(() => "");
               const obj: any = safeJsonParse(raw.trim());
-              const extracted = extractFromJsonResponse(obj);
+              const extracted = extractFromJsonResponse(obj, { reasoningContentFallback });
               if (extracted) {
                 if (extracted.content) yield { type: "content", delta: extracted.content };
                 yield { type: "final", ...extracted };

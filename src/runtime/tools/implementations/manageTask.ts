@@ -20,6 +20,13 @@ type Task = {
 
 type Store = { tasks: Task[] };
 
+type Todo = {
+  id: string;
+  content: string;
+  status: "pending" | "in_progress" | "completed";
+  priority: "high" | "medium" | "low";
+};
+
 function readStore(p: string): Store {
   if (!fs.existsSync(p)) return { tasks: [] };
   try {
@@ -34,6 +41,25 @@ function writeStore(p: string, store: Store): void {
   fs.writeFileSync(p, JSON.stringify(store, null, 2) + "\n", "utf8");
 }
 
+function syncTodosForSession(params: {
+  tasks: Task[];
+  workspaceDir: string;
+  sessionId: string | null;
+}): void {
+  if (!params.sessionId) return;
+  const todos: Todo[] = params.tasks.map((task) => ({
+    id: task.id,
+    content: task.description,
+    status: task.status === "completed" ? "completed" : "pending",
+    priority: "medium"
+  }));
+
+  const dir = path.join(params.workspaceDir, "todos", "sessions");
+  fs.mkdirSync(dir, { recursive: true });
+  const p = path.join(dir, `${params.sessionId}.json`);
+  fs.writeFileSync(p, JSON.stringify({ version: 1, session_id: params.sessionId, todos }, null, 2) + "\n", "utf8");
+}
+
 export async function manageTaskTool(argsRaw: unknown): Promise<string> {
   const args = argsRaw as Args;
   const action = String(args?.action || "").trim().toLowerCase();
@@ -41,6 +67,7 @@ export async function manageTaskTool(argsRaw: unknown): Promise<string> {
 
   const ctx = getToolContext();
   const workspaceDir = resolveWorkspaceDir(ctx?.workspaceDir ?? process.env.FF_WORKSPACE_DIR ?? undefined);
+  const sessionId = ctx?.sessionId ?? null;
   const storePath = path.join(workspaceDir, "tasks.json");
   const store = readStore(storePath);
   const now = new Date().toISOString();
@@ -55,6 +82,7 @@ export async function manageTaskTool(argsRaw: unknown): Promise<string> {
     const task: Task = { id: newId("task"), description: desc, status: "open", created_at: now, updated_at: now };
     store.tasks.push(task);
     writeStore(storePath, store);
+    syncTodosForSession({ tasks: store.tasks, workspaceDir, sessionId });
     return JSON.stringify({ ok: true, action, task, path: storePath }, null, 2);
   }
 
@@ -68,6 +96,7 @@ export async function manageTaskTool(argsRaw: unknown): Promise<string> {
     task.description = desc;
     task.updated_at = now;
     writeStore(storePath, store);
+    syncTodosForSession({ tasks: store.tasks, workspaceDir, sessionId });
     return JSON.stringify({ ok: true, action, task, path: storePath }, null, 2);
   }
 
@@ -79,6 +108,7 @@ export async function manageTaskTool(argsRaw: unknown): Promise<string> {
     task.status = "completed";
     task.updated_at = now;
     writeStore(storePath, store);
+    syncTodosForSession({ tasks: store.tasks, workspaceDir, sessionId });
     return JSON.stringify({ ok: true, action, task, path: storePath }, null, 2);
   }
 
