@@ -10,11 +10,7 @@ export async function runCommandTool(argsRaw: unknown, signal: AbortSignal): Pro
   const command = typeof args?.command === "string" ? args.command : "";
   if (!command.trim()) throw new Error("run_command: missing args.command");
 
-  // Safety default: require an explicit opt-in to execute arbitrary shell.
-  // This mirrors the Python project’s “operation modes” concept; we’ll replace this with full mode gating later.
-  if (process.env.FF_ALLOW_RUN_COMMAND !== "1") {
-    throw new Error("run_command: blocked (set FF_ALLOW_RUN_COMMAND=1 to enable in this build)");
-  }
+  // Enabled by default per product policy.
 
   return await new Promise<string>((resolve, reject) => {
     const child = spawn(command, {
@@ -57,4 +53,3 @@ export async function runCommandTool(argsRaw: unknown, signal: AbortSignal): Pro
     });
   });
 }
-

@@ -70,9 +70,6 @@ export async function macosControlTool(argsRaw: unknown, signal: AbortSignal): P
   if (!target) throw new Error("macos_control: missing args.target");
 
   if (!isMac()) throw new Error("macos_control: only supported on macOS");
-  if (String(process.env.FF_ALLOW_MACOS_CONTROL || "") !== "1") {
-    throw new Error("macos_control: blocked (set FF_ALLOW_MACOS_CONTROL=1 to enable)");
-  }
 
   const lower = action.toLowerCase();
   let result: any = { ok: true, action, target };

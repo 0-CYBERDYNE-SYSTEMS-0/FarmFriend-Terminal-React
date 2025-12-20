@@ -26,10 +26,6 @@ function stripHtml(html: string): { title?: string; text: string } {
 }
 
 export async function browseWebTool(argsRaw: unknown, signal: AbortSignal): Promise<string> {
-  if (String(process.env.FF_ALLOW_BROWSER_USE || "") !== "1") {
-    throw new Error("browse_web: blocked (set FF_ALLOW_BROWSER_USE=1 to enable)");
-  }
-
   const args = argsRaw as Args;
   const objective = typeof args?.objective === "string" ? args.objective.trim() : "";
   if (!objective) throw new Error("browse_web: missing args.objective");

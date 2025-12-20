@@ -545,6 +545,11 @@ export async function* runAgentTurn(params: {
     for (const tc of callsToRun) {
       const contextMsg = getToolContextMessage(tc.name, tc.arguments);
       yield { kind: "status", message: `tool_start:${tc.name}|${contextMsg}` };
+      if (contextMsg) {
+        yield { kind: "thinking", delta: `Tool: ${contextMsg}` };
+      } else {
+        yield { kind: "thinking", delta: `Tool: ${tc.name}` };
+      }
     }
 
     const durationById = new Map<string, number>();

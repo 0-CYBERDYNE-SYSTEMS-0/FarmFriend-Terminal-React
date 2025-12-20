@@ -93,6 +93,12 @@ You must:
 - Important discoveries or obstacles
 - Task completion
 
+### UX Transparency (REQUIRED)
+- If more than ~15 seconds pass without visible output, send a short `quick_update` explaining what you’re doing next.
+- When a tool runs longer than expected, emit a brief progress note (what tool, why, what you expect).
+- If a tool fails, immediately state the fallback plan and continue.
+- Prefer frequent, tiny updates over long silent spans. Avoid “black box” behavior.
+
 ### Format:
 ```
 quick_update(type="progress", message="Starting parallel research across 5 sources")
