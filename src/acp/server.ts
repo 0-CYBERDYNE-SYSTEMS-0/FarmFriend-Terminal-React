@@ -5,8 +5,12 @@ import { runAgentTurn } from "../runtime/agentLoop.js";
 import { withToolContext } from "../runtime/tools/context.js";
 import { newId } from "../shared/ids.js";
 import { loadSession } from "../runtime/session/sessionStore.js";
+import type { ConversationMessage } from "../runtime/session/sessionStore.js";
+import { clearSkillAllowedToolsPolicy } from "../runtime/hooks/builtin/skillAllowedToolsHook.js";
 
 const PROTOCOL_VERSION = "0.1";
+const MAX_HISTORY_MESSAGES = 200;
+const MAX_HISTORY_CHARS = 20000;
 
 type JsonRpcId = string | number | null;
 
@@ -29,6 +33,32 @@ type SessionState = {
   controller: AbortController | null;
   toolQueue: Array<{ id: string; name: string }>;
 };
+
+function truncateConversation(conversation: ConversationMessage[]): {
+  conversation: ConversationMessage[];
+  truncated: boolean;
+  total: number;
+} {
+  const total = conversation.length;
+  if (total === 0) return { conversation: [], truncated: false, total };
+
+  let chars = 0;
+  let count = 0;
+  let start = total - 1;
+
+  for (let i = total - 1; i >= 0; i -= 1) {
+    const msg = conversation[i];
+    const len = typeof msg?.content === "string" ? msg.content.length : 0;
+    if (count >= MAX_HISTORY_MESSAGES) break;
+    if (count > 0 && chars + len > MAX_HISTORY_CHARS) break;
+    chars += len;
+    count += 1;
+    start = i;
+  }
+
+  const slice = conversation.slice(start);
+  return { conversation: slice, truncated: slice.length !== total, total };
+}
 
 function send(obj: JsonRpcResponse | { jsonrpc: "2.0"; method: string; params?: any }): void {
   process.stdout.write(JSON.stringify(obj) + "\n");
@@ -205,7 +235,15 @@ export async function startAcpServer(params: { repoRoot: string; workspaceDir: s
         continue;
       }
       if (!sessions.has(sessionId)) sessions.set(sessionId, { sessionId, controller: null, toolQueue: [] });
-      send(okResponse(id ?? null, { modes: [] }));
+      const history = truncateConversation(existing.conversation || []);
+      send(
+        okResponse(id ?? null, {
+          modes: [],
+          conversation: history.conversation,
+          history_truncated: history.truncated,
+          history_total: history.total
+        })
+      );
       continue;
     }
 
@@ -213,6 +251,11 @@ export async function startAcpServer(params: { repoRoot: string; workspaceDir: s
       const sessionId = String(msg.params?.sessionId || "").trim();
       const session = sessions.get(sessionId);
       if (session?.controller) session.controller.abort();
+      if (session) {
+        session.controller = null;
+        session.toolQueue = [];
+      }
+      clearSkillAllowedToolsPolicy(sessionId);
       send(okResponse(id ?? null, {}));
       continue;
     }
@@ -234,6 +277,14 @@ export async function startAcpServer(params: { repoRoot: string; workspaceDir: s
       if (!session) {
         session = { sessionId, controller: null, toolQueue: [] };
         sessions.set(sessionId, session);
+      }
+
+      if (session.controller && !session.controller.signal.aborted) {
+        session.controller.abort();
+        sendUpdate(sessionId, {
+          sessionUpdate: "agent_message_chunk",
+          content: [toTextContent("Previous run cancelled by new prompt.")]
+        });
       }
 
       const controller = new AbortController();

@@ -60,3 +60,7 @@ export function createSkillAllowedToolsHooks(): Hook[] {
 
   return [preHook, postHook];
 }
+
+export function clearSkillAllowedToolsPolicy(sessionId: string): void {
+  sessionPolicies.delete(sessionId);
+}
