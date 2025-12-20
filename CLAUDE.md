@@ -10,6 +10,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Run daemon**: `pnpm dev:daemon` or `npm run dev:daemon` - Starts the WebSocket agent runtime on port 28888
 - **Run CLI**: `pnpm dev:cli` or `npm run dev:cli` - Starts the Ink (React) terminal UI
 - **Start both daemon + UI**: `pnpm dev:start` or `npm run dev:start` - Launches daemon and UI together (primary development workflow)
+- **Local workspace mode**: `pnpm dev -- local` or `ff-terminal local` - Launches ff-terminal with workspace in current directory (creates `ff-terminal-workspace/` locally)
 - **Run headless**: `pnpm dev:run` or `npm run dev:run` - Single-turn headless execution with a test prompt
 - **Manage profiles**: `pnpm dev -- profile setup|list|default|delete` - Profile and provider configuration
 - **Launch wizard**: `pnpm dev -- start` or `npm run dev -- start` - Interactive profile/model selector
@@ -326,10 +327,25 @@ System prompts and tool schemas are loaded from Python reference implementation 
 Sessions are identified by sessionId (UUID format). Each session maintains its own conversation history and state in `sessions/<sessionId>.json`.
 
 ### Workspace Directory
+
+**Global Mode (default)**:
 The default workspace is determined by:
 1. `FF_WORKSPACE_DIR` environment variable
 2. `workspace_dir` in config
-3. Default: Platform-specific config directory
+3. Default: `~/ff-terminal-workspace`
+
+**Local Mode**:
+When using `ff-terminal local`, the workspace is created in the current directory:
+- Workspace location: `<current-directory>/ff-terminal-workspace/`
+- All sessions, logs, and state stay in this local directory
+- Each local workspace gets a unique port (generated from workspace path hash)
+- Port stored in `ff-terminal-workspace/.daemon-port` for daemon-UI communication
+- Profiles and credentials inherited from global config
+- Multiple local workspaces can run simultaneously without conflicts
+
+**Use Cases**:
+- `ff-terminal start` - Global workspace for general work
+- `ff-terminal local` - Project-specific workspace for isolated development
 
 ### Model Selection Priority
 1. Runtime override (FF_MODEL, FF_SUBAGENT_MODEL)

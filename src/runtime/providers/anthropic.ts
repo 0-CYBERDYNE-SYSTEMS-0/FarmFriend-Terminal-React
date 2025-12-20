@@ -76,7 +76,7 @@ export function anthropicProvider(params: { apiKey: string; baseUrl?: string; an
 
   return {
     name: "anthropic",
-    async *streamChat({ model, messages, tools, temperature, maxTokens, signal }): AsyncGenerator<ProviderStreamEvent> {
+    async *streamChat({ model, messages, tools, temperature, maxTokens, signal }: Parameters<Provider["streamChat"]>[0]): AsyncGenerator<ProviderStreamEvent> {
       const url = `${baseUrl}/v1/messages`;
       const { anthropicMessages, system } = convertMessages(messages);
 
@@ -192,4 +192,3 @@ export function anthropicProvider(params: { apiKey: string; baseUrl?: string; an
     }
   };
 }
-

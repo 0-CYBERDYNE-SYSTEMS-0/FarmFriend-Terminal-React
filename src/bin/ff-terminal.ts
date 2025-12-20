@@ -29,6 +29,7 @@ function usage(): void {
   ff-terminal daemon
   ff-terminal ui
   ff-terminal start [profile] [--display-mode verbose|clean]
+  ff-terminal local [profile] [--display-mode verbose|clean]
   ff-terminal web
   ff-terminal run --prompt "..." [--profile <name>] [--session <id>] [--headless]
   ff-terminal run --scheduled-task <id-or-name> [--profile <name>] [--session <id>] --headless
@@ -73,6 +74,18 @@ function sanitizeEnvInPlace(): void {
 function safeModel(model?: string): string | undefined {
   const m = (model || "").trim();
   return m.length ? m : undefined;
+}
+
+function generatePortFromPath(workspacePath: string): number {
+  // Generate a deterministic port number from workspace path
+  // Range: 28889-38888 (avoid 28888 which is global default)
+  let hash = 0;
+  for (let i = 0; i < workspacePath.length; i++) {
+    hash = ((hash << 5) - hash) + workspacePath.charCodeAt(i);
+    hash = hash & hash; // Convert to 32-bit integer
+  }
+  const port = 28889 + (Math.abs(hash) % 10000);
+  return port;
 }
 
 async function applyProviderCredentialsFromProfile(profile: ReturnType<typeof getProfileByName>): Promise<void> {
@@ -250,6 +263,147 @@ async function run(): Promise<void> {
     }
 
     // Start UI shortly after daemon starts; UI has reconnect logic anyway.
+    await new Promise((r) => setTimeout(r, 300));
+    const ui = spawn(uiSpawnCmd, uiArgs, { env, stdio: "inherit", shell: true, cwd: projectDir });
+
+    const shutdown = () => {
+      try {
+        daemon.kill("SIGTERM");
+      } catch {
+        // ignore
+      }
+    };
+
+    ui.on("exit", (code: number | null) => {
+      shutdown();
+      process.exit(code || 0);
+    });
+    ui.on("error", () => shutdown());
+    daemon.on("exit", () => {});
+    return;
+  }
+
+  if (cmd === "local") {
+    const preferredProfile = rest[0] && !rest[0].startsWith("-") ? rest[0] : undefined;
+    const displayModeRaw = pickArg(rest, "--display-mode") || "";
+    const displayMode = displayModeRaw.trim().toLowerCase();
+    if (displayMode && displayMode !== "verbose" && displayMode !== "clean") {
+      throw new Error(`Invalid --display-mode: ${displayModeRaw} (expected verbose|clean)`);
+    }
+    let config = readConfig();
+
+    if (config.profiles.length === 0) {
+      const result = await runProfileSetupWizard({ config });
+      config = result.config;
+      writeConfig(config);
+    }
+
+    const profile = await promptSelectProfile({ config, preferredName: preferredProfile });
+
+    // Apply profile-selected env + config path to this process (daemon + Ink UI run together here).
+    sanitizeEnvInPlace();
+
+    process.env.FF_PROFILE = profile.name;
+    process.env.FF_PROVIDER = profile.provider;
+    if (displayMode) process.env.FF_DISPLAY_MODE = displayMode;
+    const model = safeModel(profile.model);
+    if (model) process.env.FF_MODEL = model;
+
+    // Provider env injection
+    await applyProviderCredentialsFromProfile(profile);
+
+    // Optional tool keys: profile override → existing env/.env → global defaults
+    for (const k of OPTIONAL_TOOL_ENV_KEYS) {
+      const profileValue = await getCredential(profile.name, k);
+      if (profileValue) {
+        process.env[k] = profileValue;
+        continue;
+      }
+
+      if (String(process.env[k] || "").trim()) continue;
+
+      const globalValue = await getCredential(GLOBAL_TOOL_CRED_PROFILE, k);
+      if (globalValue) {
+        process.env[k] = globalValue;
+        continue;
+      }
+
+      for (const p of config.profiles) {
+        if (p.name === profile.name) continue;
+        const v = await getCredential(p.name, k);
+        if (!v) continue;
+        process.env[k] = v;
+        await storeCredential(GLOBAL_TOOL_CRED_PROFILE, k, v);
+        break;
+      }
+    }
+
+    // Optional per-profile model overrides
+    if (profile.subagentModel?.trim()) process.env.FF_SUBAGENT_MODEL = profile.subagentModel.trim();
+    if (profile.toolModel?.trim()) process.env.FF_TOOL_MODEL = profile.toolModel.trim();
+    if (profile.webModel?.trim()) process.env.FF_WEB_MODEL = profile.webModel.trim();
+    if (profile.imageModel?.trim()) process.env.FF_IMAGE_MODEL = profile.imageModel.trim();
+    if (profile.videoModel?.trim()) process.env.FF_VIDEO_MODEL = profile.videoModel.trim();
+
+    // LOCAL MODE: Set workspace to current directory
+    const localWorkspaceDir = path.join(process.cwd(), "ff-terminal-workspace");
+    process.env.FF_WORKSPACE_DIR = localWorkspaceDir;
+
+    // Create workspace directory if it doesn't exist
+    fs.mkdirSync(localWorkspaceDir, { recursive: true });
+
+    // Generate workspace-specific port
+    const localPort = generatePortFromPath(localWorkspaceDir);
+    process.env.FF_TERMINAL_PORT = String(localPort);
+
+    // Store port in workspace for UI to read
+    const portFile = path.join(localWorkspaceDir, ".daemon-port");
+    fs.writeFileSync(portFile, String(localPort), "utf8");
+
+    const env = { ...process.env } as Record<string, string>;
+
+    // eslint-disable-next-line no-console
+    console.log(`Using profile: ${profile.name} (${profile.provider})`);
+    if (model) {
+      // eslint-disable-next-line no-console
+      console.log(`Model: ${model}`);
+    }
+    // eslint-disable-next-line no-console
+    console.log(`Local workspace: ${localWorkspaceDir}`);
+    // eslint-disable-next-line no-console
+    console.log(`Starting daemon... (ws://127.0.0.1:${localPort})`);
+
+    const argv1 = process.argv[1] || "";
+    const isDevTs = argv1.endsWith(".ts") || argv1.endsWith(".tsx");
+    const projectDir = (() => {
+      const abs = path.resolve(argv1 || "");
+      if (abs.includes(`${path.sep}src${path.sep}bin${path.sep}ff-terminal.ts`)) {
+        return path.resolve(path.dirname(abs), "..", "..");
+      }
+      if (abs.includes(`${path.sep}dist${path.sep}bin${path.sep}ff-terminal.js`)) {
+        return path.resolve(path.dirname(abs), "..", "..");
+      }
+      return process.cwd();
+    })();
+
+    const localTsx = path.join(projectDir, "node_modules", ".bin", process.platform === "win32" ? "tsx.cmd" : "tsx");
+    const tsxCmd = fs.existsSync(localTsx) ? localTsx : "tsx";
+
+    const daemonCmd = isDevTs ? "tsx" : process.execPath;
+    const daemonArgs = isDevTs ? ["src/daemon/daemon.ts"] : ["dist/daemon/daemon.js"];
+
+    const uiCmd = isDevTs ? "tsx" : process.execPath;
+    const uiArgs = isDevTs ? ["src/cli/app.tsx"] : ["dist/cli/app.js"];
+
+    const daemonSpawnCmd = isDevTs ? tsxCmd : daemonCmd;
+    const uiSpawnCmd = isDevTs ? tsxCmd : uiCmd;
+
+    const daemon = spawn(daemonSpawnCmd, daemonArgs, { env, stdio: ["ignore", "pipe", "pipe"], shell: true, cwd: projectDir });
+    if (env.FF_DAEMON_LOG === "1") {
+      daemon.stdout?.on("data", (b) => process.stderr.write(String(b)));
+      daemon.stderr?.on("data", (b) => process.stderr.write(String(b)));
+    }
+
     await new Promise((r) => setTimeout(r, 300));
     const ui = spawn(uiSpawnCmd, uiArgs, { env, stdio: "inherit", shell: true, cwd: projectDir });
 

@@ -22,6 +22,7 @@ export type ToolCall = {
 export type ProviderStreamEvent =
   | { type: "content"; delta: string }
   | { type: "thinking"; delta: string }
+  | { type: "status"; message: string }
   | { type: "error"; message: string }
   | { type: "final"; content: string; toolCalls: ToolCall[]; rawModel?: string };
 
@@ -34,5 +35,6 @@ export type Provider = {
     temperature: number;
     maxTokens: number;
     signal: AbortSignal;
+    sessionId?: string;
   }): AsyncGenerator<ProviderStreamEvent>;
 };

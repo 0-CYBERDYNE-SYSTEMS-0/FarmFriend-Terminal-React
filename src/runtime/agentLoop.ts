@@ -362,7 +362,8 @@ export async function* runAgentTurn(params: {
         tools,
         temperature: Number((cfg as any).temperature ?? 0.7),
         maxTokens: Number((cfg as any).max_tokens ?? 12000),
-        signal
+        signal,
+        sessionId
       })) {
         if (ev.type === "content") {
           // Hide stop token from UI if it appears.
@@ -380,6 +381,14 @@ export async function* runAgentTurn(params: {
         } else if (ev.type === "thinking") {
           emittedAnyThinking = true;
           yield { kind: "thinking", delta: ev.delta };
+        } else if (ev.type === "status") {
+          yield { kind: "status", message: ev.message };
+          logger.log("info", "provider_status", {
+            session_id: sessionId,
+            turn_id: turnId,
+            iteration: i + 1,
+            message: ev.message
+          });
         } else if (ev.type === "error") {
           yield { kind: "error", message: ev.message };
           logger.log("error", "provider_error", {

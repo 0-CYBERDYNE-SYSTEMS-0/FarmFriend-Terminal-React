@@ -139,7 +139,7 @@ function zaiAnthropicProvider(params: { apiKey: string; baseUrl: string; endpoin
 
   return {
     name: "zai",
-    async *streamChat({ model, messages, tools, temperature, maxTokens, signal }): AsyncGenerator<ProviderStreamEvent> {
+    async *streamChat({ model, messages, tools, temperature, maxTokens, signal }: Parameters<Provider["streamChat"]>[0]): AsyncGenerator<ProviderStreamEvent> {
       const url = endpoint ? `${baseUrl}${endpoint}` : baseUrl;
       const { anthropicMessages, system } = convertMessages(messages);
       const payload: any = {
