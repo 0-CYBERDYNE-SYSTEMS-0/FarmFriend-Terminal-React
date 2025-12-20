@@ -15,6 +15,7 @@ import { ExecutionRecord } from "./hooks/completionValidator.js";
 import { listSkillStubs } from "./tools/implementations/skills.js";
 import { HookRegistry } from "./hooks/registry.js";
 import { createCompletionValidationStopHook } from "./hooks/builtin/completionValidationStopHook.js";
+import { createSkillAllowedToolsHooks } from "./hooks/builtin/skillAllowedToolsHook.js";
 import { StructuredLogger, parseLogLevel, redactValue, truncateForLog } from "./logging/structuredLogger.js";
 import { newId } from "../shared/ids.js";
 
@@ -237,10 +238,31 @@ export async function* runAgentTurn(params: {
     const tokenSet = new Set(tokens);
     if (!tokenSet.size) return "";
 
-    const score = (s: { slug: string; name?: string; summary?: string; description?: string }) => {
-      const hay = `${s.slug} ${s.name || ""} ${s.summary || ""} ${s.description || ""}`.toLowerCase();
+    const score = (s: {
+      slug: string;
+      name?: string;
+      summary?: string;
+      description?: string;
+      tags?: string[];
+      triggers?: string[];
+      priority?: string;
+    }) => {
+      const slugName = `${s.slug} ${s.name || ""}`.toLowerCase();
+      const summaryDesc = `${s.summary || ""} ${s.description || ""}`.toLowerCase();
+      const tags = (s.tags || []).join(" ").toLowerCase();
+      const triggers = (s.triggers || []).join(" ").toLowerCase();
       let n = 0;
-      for (const t of tokenSet) if (hay.includes(t)) n += 1;
+      for (const t of tokenSet) {
+        if (triggers.includes(t)) n += 3;
+        if (tags.includes(t)) n += 2;
+        if (slugName.includes(t)) n += 2;
+        if (summaryDesc.includes(t)) n += 1;
+      }
+      const pr = (s.priority || "").toLowerCase();
+      if (pr === "high") n += 2;
+      if (pr === "medium") n += 1;
+      const prNum = Number(pr);
+      if (!Number.isNaN(prNum)) n += Math.max(0, Math.min(5, prNum));
       return n;
     };
 
@@ -343,6 +365,10 @@ export async function* runAgentTurn(params: {
         workspaceDir: toolCtx?.workspaceDir
       })
     );
+  }
+
+  if (String(process.env.FF_SKILLS_ENFORCE_ALLOWED_TOOLS || "") === "1") {
+    for (const hook of createSkillAllowedToolsHooks()) hookRegistry.register(hook);
   }
 
   try {

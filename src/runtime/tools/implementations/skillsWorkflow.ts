@@ -16,6 +16,10 @@ type DraftArgs = {
   recommended_tools?: string[];
   author?: string;
   version?: string;
+  license?: string;
+  compatibility?: string;
+  metadata?: Record<string, string>;
+  allowed_tools?: string[] | string;
 };
 
 type ApplyArgs = { draft_id?: string; force_overwrite?: boolean; cleanup_draft?: boolean };
@@ -58,6 +62,10 @@ function buildSkillMarkdown(params: {
   assets?: string[];
   author?: string;
   version: string;
+  license?: string;
+  compatibility?: string;
+  metadata?: Record<string, string>;
+  allowed_tools?: string[];
   instructions: string;
 }): string {
   const lines: string[] = [];
@@ -68,6 +76,17 @@ function buildSkillMarkdown(params: {
   if (params.description) lines.push(`description: ${params.description}`);
   lines.push(`version: ${params.version}`);
   if (params.author) lines.push(`author: ${params.author}`);
+  if (params.license) lines.push(`license: ${params.license}`);
+  if (params.compatibility) lines.push(`compatibility: ${params.compatibility}`);
+  if (params.metadata && Object.keys(params.metadata).length) {
+    lines.push("metadata:");
+    for (const [k, v] of Object.entries(params.metadata)) {
+      lines.push(`  ${k}: ${v}`);
+    }
+  }
+  if (params.allowed_tools?.length) {
+    lines.push(`allowed-tools: ${params.allowed_tools.join(" ")}`);
+  }
   if (params.tags?.length) {
     lines.push("tags:");
     for (const t of params.tags) lines.push(`  - ${t}`);
@@ -111,11 +130,25 @@ export async function skillDraftTool(argsRaw: unknown): Promise<string> {
   const description = String(args?.description || "").trim() || summary;
   const version = String(args?.version || "").trim() || "0.1.0";
   const author = typeof args?.author === "string" ? args.author.trim() : undefined;
+  const license = typeof args?.license === "string" ? args.license.trim() : undefined;
+  const compatibility = typeof args?.compatibility === "string" ? args.compatibility.trim() : undefined;
+  const metadata =
+    args?.metadata && typeof args.metadata === "object" && !Array.isArray(args.metadata)
+      ? Object.fromEntries(Object.entries(args.metadata).map(([k, v]) => [String(k), String(v)]))
+      : undefined;
   const triggers = Array.isArray(args?.triggers) ? args.triggers.map(String).map((s) => s.trim()).filter(Boolean) : undefined;
   const tags = Array.isArray(args?.tags) ? args.tags.map(String).map((s) => s.trim()).filter(Boolean) : undefined;
   const recommended_tools = Array.isArray(args?.recommended_tools)
     ? args.recommended_tools.map(String).map((s) => s.trim()).filter(Boolean)
     : undefined;
+  const allowed_tools = Array.isArray(args?.allowed_tools)
+    ? args.allowed_tools.map(String).map((s) => s.trim()).filter(Boolean)
+    : typeof args?.allowed_tools === "string"
+      ? args.allowed_tools
+          .split(/\s+/)
+          .map((s) => s.trim())
+          .filter(Boolean)
+      : undefined;
 
   const assets: Record<string, string> = {};
   const assetPaths: string[] = [];
@@ -140,6 +173,10 @@ export async function skillDraftTool(argsRaw: unknown): Promise<string> {
     assets: assetPaths.length ? assetPaths : undefined,
     author,
     version,
+    license,
+    compatibility,
+    metadata,
+    allowed_tools,
     instructions
   });
 
@@ -156,6 +193,10 @@ export async function skillDraftTool(argsRaw: unknown): Promise<string> {
     description,
     version,
     author,
+    license,
+    compatibility,
+    metadata,
+    allowed_tools,
     triggers,
     tags,
     recommended_tools,
@@ -245,10 +286,31 @@ export async function skillSequencerTool(argsRaw: unknown): Promise<string> {
     .filter((t) => t.length >= 3 && !STOP.has(t));
   const tokenSet = new Set(tokens);
 
-  const score = (s: { slug: string; name?: string; summary?: string; description?: string }) => {
-    const hay = `${s.slug} ${s.name || ""} ${s.summary || ""} ${s.description || ""}`.toLowerCase();
+  const score = (s: {
+    slug: string;
+    name?: string;
+    summary?: string;
+    description?: string;
+    tags?: string[];
+    triggers?: string[];
+    priority?: string;
+  }) => {
+    const slugName = `${s.slug} ${s.name || ""}`.toLowerCase();
+    const summaryDesc = `${s.summary || ""} ${s.description || ""}`.toLowerCase();
+    const tags = (s.tags || []).join(" ").toLowerCase();
+    const triggers = (s.triggers || []).join(" ").toLowerCase();
     let n = 0;
-    for (const t of tokenSet) if (hay.includes(t)) n += 1;
+    for (const t of tokenSet) {
+      if (triggers.includes(t)) n += 3;
+      if (tags.includes(t)) n += 2;
+      if (slugName.includes(t)) n += 2;
+      if (summaryDesc.includes(t)) n += 1;
+    }
+    const pr = (s.priority || "").toLowerCase();
+    if (pr === "high") n += 2;
+    if (pr === "medium") n += 1;
+    const prNum = Number(pr);
+    if (!Number.isNaN(prNum)) n += Math.max(0, Math.min(5, prNum));
     return n;
   };
 
@@ -285,4 +347,3 @@ export async function skillSequencerTool(argsRaw: unknown): Promise<string> {
     2
   );
 }
-

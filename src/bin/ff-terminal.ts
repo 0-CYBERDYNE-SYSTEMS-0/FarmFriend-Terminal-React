@@ -2,6 +2,7 @@
 
 import { startDaemon } from "../daemon/daemon.js";
 import { startWebServer } from "../web/server.js";
+import { startAcpServer } from "../acp/server.js";
 import { startInkUi } from "../cli/app.js";
 import { ToolRegistry } from "../runtime/tools/registry.js";
 import { registerAllTools } from "../runtime/registerDefaultTools.js";
@@ -30,6 +31,7 @@ function usage(): void {
   ff-terminal ui
   ff-terminal start [profile] [--display-mode verbose|clean]
   ff-terminal web
+  ff-terminal acp [--profile <name>]
   ff-terminal run --prompt "..." [--profile <name>] [--session <id>] [--headless]
   ff-terminal run --scheduled-task <id-or-name> [--profile <name>] [--session <id>] --headless
   ff-terminal schedule list
@@ -272,6 +274,57 @@ async function run(): Promise<void> {
 
   if (cmd === "web") {
     await startWebServer();
+    return;
+  }
+
+  if (cmd === "acp") {
+    const profileName = pickArg(rest, "--profile");
+    const repoRoot = findRepoRoot();
+    const workspaceDir = resolveWorkspaceDir(process.env.FF_WORKSPACE_DIR ?? undefined);
+    warnIfLocalWorkspace(workspaceDir, repoRoot);
+
+    if (profileName) {
+      const config = readConfig();
+      const profile = getProfileByName(config, profileName);
+      if (!profile) throw new Error(`No such profile: ${profileName}\n`);
+
+      process.env.FF_PROVIDER = profile.provider;
+      process.env.FF_PROFILE = profile.name;
+
+      const model = profile.model?.trim();
+      if (model) process.env.FF_MODEL = model;
+
+      await applyProviderCredentialsFromProfile(profile);
+
+      if (profile.subagentModel?.trim()) process.env.FF_SUBAGENT_MODEL = profile.subagentModel.trim();
+      if (profile.toolModel?.trim()) process.env.FF_TOOL_MODEL = profile.toolModel.trim();
+      if (profile.webModel?.trim()) process.env.FF_WEB_MODEL = profile.webModel.trim();
+      if (profile.imageModel?.trim()) process.env.FF_IMAGE_MODEL = profile.imageModel.trim();
+      if (profile.videoModel?.trim()) process.env.FF_VIDEO_MODEL = profile.videoModel.trim();
+
+      for (const k of OPTIONAL_TOOL_ENV_KEYS) {
+        const profileValue = await getCredential(profile.name, k);
+        if (profileValue) {
+          process.env[k] = profileValue;
+          continue;
+        }
+        if (String(process.env[k] || "").trim()) continue;
+        const globalValue = await getCredential(GLOBAL_TOOL_CRED_PROFILE, k);
+        if (globalValue) {
+          process.env[k] = globalValue;
+          continue;
+        }
+      }
+
+      // eslint-disable-next-line no-console
+      console.log(`Using profile: ${profile.name} (${profile.provider})`);
+      if (model) {
+        // eslint-disable-next-line no-console
+        console.log(`Model: ${model}`);
+      }
+    }
+
+    await startAcpServer({ repoRoot, workspaceDir });
     return;
   }
 
