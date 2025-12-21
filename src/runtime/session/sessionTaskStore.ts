@@ -46,6 +46,12 @@ export function loadSessionTaskStore(params: {
     return { store, storePath, migratedFromLegacy: false };
   }
 
+  // Legacy task migration is opt-in to avoid cross-session leakage.
+  // Set FF_TASKS_MIGRATE_LEGACY=1 to import workspace-level tasks.json.
+  if (process.env.FF_TASKS_MIGRATE_LEGACY !== "1") {
+    return { store, storePath, migratedFromLegacy: false };
+  }
+
   const legacyPath = path.join(params.workspaceDir, "tasks.json");
   const legacy = readStore(legacyPath);
   if (legacy.tasks.length > 0) {
