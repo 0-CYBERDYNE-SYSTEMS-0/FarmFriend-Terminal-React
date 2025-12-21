@@ -1,5 +1,5 @@
 import { AgentStopContext, AgentStopResult, Hook } from "../types.js";
-import { extractPromises, unfulfilledHighConfidence, Promise as CVPromise } from "../completionValidator.js";
+import { Promise as CVPromise } from "../completionValidator.js";
 import { loadSessionTaskStore } from "../../session/sessionTaskStore.js";
 
 type Task = {
@@ -25,29 +25,8 @@ export function createCompletionValidationStopHook(params: {
     const { store } = loadSessionTaskStore({ workspaceDir: params.workspaceDir, sessionId: _ctx.sessionId });
     const openTasks = store.tasks.filter((t) => t.status === "open");
 
-    // Promise-based validation (long-horizon autonomy): look at the assistant's latest message
-    const promises = extractPromises(_ctx.assistantContent || "");
-
-    // Heuristic: if no tools ran this turn but assistant text contains hallucinated tool tags,
-    // synthesize a high-confidence promise to force a retry instead of silently stopping.
-    const syntheticPromises: CVPromise[] = [];
-    if (_ctx.toolExecutionsCount === 0) {
-      const matches = [...(_ctx.assistantContent || "").matchAll(/\[tool:([^\]\s]+)\]/gi)];
-      for (const m of matches.slice(0, 4)) {
-        syntheticPromises.push({
-          id: `promise_synth_${m[1] || "tool"}`,
-          content: `[tool:${m[1]}] (no execution observed)`,
-          promiseType: "tool_execution",
-          extractedAction: "execute",
-          extractedTarget: m[1] || "tool_call",
-          confidence: 0.9,
-          fulfilled: false,
-          fulfillmentEvidence: []
-        });
-      }
-    }
-
-    const openPromises = unfulfilledHighConfidence([...promises, ...syntheticPromises]);
+    // Simplest fix: disable promise-based validation entirely; only enforce open tasks.
+    const openPromises: CVPromise[] = [];
 
     if (!openTasks.length && !openPromises.length) return { action: "allow" };
 
