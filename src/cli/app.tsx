@@ -9,7 +9,7 @@ import type { Profile } from "../runtime/profiles/types.js";
 import { loadToolSchemas } from "../runtime/tools/toolSchemas.js";
 import { readMountsConfig, setMountEnabled } from "../runtime/config/mounts.js";
 import { findRepoRoot } from "../runtime/config/repoRoot.js";
-import { defaultWorkspaceDir, resolveWorkspaceDir } from "../runtime/config/paths.js";
+import { resolveWorkspaceDir } from "../runtime/config/paths.js";
 import { resolveConfig } from "../runtime/config/loadConfig.js";
 import { loadCommands, listCommands, getCommand } from "../runtime/commands/loader.js";
 import { loadAgentConfigs, listAgentConfigs, getAllTemplates } from "../runtime/agents/loader.js";
@@ -47,6 +47,7 @@ function parseWireChunk(chunk: string, displayMode: string = "clean"): Line | nu
     if (chunk === "task_completed") return null;
     if (chunk === "Starting turn...") return null;
     if (chunk.startsWith("Provider:") && chunk.includes("Model:")) return null;
+    if (chunk.startsWith("completion_validation:")) return null;
   }
 
   if (chunk === "task_completed") return { kind: "system", text: "task_completed" };
@@ -220,6 +221,7 @@ const ChatPrompt = memo(function ChatPrompt(props: {
   processing: boolean;
   showThinking: boolean;
   showTodoPanel: boolean;
+  showToolDetails: boolean;
   thinkingCount: number;
 }) {
   const value = useSyncExternalStore(
@@ -237,6 +239,7 @@ const ChatPrompt = memo(function ChatPrompt(props: {
     ? "visible"
     : `hidden (${props.thinkingCount})`;
   const todosText = props.showTodoPanel ? "shown" : "hidden";
+  const toolsText = props.showToolDetails ? "expanded" : "collapsed";
 
   return (
     <>
@@ -244,21 +247,95 @@ const ChatPrompt = memo(function ChatPrompt(props: {
       <Box gap={1}>
         <Spinner active={props.processing} />
         <Text color="gray">
-          Enter to send • Ctrl+C to cancel • Shift+Tab: mode={props.operationMode} • Ctrl+T: thinking {thinkingText} • Ctrl+D: todos {todosText} • /help
+          Enter to send • Ctrl+C to cancel • Shift+Tab: mode={props.operationMode} • Ctrl+T: thinking {thinkingText} • Ctrl+D: todos {todosText} • Ctrl+E: tools {toolsText} • /help
         </Text>
       </Box>
     </>
   );
 });
 
-const Transcript = memo(function Transcript(props: { lines: LineEntry[]; showThinking: boolean }) {
+const TOOL_NAME_PATTERNS = [
+  /^▶\s*([A-Za-z0-9_-]+)/,
+  /^■\s*([A-Za-z0-9_-]+)/,
+  /^✓\s*([A-Za-z0-9_-]+)/,
+  /^Tool:\s*([A-Za-z0-9_-]+)/i
+];
+
+function extractToolName(text: string): string | null {
+  for (const rx of TOOL_NAME_PATTERNS) {
+    const match = text.match(rx);
+    if (match && match[1]) return match[1];
+  }
+  return null;
+}
+
+function summarizeToolGroup(lines: LineEntry[]): string {
+  const names = new Set<string>();
+  for (const line of lines) {
+    const name = extractToolName(line.text.trim());
+    if (name) names.add(name);
+  }
+  const unique = Array.from(names);
+  if (unique.length) {
+    const shown = unique.slice(0, 3).join(", ");
+    const more = unique.length > 3 ? ` +${unique.length - 3}` : "";
+    return `Tools · ${unique.length} ran (${shown}${more}) · Ctrl+E to expand`;
+  }
+  return `Tools · ${lines.length} events · Ctrl+E to expand`;
+}
+
+const Transcript = memo(function Transcript(props: {
+  lines: LineEntry[];
+  showThinking: boolean;
+  showToolDetails: boolean;
+  scrollOffset: number;
+  visibleCount: number;
+}) {
   const filteredLines = props.showThinking
     ? props.lines
     : props.lines.filter(l => l.kind !== "thinking");
 
+  const rendered: LineEntry[] = [];
+  let i = 0;
+  let prevKind: Line["kind"] | null = null;
+  while (i < filteredLines.length) {
+    const line = filteredLines[i];
+    if (line.kind === "tool") {
+      const group: LineEntry[] = [];
+      while (i < filteredLines.length && filteredLines[i].kind === "tool") {
+        group.push(filteredLines[i]);
+        i += 1;
+      }
+      if (props.showToolDetails) {
+        rendered.push(...group);
+      } else {
+        rendered.push({
+          id: group[group.length - 1]?.id ?? line.id,
+          kind: "tool",
+          text: summarizeToolGroup(group)
+        });
+      }
+      prevKind = "tool";
+      continue;
+    }
+
+    if (line.kind === "assistant" && prevKind !== "assistant") {
+      rendered.push({ id: line.id * 1000 + 1, kind: "system", text: "Assistant" } as LineEntry);
+    }
+    rendered.push(line);
+    prevKind = line.kind;
+    i += 1;
+  }
+
+  const visibleCount = Math.max(8, props.visibleCount);
+  const maxOffset = Math.max(0, rendered.length - visibleCount);
+  const offset = Math.min(Math.max(0, props.scrollOffset), maxOffset);
+  const start = Math.max(0, rendered.length - visibleCount - offset);
+  const windowed = rendered.slice(start, start + visibleCount);
+
   return (
     <Box flexDirection="column">
-      {filteredLines.slice(-40).map((l, i) => (
+      {windowed.map((l) => (
         <Text
           key={l.id}
           color={
@@ -374,7 +451,7 @@ const TodoPanel = memo(function TodoPanel(props: {
     return (
       <Box flexDirection="column" borderStyle="single" borderColor="gray">
         <Text color="yellow">Todo Panel</Text>
-        <Text dimColor>No todos for this session. Use manage_task tool to create.</Text>
+        <Text color="gray">No todos for this session. Use manage_task tool to create.</Text>
       </Box>
     );
   }
@@ -405,13 +482,13 @@ const TodoPanel = memo(function TodoPanel(props: {
         <Box flexDirection="column" marginTop={1}>
           <Text color="gray">○ Pending ({pending.length})</Text>
           {pending.slice(0, 3).map(t => (
-            <Text key={t.id} dimColor>
+            <Text key={t.id} color="gray">
               • {t.content.slice(0, 60)}
               {t.content.length > 60 ? "..." : ""}
             </Text>
           ))}
           {pending.length > 3 && (
-            <Text dimColor>  ... and {pending.length - 3} more</Text>
+            <Text color="gray">  ... and {pending.length - 3} more</Text>
           )}
         </Box>
       )}
@@ -423,11 +500,57 @@ const TodoPanel = memo(function TodoPanel(props: {
       )}
 
       <Box marginTop={1}>
-        <Text dimColor>
+        <Text color="gray">
           Press Ctrl+D to hide • Auto-refreshes every 2s
         </Text>
       </Box>
     </Box>
+  );
+});
+
+const TodoSummary = memo(function TodoSummary(props: {
+  sessionId: string | null;
+  workspaceDir: string;
+  visible: boolean;
+}) {
+  const [todos, setTodos] = useState<Todo[]>([]);
+
+  useEffect(() => {
+    if (!props.sessionId) return;
+    const todoPath = path.join(
+      props.workspaceDir,
+      "todos",
+      "sessions",
+      `${props.sessionId}.json`
+    );
+
+    const refresh = () => {
+      try {
+        if (!fs.existsSync(todoPath)) {
+          setTodos([]);
+          return;
+        }
+        const content = fs.readFileSync(todoPath, "utf8");
+        const data = JSON.parse(content);
+        setTodos(Array.isArray(data.todos) ? data.todos : []);
+      } catch {
+        setTodos([]);
+      }
+    };
+
+    refresh();
+    const interval = setInterval(refresh, 4000);
+    return () => clearInterval(interval);
+  }, [props.sessionId, props.workspaceDir]);
+
+  if (!props.visible || !props.sessionId || todos.length === 0) return null;
+
+  const pending = todos.filter(t => t.status === "pending").length;
+  const completed = todos.filter(t => t.status === "completed").length;
+  return (
+    <Text color="gray">
+      Todos · {todos.length} total ({pending} pending · {completed} done) · Ctrl+D to open
+    </Text>
   );
 });
 
@@ -1081,8 +1204,10 @@ function App(props: { port: number }) {
   const [commandSkippedFields, setCommandSkippedFields] = useState<Set<string>>(new Set());
   const [commandEditValue, setCommandEditValue] = useState("");
 
-  const [showThinking, setShowThinking] = useState(true);
+  const [showThinking, setShowThinking] = useState(false);
   const [showTodoPanel, setShowTodoPanel] = useState(false);
+  const [showToolDetails, setShowToolDetails] = useState(false);
+  const [scrollOffset, setScrollOffset] = useState(0);
 
   const [doctorRunning, setDoctorRunning] = useState(false);
   const [doctorWaitingForConfirm, setDoctorWaitingForConfirm] = useState(false);
@@ -1111,6 +1236,11 @@ function App(props: { port: number }) {
     const workspaceFromEnv = process.env.FF_WORKSPACE_DIR;
     return resolveWorkspaceDir((runtimeCfg as any).workspace_dir ?? workspaceFromEnv ?? undefined);
   }, []);
+
+  const transcriptHeight = useMemo(() => {
+    const rows = stdout?.rows ?? 40;
+    return Math.max(8, rows - 12);
+  }, [stdout?.rows]);
 
   const discoverProjects = (): ProjectStub[] => {
     const projectsRoot = path.join(workspaceDir, "projects");
@@ -1233,6 +1363,12 @@ function App(props: { port: number }) {
     linesRef.current = [];
     commitLines(true);
   }, [commitLines]);
+
+  useEffect(() => {
+    if (scrollOffset === 0) return;
+    const maxOffset = Math.max(0, lines.length - transcriptHeight);
+    if (scrollOffset > maxOffset) setScrollOffset(maxOffset);
+  }, [lines.length, scrollOffset, transcriptHeight]);
 
   const displayMode = useMemo(() => String(process.env.FF_DISPLAY_MODE || "clean").trim().toLowerCase(), []);
 
@@ -1566,6 +1702,19 @@ Then apply it with agent_apply to save the agent config.`;
     // Shift+Tab cycles operation mode (matches Python TUI).
     if (key.tab && key.shift) {
       cycleOperationMode();
+      return;
+    }
+
+    if (key.pageUp) {
+      setScrollOffset((v) => v + 5);
+      return;
+    }
+    if (key.pageDown) {
+      setScrollOffset((v) => Math.max(0, v - 5));
+      return;
+    }
+    if ((key as any).home) {
+      setScrollOffset(0);
       return;
     }
 
@@ -2376,11 +2525,14 @@ Use skill_draft first to create the draft, then skill_apply to create the final 
         { kind: "system", text: "  /quit (/exit)    Exit" },
         { kind: "system", text: "  //text           Send a literal prompt starting with '/'" },
         { kind: "system", text: "" },
-        { kind: "system", text: "Shortcuts:" },
-        { kind: "system", text: "  Shift+Tab        Cycle operation mode" },
-        { kind: "system", text: "  Ctrl+T           Toggle thinking visibility" },
-        { kind: "system", text: "  Ctrl+D           Toggle todo panel" }
-      ]);
+            { kind: "system", text: "Shortcuts:" },
+            { kind: "system", text: "  Shift+Tab        Cycle operation mode" },
+            { kind: "system", text: "  Ctrl+T           Toggle thinking visibility" },
+            { kind: "system", text: "  Ctrl+D           Toggle todo panel" },
+            { kind: "system", text: "  Ctrl+E           Toggle tool details" },
+            { kind: "system", text: "  PageUp/PageDown  Scroll transcript" },
+            { kind: "system", text: "  Home             Jump to bottom" }
+          ]);
     };
 
     const showAgents = () => {
@@ -2450,6 +2602,18 @@ Use skill_draft first to create the draft, then skill_apply to create the final 
         pushLines({
           kind: "system",
           text: `Todo panel ${next ? "shown" : "hidden"}`
+        });
+        return next;
+      });
+      return;
+    }
+
+    if (key.ctrl && ch === "e") {
+      setShowToolDetails(prev => {
+        const next = !prev;
+        pushLines({
+          kind: "system",
+          text: `Tool details ${next ? "expanded" : "collapsed"}`
         });
         return next;
       });
@@ -2825,10 +2989,21 @@ Use skill_draft first to create the draft, then skill_apply to create the final 
       />
       <TodoPanel
         sessionId={sessionId}
-        workspaceDir={defaultWorkspaceDir()}
+        workspaceDir={workspaceDir}
         visible={showTodoPanel}
       />
-      <Transcript lines={lines} showThinking={showThinking} />
+      <TodoSummary
+        sessionId={sessionId}
+        workspaceDir={workspaceDir}
+        visible={mode === "chat" && !showTodoPanel}
+      />
+      <Transcript
+        lines={lines}
+        showThinking={showThinking}
+        showToolDetails={showToolDetails}
+        scrollOffset={scrollOffset}
+        visibleCount={transcriptHeight}
+      />
       {mode === "chat" ? (
         <ChatPrompt
           inputStore={inputStore.current}
@@ -2836,6 +3011,7 @@ Use skill_draft first to create the draft, then skill_apply to create the final 
           processing={processing}
           showThinking={showThinking}
           showTodoPanel={showTodoPanel}
+          showToolDetails={showToolDetails}
           thinkingCount={lines.filter(l => l.kind === "thinking").length}
         />
       ) : null}
