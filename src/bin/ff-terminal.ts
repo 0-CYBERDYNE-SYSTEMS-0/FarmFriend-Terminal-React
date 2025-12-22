@@ -141,7 +141,9 @@ async function run(): Promise<void> {
   // Load .env/.env.local (cwd + repo root) for convenience (API keys like TAVILY_API_KEY, PERPLEXITY_API_KEY, etc.).
   loadDefaultDotenv({ repoRoot: findRepoRoot() });
 
-  const [cmd, ...rest] = process.argv.slice(2);
+  const rawArgs = process.argv.slice(2);
+  const args = rawArgs[0] === "--" ? rawArgs.slice(1) : rawArgs;
+  const [cmd, ...rest] = args;
 
   if (!cmd || cmd === "-h" || cmd === "--help") {
     usage();

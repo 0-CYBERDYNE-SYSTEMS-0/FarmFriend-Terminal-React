@@ -397,3 +397,36 @@ The runtime enforces safety boundaries:
 - **Session caching**: Conversation history loaded once at start
 - **Tool schema caching**: Schemas loaded once from port packet
 - **Workspace size**: Session history grows with conversation length
+
+## Testing Strategy
+
+### Running Tests
+- **All tests**: `pnpm test` or `npm test` - Runs full test suite with Vitest
+- **Watch mode**: `pnpm test -- --watch` - Continuous testing during development
+- **Single file**: `pnpm test -- <filename>` - Run tests for specific file
+- **Test UI**: `pnpm test:ui` or `npm run test:ui` - Interactive test explorer
+- **Coverage report**: `pnpm test:coverage` or `npm run test:coverage` - Generate coverage metrics
+
+### Test Configuration
+- **Framework**: Vitest with Node environment
+- **Globals enabled**: No need to import `describe`, `it`, `expect`
+- **TypeScript**: Automatically transpiled via tsx
+- **Configuration**: `vitest.config.ts` - Minimal setup, uses ES2022 target
+
+## Quick Troubleshooting
+
+### Build Issues
+- **TypeScript errors**: Run `npm run build` to catch compilation errors
+- **Module resolution**: Check `tsconfig.json` for moduleResolution: "NodeNext"
+- **JSX in .ts files**: Ensure files using JSX have proper import statements
+
+### Daemon/UI Issues
+- **WebSocket connection fails**: Verify daemon is running on port 28888
+- **Port already in use**: Kill existing process: `lsof -ti:28888 | xargs kill`
+- **Tool not found**: Check tool is registered in `registerDefaultTools()` in tools/registry.ts
+- **Profile issues**: Validate profile exists: `pnpm dev -- profile list`
+
+### Common Environment Setup
+- Set `FF_WORKSPACE_DIR` to use custom workspace location
+- Set `FF_DEBUG=true` for verbose logging output
+- Set `FF_LOG_HOOKS_JSONL=true` to enable tool call logging for debugging

@@ -80,6 +80,27 @@ npm run start:daemon
 npm run start:cli
 ```
 
+### Install the CLI launcher
+
+1. Run `npm run build` (again if you already built once).
+2. Install the launcher into `~/.local/bin`:
+   ```bash
+   ./scripts/install-cli.sh
+   ```
+3. Ensure the install directory is on your shell `PATH`:
+   ```bash
+   echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zprofile
+   source ~/.zprofile
+   ```
+4. Verify the binary and its help text:
+   ```bash
+   command -v ff-terminal
+   ff-terminal --help
+   ```
+
+With the launcher installed you can run the CLI directly (no longer needing `npm run dev -- ...` for everyday use).
+Start the UI with `ff-terminal start` (and pass a profile name or `--display-mode` flags as needed).
+
 ---
 
 ## 🚀 Getting Started
@@ -98,6 +119,10 @@ npm run dev:cli
 #### Option A: Profile Setup (Recommended)
 ```bash
 # Create a new profile
+# Run the profile wizard with the CLI (after installing it) or continue using the dev runner:
+ff-terminal profile setup
+
+# If you still prefer the `npm run dev` flow:
 npm run dev -- profile setup
 
 # List available profiles
@@ -265,9 +290,40 @@ Profiles are stored in `~/.ff-terminal-profiles.json` with secure credential sto
 ### **Provider Settings**
 Each provider supports custom configuration:
 - Base URLs and endpoints
-- Model selection and parameters  
+- Model selection and parameters
 - Authentication tokens and API keys
 - Rate limiting and timeout settings
+
+### **Workspace Directory Configuration**
+The workspace directory stores sessions, logs, and project data. It defaults to `<project-root>/ff-terminal-workspace` but can be customized:
+
+**Default Behavior:**
+- Global mode: Uses workspace relative to the repository root
+- Local mode: Creates isolated workspace in current directory with `ff-terminal local`
+
+**Override the Workspace Path:**
+1. **Environment Variable** (highest priority):
+   ```bash
+   export FF_WORKSPACE_DIR="/custom/path/to/workspace"
+   ff-terminal start
+   ```
+
+2. **Configuration File** (platform-specific):
+   - macOS: `~/Library/Application Support/ff-terminal/config.json`
+   - Linux: `~/.config/ff-terminal/config.json`
+   - Windows: `%APPDATA%\ff-terminal\config.json`
+
+   Add to your config file:
+   ```json
+   {
+     "workspace_dir": "/Users/yourusername/FarmFriend-Terminal-React/ff-terminal-workspace"
+   }
+   ```
+
+3. **Code Resolution** (automatic fallback):
+   The system automatically uses the current user's home directory with dynamic path resolution. No hardcoded paths are used.
+
+**Note:** The workspace directory must be writable by the current user. The application automatically creates required subdirectories if missing.
 
 ### **Skill Configuration**
 Individual skills can be enabled/disabled and customized:
