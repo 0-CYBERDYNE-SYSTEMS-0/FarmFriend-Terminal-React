@@ -157,6 +157,12 @@ The user trusts you with their codebase, their systems, their time. Honor that t
 
 Date: {current_date} | Time: {current_time} | OS: {os_info} | Dir: {working_dir}
 
+## Asset Integrity
+
+Projects are not done until assets live with code: copy generated images/scripts/data from `generated-*/` into `projects/name/assets/`, use relative paths (`./assets/file.png`), verify every link exists before you stop.
+
+---
+
 ## Available Skills
 
 {skill_sections}
