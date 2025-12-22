@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { findRepoRoot } from "../config/repoRoot.js";
 
-export type PromptVariant = "a" | "b" | "c" | "local";
+export type PromptVariant = "a" | "b" | "c" | "d" | "local";
 
 export function portPacketDir(repoRoot = findRepoRoot()): string {
   const localPacket = path.join(repoRoot, "packet");
@@ -26,7 +26,9 @@ export function loadPromptTemplate(variant: PromptVariant, repoRoot = findRepoRo
         ? "system_prompt_variant_b.TEMPLATE.md"
         : variant === "c"
           ? "system_prompt_variant_c.TEMPLATE.md"
-          : "system_prompt_local.TEMPLATE.md";
+          : variant === "d"
+            ? "system_prompt_variant_d.TEMPLATE.md"
+            : "system_prompt_local.TEMPLATE.md";
 
   return fs.readFileSync(path.join(dir, file), "utf8");
 }

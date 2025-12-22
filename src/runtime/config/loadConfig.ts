@@ -9,7 +9,7 @@ export type RuntimeConfig = Record<string, unknown> & {
   tool_limit_total?: number;
   hooks_enabled?: boolean;
   parallel_mode?: boolean;
-  system_message_variant?: "a" | "b" | "c";
+  system_message_variant?: "a" | "b" | "c" | "d";
   log_level?: string;
   log_max_bytes?: number;
   log_retention?: number;

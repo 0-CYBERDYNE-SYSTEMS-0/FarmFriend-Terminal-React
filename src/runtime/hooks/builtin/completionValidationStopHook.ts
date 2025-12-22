@@ -1,5 +1,4 @@
 import { AgentStopContext, AgentStopResult, Hook } from "../types.js";
-import { Promise as CVPromise } from "../completionValidator.js";
 import { loadSessionTaskStore } from "../../session/sessionTaskStore.js";
 
 type Task = {
@@ -25,54 +24,35 @@ export function createCompletionValidationStopHook(params: {
     const { store } = loadSessionTaskStore({ workspaceDir: params.workspaceDir, sessionId: _ctx.sessionId });
     const openTasks = store.tasks.filter((t) => t.status === "open");
 
-    // Simplest fix: disable promise-based validation entirely; only enforce open tasks.
-    const openPromises: CVPromise[] = [];
+    if (!openTasks.length) return { action: "allow" };
 
-    if (!openTasks.length && !openPromises.length) return { action: "allow" };
+    blockAttempts += 1;
 
-    // ONE-SHOT NUDGE: Single gentle reminder, then allow stop
-    // This catches ~80% of "forgot to finish" cases without creating loops
-    if (blockAttempts < params.maxAttempts) {
-      blockAttempts += 1;
+    // Show exact task descriptions for this session.
+    const taskList = openTasks
+      .slice(0, 5)
+      .map((t) => `- [${t.id}] ${t.description}`)
+      .join("\n");
 
-      // Show exact task descriptions for this session.
-      const taskList = openTasks
-        .slice(0, 5)
-        .map((t) => `- [${t.id}] ${t.description}`)
-        .join("\n");
+    const repeatedWarning = blockAttempts > params.maxAttempts ? `\n\nRepeated stop attempts are still blocked until all open tasks are cleared.` : "";
 
-      const promiseList = openPromises
-        .slice(0, 5)
-        .map((p) => `- (${p.promiseType}) ${p.content}`)
-        .join("\n");
+    const systemPrompt =
+      `Observation: You attempted to stop with outstanding work.\n\n` +
+      `Tasks still marked as open for this session (${openTasks.length}):\n${taskList}\n\n` +
+      `Complete these tasks or close them with manage_task(action="complete", task_id="...") if they are no longer needed.` +
+      repeatedWarning;
 
-      const sections = [] as string[];
-      if (openTasks.length) {
-        sections.push(
-          `Tasks still marked as open for this session (${openTasks.length}):\n${taskList}`
-        );
-      }
-      if (openPromises.length) {
-        sections.push(
-          `Commitments detected in your last reply that are not yet fulfilled (${openPromises.length}):\n${promiseList}`
-        );
-      }
+    const statusMessage =
+      blockAttempts <= params.maxAttempts
+        ? `completion_validation: ${openTasks.length} tasks open - complete them before stopping`
+        : `completion_validation: ${openTasks.length} tasks open - stop blocked until tasks complete`;
 
-      const systemPrompt =
-        `Observation: You attempted to stop with outstanding work.\n\n` +
-        sections.join("\n\n") +
-        `\n\nIf tasks are done, close them with manage_task. If promises cannot be completed, explicitly explain why (environmental limits, missing context, etc.). Otherwise, continue and fulfill them.`;
-
-      return {
-        action: "block",
-        reason: "completion_validation: outstanding tasks/promises (one nudge allowed)",
-        statusMessage: `completion_validation: ${openTasks.length} tasks, ${openPromises.length} promises open - complete or explain`,
-        systemPrompt
-      };
-    }
-
-    // Second stop attempt: always allow (agent wins)
-    return { action: "allow" };
+    return {
+      action: "block",
+      reason: "completion_validation: open tasks remain",
+      statusMessage,
+      systemPrompt
+    };
   };
 
   return {
