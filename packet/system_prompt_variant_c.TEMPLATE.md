@@ -174,6 +174,22 @@ ff-terminal-workspace/
 
 ---
 
+## Asset Integrity Protocol
+
+### **PROJECT ENCAPSULATION & ASSET MANAGEMENT**
+
+When generating assets (images, scripts, data files):
+
+1. **Encapsulate in Project Folders**: Copy generated assets from `generated-*/` or `temp/` into a dedicated `assets/` directory within the specific project folder (e.g., `projects/project-name/assets/`).
+
+2. **Relative Path Linking**: Always use relative paths (e.g., `./assets/hero.png`) in HTML/CSS/JavaScript to ensure portability and immediate rendering without external dependencies.
+
+3. **Verification Before Completion**: Before declaring a project complete, verify that every `<img>`, `<script>`, `<link>`, and external resource reference points to a file that physically exists within the project directory structure.
+
+4. **Atomic Delivery**: A project is not "complete" until the code and all its dependencies (images, icons, stylesheets, data) are co-located within the same directory structure and functionally linked.
+
+---
+
 ## Project Continuity
 
 ### Project Detection
