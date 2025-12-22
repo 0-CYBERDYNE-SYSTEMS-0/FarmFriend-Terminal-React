@@ -196,7 +196,7 @@ const Banner = memo(function Banner(props: { displayMode: string; width: number 
   return null;
 });
 
-const Spinner = memo(function Spinner(props: { active: boolean }) {
+const Spinner = memo(function Spinner(props: { active: boolean; context?: string }) {
   const [i, setI] = useState(0);
   // ASCII spinner to maximize compatibility across terminal fonts.
   const frames = useMemo(() => ["|", "/", "-", "\\"], []);
@@ -210,7 +210,7 @@ const Spinner = memo(function Spinner(props: { active: boolean }) {
   if (!props.active) return null;
   return (
     <Text color="yellow">
-      [{frames[i]}]{" "}
+      [{frames[i]}] {props.context || "Processing..."}
     </Text>
   );
 });
@@ -269,19 +269,45 @@ function extractToolName(text: string): string | null {
   return null;
 }
 
+// Cache for tool group summaries to avoid redundant string processing
+const toolSummaryCache = new Map<string, string>();
+
 function summarizeToolGroup(lines: LineEntry[]): string {
-  const names = new Set<string>();
-  for (const line of lines) {
-    const name = extractToolName(line.text.trim());
-    if (name) names.add(name);
+  // Create cache key from line IDs
+  const cacheKey = lines.map(l => l.id).join(',');
+
+  if (toolSummaryCache.has(cacheKey)) {
+    return toolSummaryCache.get(cacheKey)!;
   }
+
+  const names = new Set<string>();
+  let failureCount = 0;
+
+  for (const line of lines) {
+    const text = line.text.trim();
+    const name = extractToolName(text);
+    if (name) names.add(name);
+
+    // Count failures (marked with ✗ or containing "failed")
+    if (text.includes('✗') || text.toLowerCase().includes('failed')) {
+      failureCount++;
+    }
+  }
+
   const unique = Array.from(names);
+  let result: string;
+
   if (unique.length) {
     const shown = unique.slice(0, 3).join(", ");
     const more = unique.length > 3 ? ` +${unique.length - 3}` : "";
-    return `Tools · ${unique.length} ran (${shown}${more}) · Ctrl+E to expand`;
+    const failedText = failureCount > 0 ? ` (${failureCount} failed)` : "";
+    result = `Tools · ${unique.length} ran${failedText} (${shown}${more}) · Ctrl+E to expand`;
+  } else {
+    result = `Tools · ${lines.length} events · Ctrl+E to expand`;
   }
-  return `Tools · ${lines.length} events · Ctrl+E to expand`;
+
+  toolSummaryCache.set(cacheKey, result);
+  return result;
 }
 
 const Transcript = memo(function Transcript(props: {
@@ -291,72 +317,109 @@ const Transcript = memo(function Transcript(props: {
   scrollOffset: number;
   visibleCount: number;
 }) {
-  const filteredLines = props.showThinking
-    ? props.lines
-    : props.lines.filter(l => l.kind !== "thinking");
+  // OPTIMIZE 1: Memoize filtering
+  const filteredLines = useMemo(() => {
+    return props.showThinking
+      ? props.lines
+      : props.lines.filter(l => l.kind !== "thinking");
+  }, [props.lines, props.showThinking]);
 
-  const rendered: LineEntry[] = [];
-  let i = 0;
-  let prevKind: Line["kind"] | null = null;
-  while (i < filteredLines.length) {
-    const line = filteredLines[i];
-    if (line.kind === "tool") {
-      const group: LineEntry[] = [];
-      while (i < filteredLines.length && filteredLines[i].kind === "tool") {
-        group.push(filteredLines[i]);
-        i += 1;
+  // OPTIMIZE 2: Memoize rendered lines (tool grouping)
+  const rendered = useMemo((): LineEntry[] => {
+    const result: LineEntry[] = [];
+    let i = 0;
+    let prevKind: Line["kind"] | null = null;
+
+    while (i < filteredLines.length) {
+      const line = filteredLines[i];
+      if (line.kind === "tool") {
+        const group: LineEntry[] = [];
+        while (i < filteredLines.length && filteredLines[i].kind === "tool") {
+          group.push(filteredLines[i]);
+          i += 1;
+        }
+        if (props.showToolDetails) {
+          result.push(...group);
+        } else {
+          result.push({
+            id: group[group.length - 1]?.id ?? line.id,
+            kind: "tool",
+            text: summarizeToolGroup(group)
+          });
+        }
+        prevKind = "tool";
+        continue;
       }
-      if (props.showToolDetails) {
-        rendered.push(...group);
-      } else {
-        rendered.push({
-          id: group[group.length - 1]?.id ?? line.id,
-          kind: "tool",
-          text: summarizeToolGroup(group)
-        });
+
+      if (line.kind === "assistant" && prevKind !== "assistant") {
+        result.push({ id: line.id * 1000 + 1, kind: "system", text: "Assistant" } as LineEntry);
       }
-      prevKind = "tool";
-      continue;
+      result.push(line);
+      prevKind = line.kind;
+      i += 1;
     }
+    return result;
+  }, [filteredLines, props.showToolDetails]);
 
-    if (line.kind === "assistant" && prevKind !== "assistant") {
-      rendered.push({ id: line.id * 1000 + 1, kind: "system", text: "Assistant" } as LineEntry);
-    }
-    rendered.push(line);
-    prevKind = line.kind;
-    i += 1;
-  }
+  // OPTIMIZE 3: Memoize windowing calculations
+  const windowingData = useMemo(() => {
+    const visibleCount = Math.max(8, props.visibleCount);
+    const maxOffset = Math.max(0, rendered.length - visibleCount);
+    const offset = Math.min(Math.max(0, props.scrollOffset), maxOffset);
+    const start = Math.max(0, rendered.length - visibleCount - offset);
+    const windowed = rendered.slice(start, start + visibleCount);
 
-  const visibleCount = Math.max(8, props.visibleCount);
-  const maxOffset = Math.max(0, rendered.length - visibleCount);
-  const offset = Math.min(Math.max(0, props.scrollOffset), maxOffset);
-  const start = Math.max(0, rendered.length - visibleCount - offset);
-  const windowed = rendered.slice(start, start + visibleCount);
+    return { visibleCount, maxOffset, offset, start, windowed };
+  }, [rendered, props.scrollOffset, props.visibleCount]);
+
+  // OPTIMIZE 4: Memoize scroll indicator
+  const scrollIndicator = useMemo(() => {
+    if (windowingData.offset === 0) return null;
+    const lineNumber = windowingData.start + 1;
+    const totalLines = rendered.length;
+    return `↑ Scrolled · Lines ${lineNumber}-${Math.min(windowingData.start + windowingData.visibleCount, totalLines)} of ${totalLines} · Press Home to jump to bottom`;
+  }, [windowingData.offset, windowingData.start, windowingData.visibleCount, rendered.length]);
+
+  // Helper to truncate long lines
+  const truncateText = (text: string, maxLength = 2000): string => {
+    if (text.length <= maxLength) return text;
+    return text.substring(0, maxLength) + "... (truncated, Ctrl+E to expand)";
+  };
 
   return (
     <Box flexDirection="column">
-      {windowed.map((l) => (
-        <Text
-          key={l.id}
-          color={
-            l.kind === "user"
-              ? "cyanBright"
-              : l.kind === "assistant"
-                ? "whiteBright"
-                : l.kind === "thinking"
-                  ? "magenta"
-                  : l.kind === "tool"
-                    ? "yellow"
-                    : l.kind === "error"
-                      ? "red"
-                      : "gray"
-          }
-          bold={l.kind === "user" || l.kind === "assistant"}
-          dimColor={false}
-        >
-          {l.kind === "user" ? `› ${l.text}` : l.text}
+      {windowingData.windowed.map((l) => {
+        const displayText = l.kind === "user" ? `› ${l.text}` : l.text;
+        const truncated = props.showToolDetails ? displayText : truncateText(displayText);
+
+        return (
+          <Text
+            key={l.id}
+            color={
+              l.kind === "user"
+                ? "cyanBright"
+                : l.kind === "assistant"
+                  ? "whiteBright"
+                  : l.kind === "thinking"
+                    ? "magenta"
+                    : l.kind === "tool"
+                      ? "yellow"
+                      : l.kind === "error"
+                        ? "red"
+                        : "gray"
+            }
+            bold={l.kind === "user" || l.kind === "assistant"}
+            dimColor={false}
+          >
+            {truncated}
+          </Text>
+        );
+      })}
+      {scrollIndicator && (
+        <Text color="gray" dimColor>
+          {scrollIndicator}
         </Text>
-      ))}
+      )}
     </Box>
   );
 });
@@ -581,7 +644,8 @@ const WIZARD_ROWS: WizardRow[] = [
 type OperationMode = "auto" | "confirm" | "read_only" | "planning";
 const OP_MODES: OperationMode[] = ["auto", "confirm", "read_only", "planning"];
 const MAX_TRANSCRIPT_LINES = 400;
-const LINE_COMMIT_DELAY = 120;
+const LINE_COMMIT_DELAY_STREAMING = 50;  // Faster during active streaming
+const LINE_COMMIT_DELAY_IDLE = 120;      // Original delay for idle state
 
 type ProjectStub = { dir: string; name: string; status: "ready" | "needs_setup" };
 
@@ -1156,6 +1220,8 @@ function App(props: { port: number }) {
   const lineSeq = useRef(0);
   const linesCommitTimer = useRef<NodeJS.Timeout | null>(null);
   const ctrlCPressTime = useRef<number>(0);
+  const lastManualScrollTime = useRef<number>(0);
+  const lastStreamTime = useRef<number>(0);
   const inputStore = useRef<InputStore>({ value: "", subscribers: new Set() });
   const notifyInputSubscribers = useCallback(() => {
     inputStore.current.subscribers.forEach((cb) => cb());
@@ -1321,7 +1387,16 @@ function App(props: { port: number }) {
         return;
       }
       if (linesCommitTimer.current) return;
-      linesCommitTimer.current = setTimeout(flush, LINE_COMMIT_DELAY);
+
+      // Use shorter delay during active streaming
+      const now = Date.now();
+      const timeSinceLastStream = now - lastStreamTime.current;
+      const delay = timeSinceLastStream < 1000
+        ? LINE_COMMIT_DELAY_STREAMING
+        : LINE_COMMIT_DELAY_IDLE;
+
+      lastStreamTime.current = now;
+      linesCommitTimer.current = setTimeout(flush, delay);
     },
     []
   );
@@ -1364,11 +1439,36 @@ function App(props: { port: number }) {
     commitLines(true);
   }, [commitLines]);
 
+  // Effect 1: Clamp scroll offset to valid range
   useEffect(() => {
-    if (scrollOffset === 0) return;
     const maxOffset = Math.max(0, lines.length - transcriptHeight);
-    if (scrollOffset > maxOffset) setScrollOffset(maxOffset);
+    if (scrollOffset > maxOffset) {
+      setScrollOffset(maxOffset);
+    }
   }, [lines.length, scrollOffset, transcriptHeight]);
+
+  // Effect 2: Auto-scroll logic (only runs when lines.length changes)
+  useEffect(() => {
+    // Only auto-scroll if user hasn't manually scrolled recently
+    if (scrollOffset === 0) return; // Already at bottom
+
+    const now = Date.now();
+    const timeSinceManualScroll = now - lastManualScrollTime.current;
+
+    if (timeSinceManualScroll > 3000) {
+      setScrollOffset(0);
+    }
+  }, [lines.length]); // Only trigger on new content, not scrollOffset changes
+
+  // Hide cursor during processing to reduce flashing
+  useEffect(() => {
+    if (processing && stdout) {
+      stdout.write('\x1B[?25l'); // Hide cursor
+      return () => {
+        stdout.write('\x1B[?25h'); // Show cursor on cleanup
+      };
+    }
+  }, [processing, stdout]);
 
   const displayMode = useMemo(() => String(process.env.FF_DISPLAY_MODE || "clean").trim().toLowerCase(), []);
 
@@ -1575,6 +1675,7 @@ ${fullContext}`;
     let stopped = false;
     let retryTimer: NodeJS.Timeout | null = null;
     let socket: WebSocket | null = null;
+    let retryCount = 0;
 
     const connect = () => {
       if (stopped) return;
@@ -1583,6 +1684,7 @@ ${fullContext}`;
 
       socket.on("open", () => {
         setConnected(true);
+        retryCount = 0; // Reset retry count on successful connection
         socket?.send(JSON.stringify({ type: "hello", client: "ink", version: "0.0.0" }));
       });
 
@@ -1591,7 +1693,13 @@ ${fullContext}`;
         setTurnId(null);
         setProcessing(false);
         if (stopped) return;
-        retryTimer = setTimeout(connect, 750);
+
+        // Exponential backoff: 750ms, 1.5s, 3s, 6s, max 10s
+        const delay = Math.min(750 * Math.pow(2, retryCount), 10000);
+        retryCount++;
+
+        pushLines({ kind: "system", text: `Connection lost. Reconnecting in ${Math.round(delay / 1000)}s...` });
+        retryTimer = setTimeout(connect, delay);
       });
 
       socket.on("message", (data) => {
@@ -1653,7 +1761,19 @@ ${fullContext}`;
       });
 
       socket.on("error", (err) => {
-        pushLines({ kind: "error", text: (err as any)?.message ?? String(err) });
+        const errorMsg = (err as any)?.message ?? String(err);
+        pushLines({ kind: "error", text: `WebSocket error: ${errorMsg}` });
+
+        // Trigger reconnect on error
+        setConnected(false);
+        if (stopped) return;
+
+        const delay = Math.min(750 * Math.pow(2, retryCount), 10000);
+        retryCount++;
+
+        pushLines({ kind: "system", text: `Reconnecting in ${Math.round(delay / 1000)}s...` });
+        if (retryTimer) clearTimeout(retryTimer);
+        retryTimer = setTimeout(connect, delay);
       });
     };
 
@@ -1706,14 +1826,17 @@ Then apply it with agent_apply to save the agent config.`;
     }
 
     if (key.pageUp) {
-      setScrollOffset((v) => v + 5);
-      return;
-    }
-    if (key.pageDown) {
+      lastManualScrollTime.current = Date.now();
       setScrollOffset((v) => Math.max(0, v - 5));
       return;
     }
+    if (key.pageDown) {
+      lastManualScrollTime.current = Date.now();
+      setScrollOffset((v) => v + 5);
+      return;
+    }
     if ((key as any).home) {
+      lastManualScrollTime.current = Date.now();
       setScrollOffset(0);
       return;
     }
@@ -2564,8 +2687,8 @@ Use skill_draft first to create the draft, then skill_apply to create the final 
       const now = Date.now();
       const timeSinceLastCtrlC = now - ctrlCPressTime.current;
 
-      if (timeSinceLastCtrlC < 1000) {
-        // Second Ctrl+C within 1 second - exit program
+      if (timeSinceLastCtrlC < 5000) {
+        // Second Ctrl+C within 5 seconds - exit program
         pushLines({ kind: "system", text: "Exiting..." });
         process.exit(0);
       } else {
