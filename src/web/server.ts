@@ -87,9 +87,9 @@ async function parseFileUpload(req: IncomingMessage): Promise<FileUploadResult> 
         limits: { fileSize: MAX_FILE_SIZE },
       });
 
-      busboy.on('file', (_fieldName, file, { filename, mimeType, encoding, mimeType: detectedMime }) => {
+      busboy.on('file', (_fieldName: string, file: any, filename: string, encoding: string, mimeType: string) => {
         fileName = filename;
-        fileType = detectedMime || mimeType || 'application/octet-stream';
+        fileType = mimeType || 'application/octet-stream';
 
         // Check if file type is allowed
         const allowed = ALLOWED_TYPES.some(t => fileType.startsWith(t));
