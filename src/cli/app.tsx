@@ -1622,6 +1622,7 @@ ${fullContext}`;
       });
 
       socket.on("message", (data) => {
+        console.log('[TTS DEBUG] WebSocket message received, type:', (data.toString().slice(0, 50)));
         let msg: ServerMessage | null = null;
         try {
           msg = JSON.parse(String(data)) as ServerMessage;
