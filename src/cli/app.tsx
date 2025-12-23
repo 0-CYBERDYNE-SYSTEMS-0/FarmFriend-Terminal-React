@@ -1445,13 +1445,13 @@ function App(props: { port: number }) {
     ]);
   }, [pushLines]);
 
-  const sendTurn = (prompt: string, opts?: { echoUser?: boolean }) => {
+  const sendTurn = async (prompt: string, opts?: { echoUser?: boolean }) => {
     // Interrupt TTS playback when user sends new message
     if (playbackQueueRef.current) {
       playbackQueueRef.current.interrupt();
     }
     if (textBufferRef.current) {
-      textBufferRef.current.flush();
+      await textBufferRef.current.flush();
     }
     setTtsSpeaking(false);
 
@@ -1696,8 +1696,12 @@ ${fullContext}`;
           // Flush TTS buffer on turn completion
           console.log('[TTS DEBUG] Turn finished, flushing buffer...');
           if (ttsEnabled && ttsServiceReadyRef.current && textBufferRef.current) {
-            textBufferRef.current.flush();
-            console.log('[TTS DEBUG] Buffer flushed');
+            // Fire-and-forget - don't await in sync callback
+            textBufferRef.current.flush().then(() => {
+              console.log('[TTS DEBUG] Buffer flushed');
+            }).catch(err => {
+              console.error('[TTS DEBUG] Flush error:', err);
+            });
           } else {
             console.log('[TTS DEBUG] Skipping flush - ttsEnabled:', ttsEnabled, 'ttsServiceReady:', ttsServiceReadyRef.current, 'buffer exists:', !!textBufferRef.current);
           }
@@ -1808,7 +1812,10 @@ ${fullContext}`;
     return () => {
       console.log('[TTS DEBUG] Cleaning up TTS resources...');
       playbackQueueRef.current?.interrupt();
-      textBufferRef.current?.flush();
+      // Fire-and-forget flush in cleanup
+      if (textBufferRef.current) {
+        textBufferRef.current.flush().catch(console.error);
+      }
       if (ttsProcessRef.current) {
         stopTtsService(ttsProcessRef.current).catch(console.error);
       }

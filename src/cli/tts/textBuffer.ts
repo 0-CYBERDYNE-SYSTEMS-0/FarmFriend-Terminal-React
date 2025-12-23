@@ -11,6 +11,8 @@ export class TextBuffer {
   private buffer: string = '';
   private inCodeBlock: boolean = false;
   private onSentence: (text: string) => void | Promise<void>;
+  private processingSentence: boolean = false; // Track if we're processing a sentence
+  private pendingSentences: string[] = []; // Queue of sentences waiting to be processed
 
   constructor(options: TextBufferOptions) {
     this.onSentence = options.onSentence;
@@ -35,9 +37,33 @@ export class TextBuffer {
     // Extract complete sentences
     const sentences = this.extractCompleteSentences();
     console.log('[TTS DEBUG] Sentences detected:', sentences);
-    sentences.forEach(sentence => {
-      this.onSentence(sentence);
-    });
+    if (sentences.length > 0) {
+      // Add to pending queue
+      this.pendingSentences.push(...sentences);
+      // Process queue if not already processing
+      this.processQueue();
+    }
+  }
+
+  /**
+   * Process pending sentences one at a time (sequentially).
+   */
+  private async processQueue(): Promise<void> {
+    if (this.processingSentence || this.pendingSentences.length === 0) {
+      return;
+    }
+
+    this.processingSentence = true;
+    while (this.pendingSentences.length > 0) {
+      const sentence = this.pendingSentences.shift()!;
+      console.log('[TTS DEBUG] Processing sentence:', sentence);
+      try {
+        await this.onSentence(sentence);
+      } catch (err) {
+        console.error('[TTS DEBUG] Error processing sentence:', err);
+      }
+    }
+    this.processingSentence = false;
   }
 
   /**
@@ -71,12 +97,13 @@ export class TextBuffer {
   /**
    * Flush any remaining text in buffer (e.g., incomplete sentence at end of response).
    */
-  flush(): void {
+  async flush(): Promise<void> {
     const remaining = this.buffer.trim();
     console.log('[TTS DEBUG] TextBuffer.flush() remaining:', remaining, 'inCodeBlock:', this.inCodeBlock);
     if (remaining.length > 0 && !this.inCodeBlock) {
-      console.log('[TTS DEBUG] TextBuffer.flush() calling onSentence with:', remaining);
-      this.onSentence(remaining);
+      console.log('[TTS DEBUG] TextBuffer.flush() adding remaining to queue:', remaining);
+      this.pendingSentences.push(remaining);
+      await this.processQueue();
     } else {
       console.log('[TTS DEBUG] TextBuffer.flush() skipped - no remaining text or in code block');
     }
@@ -90,6 +117,8 @@ export class TextBuffer {
   reset(): void {
     this.buffer = '';
     this.inCodeBlock = false;
+    this.pendingSentences = [];
+    this.processingSentence = false;
   }
 
   /**
