@@ -26,12 +26,15 @@ export class TextBuffer {
     const backtickCount = (this.buffer.match(/```/g) || []).length;
     this.inCodeBlock = backtickCount % 2 === 1;
 
+    console.log('[TTS DEBUG] TextBuffer.add() delta:', delta, 'inCodeBlock:', this.inCodeBlock, 'buffer:', this.buffer);
+
     if (this.inCodeBlock) {
       return; // Don't extract sentences from code blocks
     }
 
     // Extract complete sentences
     const sentences = this.extractCompleteSentences();
+    console.log('[TTS DEBUG] Sentences detected:', sentences);
     sentences.forEach(sentence => {
       this.onSentence(sentence);
     });
@@ -70,8 +73,12 @@ export class TextBuffer {
    */
   flush(): void {
     const remaining = this.buffer.trim();
+    console.log('[TTS DEBUG] TextBuffer.flush() remaining:', remaining, 'inCodeBlock:', this.inCodeBlock);
     if (remaining.length > 0 && !this.inCodeBlock) {
+      console.log('[TTS DEBUG] TextBuffer.flush() calling onSentence with:', remaining);
       this.onSentence(remaining);
+    } else {
+      console.log('[TTS DEBUG] TextBuffer.flush() skipped - no remaining text or in code block');
     }
     this.buffer = '';
     this.inCodeBlock = false;

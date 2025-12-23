@@ -1651,13 +1651,17 @@ ${fullContext}`;
           if (!parsed) return;
 
           // TTS integration: add content to text buffer for speech synthesis
+          console.log('[TTS DEBUG] Chunk received, kind:', parsed.kind, 'ttsEnabled:', ttsEnabled, 'ttsServiceReady:', ttsServiceReady, 'textBuffer exists:', !!textBufferRef.current);
           if (
             ttsEnabled &&
             ttsServiceReady &&
             parsed.kind === "assistant" &&
             textBufferRef.current
           ) {
+            console.log('[TTS DEBUG] Adding text to buffer:', parsed.text);
             textBufferRef.current.add(parsed.text);
+          } else {
+            console.log('[TTS DEBUG] Skipping TTS - conditions not met');
           }
 
           if (parsed.kind === "assistant" || parsed.kind === "thinking") {
@@ -1670,8 +1674,12 @@ ${fullContext}`;
 
         if (msg.type === "turn_finished") {
           // Flush TTS buffer on turn completion
+          console.log('[TTS DEBUG] Turn finished, flushing buffer...');
           if (ttsEnabled && ttsServiceReady && textBufferRef.current) {
             textBufferRef.current.flush();
+            console.log('[TTS DEBUG] Buffer flushed');
+          } else {
+            console.log('[TTS DEBUG] Skipping flush - ttsEnabled:', ttsEnabled, 'ttsServiceReady:', ttsServiceReady, 'buffer exists:', !!textBufferRef.current);
           }
 
           setTurnId(null);
@@ -1713,16 +1721,20 @@ ${fullContext}`;
 
   // TTS service lifecycle management
   useEffect(() => {
+    console.log('[TTS DEBUG] useEffect triggered, ttsEnabled:', ttsEnabled);
     if (!ttsEnabled) return;
 
     (async () => {
       try {
+        console.log('[TTS DEBUG] Starting TTS service...');
         // Start TTS service
         const { process: ttsProc, ready } = await startTtsService();
         ttsProcessRef.current = ttsProc;
         setTtsServiceReady(ready);
+        console.log('[TTS DEBUG] Service started, ready:', ready);
 
         if (!ready) {
+          console.log('[TTS DEBUG] Service not ready, disabling TTS');
           pushLines({
             kind: "system",
             text: "⚠️  TTS service unavailable. Voice output disabled."
@@ -1732,22 +1744,29 @@ ${fullContext}`;
         }
 
         // Initialize playback queue
+        console.log('[TTS DEBUG] Initializing playback queue...');
         playbackQueueRef.current = new AudioPlaybackQueue();
 
         // Initialize text buffer
+        console.log('[TTS DEBUG] Initializing text buffer...');
         textBufferRef.current = new TextBuffer({
           onSentence: async (text: string) => {
+            console.log('[TTS DEBUG] onSentence triggered with text:', text);
             try {
+              console.log('[TTS DEBUG] Calling synthesize...');
               const audio = await synthesize(text, { voice: currentVoice });
+              console.log('[TTS DEBUG] Synthesis successful, audio size:', audio.length);
               playbackQueueRef.current?.enqueue(audio);
+              console.log('[TTS DEBUG] Audio enqueued for playback');
               setTtsSpeaking(true);
             } catch (err) {
-              console.error("TTS synthesis failed:", err);
+              console.error('[TTS DEBUG] Synthesis failed:', err);
             }
           }
         });
+        console.log('[TTS DEBUG] TTS fully initialized!');
       } catch (err) {
-        console.error("Failed to initialize TTS:", err);
+        console.error('[TTS DEBUG] Failed to initialize TTS:', err);
         pushLines({
           kind: "error",
           text: `TTS initialization failed: ${err instanceof Error ? err.message : String(err)}`
@@ -1758,6 +1777,7 @@ ${fullContext}`;
 
     // Cleanup
     return () => {
+      console.log('[TTS DEBUG] Cleaning up TTS resources...');
       playbackQueueRef.current?.interrupt();
       textBufferRef.current?.flush();
       if (ttsProcessRef.current) {
