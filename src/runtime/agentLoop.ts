@@ -182,7 +182,7 @@ function getToolPreview(toolName: string, output: string, ok: boolean): string {
 }
 
 export async function* runAgentTurn(params: {
-  userInput: string;
+  userInput: string | any[];
   registry: ToolRegistry;
   sessionId: string;
   repoRoot?: string;
@@ -202,7 +202,15 @@ export async function* runAgentTurn(params: {
   const sessionDir = path.join(workspaceDir, "sessions");
 
   const session = loadSession(sessionId, sessionDir) ?? createSession(sessionId);
-  session.conversation.push({ role: "user", content: userInput, created_at: new Date().toISOString() });
+
+  // Convert content blocks to string for session storage
+  const contentForHistory = typeof userInput === 'string'
+    ? userInput
+    : userInput.map(block =>
+        block.type === 'text' ? block.text : `[Image]`
+      ).join('\n');
+
+  session.conversation.push({ role: "user", content: contentForHistory, created_at: new Date().toISOString() });
   saveSession(session, sessionDir);
 
   const cfg = resolveConfig({ repoRoot });
@@ -233,12 +241,17 @@ export async function* runAgentTurn(params: {
     const stubs = listSkillStubs({ workspaceDir, repoRoot });
     if (!stubs.length) return "";
 
+    // Extract text from userInput (handle both string and content blocks)
+    const inputText = typeof userInput === 'string'
+      ? userInput
+      : userInput.map((block: any) => block.type === 'text' ? block.text : '').join(' ');
+
     const STOP = new Set(["the", "and", "for", "with", "from", "that", "this", "you", "your", "are", "can", "will", "how", "what"]);
-    const tokens = userInput
+    const tokens = inputText
       .toLowerCase()
       .split(/[^a-z0-9_-]+/g)
-      .map((t) => t.trim())
-      .filter((t) => t.length >= 3 && !STOP.has(t));
+      .map((t: string) => t.trim())
+      .filter((t: string) => t.length >= 3 && !STOP.has(t));
     const tokenSet = new Set(tokens);
     if (!tokenSet.size) return "";
 
@@ -300,7 +313,16 @@ export async function* runAgentTurn(params: {
   const tools = loadToolSchemas(repoRoot).filter((t) => registry.has(t.function.name));
   const messages: OpenAIMessage[] = [{ role: "system", content: systemPrompt }];
   for (const m of session.conversation.slice(-40)) {
-    messages.push({ role: m.role === "assistant" ? "assistant" : "user", content: m.content });
+    if (m.role === "user") {
+      // For the current turn's user message, use content blocks if available
+      if (m === session.conversation[session.conversation.length - 1] && Array.isArray(userInput)) {
+        messages.push({ role: "user", content: userInput });
+      } else {
+        messages.push({ role: "user", content: m.content });
+      }
+    } else {
+      messages.push({ role: m.role === "assistant" ? "assistant" : "user", content: m.content });
+    }
   }
 
   // Allow very long runs; default 500, overridable via config/env.
@@ -318,7 +340,7 @@ export async function* runAgentTurn(params: {
   logger.log("info", "turn_start", {
     session_id: sessionId,
     turn_id: turnId,
-    user_input_preview: smartTruncate(userInput, 400),
+    user_input_preview: smartTruncate(contentForHistory, 400),
     provider: provider.name,
     model,
     workspace_dir: workspaceDir,
@@ -462,7 +484,7 @@ export async function* runAgentTurn(params: {
         sessionId,
         repoRoot,
         workspaceDir,
-        userInput,
+        userInput: contentForHistory,
         assistantContent,
         iteration: i,
         maxIterations,
@@ -657,7 +679,7 @@ export async function* runAgentTurn(params: {
         sessionId,
         repoRoot,
         workspaceDir,
-        userInput,
+        userInput: contentForHistory,
         assistantContent: finalAssistantContent,
         iteration: i,
         maxIterations,

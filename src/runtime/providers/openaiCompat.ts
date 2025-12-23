@@ -33,7 +33,8 @@ function extractTextContent(content: unknown): string {
       }
       if (typeof block === "object") {
         const b: any = block;
-        if (typeof b.text === "string") parts.push(b.text);
+        if (b.type === "text" && typeof b.text === "string") parts.push(b.text);
+        else if (typeof b.text === "string") parts.push(b.text);
         else if (typeof b.content === "string") parts.push(b.content);
       }
     }
@@ -44,6 +45,17 @@ function extractTextContent(content: unknown): string {
     if (typeof c.text === "string") return c.text;
   }
   return "";
+}
+
+function normalizeMessages(messages: any[]): any[] {
+  return messages.map(msg => {
+    // If message content is already an array (content blocks), pass through as-is
+    if (Array.isArray(msg.content)) {
+      return msg;
+    }
+    // Otherwise keep as string
+    return msg;
+  });
 }
 
 function toolCallsFromMessage(message: any): ToolCall[] {
@@ -161,7 +173,7 @@ export function openAICompatProvider(params: {
 
       const payloadBase = {
         model: mapModel(model),
-        messages,
+        messages: normalizeMessages(messages),
         tools: tools?.length ? tools : undefined,
         temperature,
         max_tokens: maxTokens

@@ -102,6 +102,7 @@ export default function App() {
   const [isProcessing, setIsProcessing] = useState(false)
   const [assistantContent, setAssistantContent] = useState('')
   const [attachments, setAttachments] = useState<FileAttachment[]>([])
+  const [messageAddedForTurn, setMessageAddedForTurn] = useState(false)
 
   const wsRef = useRef<WebSocket | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -183,13 +184,14 @@ export default function App() {
             case 'turn_finished':
               // Finalize any pending content using functional update to avoid stale closure
               setAssistantContent(prevContent => {
-                if (prevContent) {
+                if (prevContent && !messageAddedForTurn) {
                   setMessages(messages => [...messages, {
                     id: `${Date.now()}-assistant`,
                     role: 'assistant',
                     content: prevContent,
                     timestamp: msg.timestamp * 1000
                   }])
+                  setMessageAddedForTurn(true)
                 }
                 return ''  // Always clear assistantContent
               })
@@ -234,7 +236,7 @@ export default function App() {
     if (!isProcessing || assistantContent === '') return
 
     const timeout = setTimeout(() => {
-      if (assistantContent) {
+      if (assistantContent && !messageAddedForTurn) {
         setMessages(prev => [...prev, {
           id: `${Date.now()}-assistant`,
           role: 'assistant',
@@ -243,16 +245,20 @@ export default function App() {
         }])
         setAssistantContent('')
         setIsProcessing(false)
+        setMessageAddedForTurn(true)
       }
     }, 5000)
 
     return () => clearTimeout(timeout)
-  }, [assistantContent, isProcessing])
+  }, [assistantContent, isProcessing, messageAddedForTurn])
 
   const sendMessage = useCallback(() => {
     const trimmed = input.trim()
     if (!trimmed && attachments.length === 0) return
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return
+
+    // Reset flag for new turn
+    setMessageAddedForTurn(false)
 
     // Build message with attachments
     let messageContent = trimmed

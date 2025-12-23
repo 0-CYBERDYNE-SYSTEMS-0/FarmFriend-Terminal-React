@@ -2,7 +2,7 @@ import { newId } from "../shared/ids.js";
 
 export type ClientMessage =
   | { type: "hello"; client: "ink" | "web"; version?: string }
-  | { type: "start_turn"; input: string; sessionId?: string }
+  | { type: "start_turn"; input: string | any[]; sessionId?: string }
   | { type: "cancel_turn"; turnId: string }
   | { type: "list_tools" };
 
@@ -25,7 +25,7 @@ export function isClientMessage(value: unknown): value is ClientMessage {
   if (!value || typeof value !== "object") return false;
   const type = (value as any).type;
   if (type === "hello") return (value as any).client === "ink" || (value as any).client === "web";
-  if (type === "start_turn") return typeof (value as any).input === "string";
+  if (type === "start_turn") return typeof (value as any).input === "string" || Array.isArray((value as any).input);
   if (type === "cancel_turn") return typeof (value as any).turnId === "string";
   if (type === "list_tools") return true;
   return false;

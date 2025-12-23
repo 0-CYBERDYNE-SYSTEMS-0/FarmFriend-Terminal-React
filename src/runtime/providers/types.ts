@@ -1,7 +1,14 @@
 export type OpenAIRole = "system" | "developer" | "user" | "assistant" | "tool";
 
+// Content block types for multimodal support
+type ContentBlock =
+  | { type: "text"; text: string }
+  | { type: "image_url"; image_url: { url: string } };
+
 export type OpenAIMessage =
-  | { role: "system" | "developer" | "user" | "assistant"; content: string }
+  | { role: "system" | "developer"; content: string }
+  | { role: "user"; content: string | ContentBlock[] }
+  | { role: "assistant"; content: string }
   | { role: "tool"; tool_call_id: string; name?: string; content: string };
 
 export type OpenAIToolSchema = {

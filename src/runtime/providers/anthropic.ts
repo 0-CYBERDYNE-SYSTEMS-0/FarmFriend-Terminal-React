@@ -2,7 +2,17 @@ import { readSSEDataLines } from "./sse.js";
 import { OpenAIMessage, OpenAIToolSchema, Provider, ProviderStreamEvent, ToolCall } from "./types.js";
 
 function textContentOf(msg: OpenAIMessage): string {
-  return msg.content;
+  if (typeof msg.content === 'string') {
+    return msg.content;
+  }
+  // If content is array (content blocks), extract text portions
+  if (Array.isArray(msg.content)) {
+    return msg.content
+      .filter(block => block && typeof block === 'object' && block.type === 'text')
+      .map(block => block.text || '')
+      .join('\n');
+  }
+  return String(msg.content || '');
 }
 
 function convertMessages(messages: OpenAIMessage[]): { anthropicMessages: any[]; system?: string } {
@@ -31,7 +41,30 @@ function convertMessages(messages: OpenAIMessage[]): { anthropicMessages: any[];
     }
 
     const role = m.role === "assistant" ? "assistant" : "user";
-    out.push({ role, content: [{ type: "text", text: textContentOf(m) }] });
+
+    // Handle content blocks
+    let content;
+    if (typeof m.content === 'string') {
+      content = [{ type: "text", text: m.content }];
+    } else if (Array.isArray(m.content)) {
+      // Convert image_url blocks to Anthropic image format
+      content = m.content.map(block => {
+        if (block.type === 'image_url' && block.image_url?.url) {
+          const match = block.image_url.url.match(/^data:([^;]+);base64,(.+)$/);
+          if (match) {
+            return {
+              type: "image",
+              source: { type: "base64", media_type: match[1], data: match[2] }
+            };
+          }
+        }
+        return block;
+      });
+    } else {
+      content = [{ type: "text", text: String(m.content || '') }];
+    }
+
+    out.push({ role, content });
   }
 
   const system = systemParts.join("\n\n").trim();

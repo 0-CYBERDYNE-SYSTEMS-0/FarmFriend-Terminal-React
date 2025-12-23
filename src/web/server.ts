@@ -9,9 +9,17 @@ import Busboy from "busboy";
 
 import { findRepoRoot } from "../runtime/config/repoRoot.js";
 
+// File attachment from web client
+type FileAttachment = {
+  name: string;
+  type: string;
+  size: number;
+  data: string; // base64 data URL
+};
+
 // Types for web client messages (existing protocol)
 type WebClientMessage =
-  | { type: "command"; data: { command: string } }
+  | { type: "command"; data: { command: string; files?: FileAttachment[] } }
   | { type: "ping" }
   | { type: "get_history" }
   | { type: "clear_session" };
@@ -150,7 +158,8 @@ function parseWebClientMessage(raw: string): WebClientMessage | null {
     if (obj.type === "get_history") return { type: "get_history" };
     if (obj.type === "clear_session") return { type: "clear_session" };
     if (obj.type === "command" && typeof obj.data?.command === "string") {
-      return { type: "command", data: { command: obj.data.command } };
+      const files = Array.isArray(obj.data.files) ? obj.data.files : undefined;
+      return { type: "command", data: { command: obj.data.command, files } };
     }
     return null;
   } catch {
@@ -493,7 +502,9 @@ export async function startWebServer(): Promise<void> {
 
       if (msg.type === "command") {
         const command = msg.data.command.trim();
-        if (!command) return;
+        const files = msg.data.files;
+
+        if (!command && (!files || files.length === 0)) return;
 
         try {
           daemonWs = await getDaemonConnection(sessionId);
@@ -505,10 +516,42 @@ export async function startWebServer(): Promise<void> {
             timestamp: Date.now() / 1000
           });
 
+          // Build content blocks for multimodal input
+          let daemonInput: string | any[];
+
+          if (files && files.length > 0) {
+            const contentBlocks: any[] = [];
+
+            // Add images as vision blocks
+            for (const file of files) {
+              if (file.type.startsWith('image/')) {
+                contentBlocks.push({
+                  type: "image_url",
+                  image_url: { url: file.data }
+                });
+              } else {
+                // Non-image files: inform AI but can't process
+                contentBlocks.push({
+                  type: "text",
+                  text: `[File attached: ${file.name}]`
+                });
+              }
+            }
+
+            // Add user's text if present
+            if (command) {
+              contentBlocks.push({ type: "text", text: command });
+            }
+
+            daemonInput = contentBlocks;
+          } else {
+            daemonInput = command;
+          }
+
           // Send to daemon
           daemonWs.send(JSON.stringify({
             type: "start_turn",
-            input: command,
+            input: daemonInput,
             sessionId
           } as DaemonClientMessage));
 

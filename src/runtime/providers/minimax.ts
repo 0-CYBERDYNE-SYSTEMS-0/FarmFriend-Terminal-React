@@ -2,7 +2,15 @@ import { OpenAIMessage, OpenAIToolSchema, Provider, ProviderStreamEvent, ToolCal
 
 function textContentOf(msg: OpenAIMessage): string {
   if (msg.role === "tool") return msg.content;
-  return msg.content;
+  if (typeof msg.content === 'string') return msg.content;
+  // If content is array (content blocks), extract text portions
+  if (Array.isArray(msg.content)) {
+    return msg.content
+      .filter(block => block && typeof block === 'object' && block.type === 'text')
+      .map(block => block.text || '')
+      .join('\n');
+  }
+  return String(msg.content || '');
 }
 
 function convertMessages(messages: OpenAIMessage[]): { anthropicMessages: any[]; system?: string } {
