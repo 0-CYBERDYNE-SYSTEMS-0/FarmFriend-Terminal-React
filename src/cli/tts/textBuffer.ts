@@ -5,12 +5,14 @@
 
 interface TextBufferOptions {
   onSentence: (text: string) => void | Promise<void>;
+  isPlaying?: () => boolean;  // NEW: Check if audio is currently playing
 }
 
 export class TextBuffer {
   private buffer: string = '';
   private inCodeBlock: boolean = false;
   private onSentence: (text: string) => void | Promise<void>;
+  private isPlaying?: () => boolean;  // NEW: Check if audio is playing
   private processingSentence: boolean = false; // Track if we're processing a sentence
   private pendingSentences: string[] = []; // Queue of sentences waiting to be processed
   // Pre-buffering state for aggressive early emit
@@ -22,6 +24,7 @@ export class TextBuffer {
 
   constructor(options: TextBufferOptions) {
     this.onSentence = options.onSentence;
+    this.isPlaying = options.isPlaying;  // NEW
   }
 
   /**
@@ -104,23 +107,57 @@ export class TextBuffer {
   }
 
   /**
-   * Process pending sentences one at a time (sequentially).
+   * Process pending sentences with pipeline parallelism.
+   * Synthesizes next sentence while current one plays (no gaps).
    */
   private async processQueue(): Promise<void> {
-    if (this.processingSentence || this.pendingSentences.length === 0) {
+    if (this.pendingSentences.length === 0) {
       return;
     }
 
+    // If already processing, wait for current batch to finish then re-check
+    if (this.processingSentence) {
+      // Poll until the current processor finishes
+      while (this.processingSentence) {
+        await new Promise(r => setTimeout(r, 50));
+      }
+      // Re-check queue - might have new items from flush
+      if (this.pendingSentences.length === 0) {
+        return;
+      }
+    }
+
     this.processingSentence = true;
+
     while (this.pendingSentences.length > 0) {
       const sentence = this.pendingSentences.shift()!;
       console.log('[TTS DEBUG] Processing sentence:', sentence);
+
       try {
-        await this.onSentence(sentence);
+        // Synthesize this sentence (takes time)
+        const audio = await this.onSentence(sentence);
+
+        // Pipeline parallelism - if more sentences pending and
+        // audio is currently playing, don't wait - start next immediately
+        const morePending = this.pendingSentences.length > 0;
+        const currentlyPlaying = this.isPlaying?.() ?? false;
+
+        if (morePending && currentlyPlaying) {
+          console.log('[TTS DEBUG] Pipeline: Starting next synthesis while audio plays');
+          // Start next sentence immediately, don't wait for current playback
+          continue;
+        }
+
+        // Otherwise, this was the last sentence or nothing is playing yet
+        // Small delay to ensure audio starts playing before continuing
+        if (!currentlyPlaying && audio) {
+          await new Promise(r => setTimeout(r, 100)); // Let audio start
+        }
       } catch (err) {
         console.error('[TTS DEBUG] Error processing sentence:', err);
       }
     }
+
     this.processingSentence = false;
   }
 

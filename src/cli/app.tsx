@@ -1786,7 +1786,8 @@ ${fullContext}`;
             } catch (err) {
               console.error('[TTS DEBUG] Synthesis failed:', err);
             }
-          }
+          },
+          isPlaying: () => playbackQueueRef.current?.isPlaying() ?? false
         });
         console.log('[TTS DEBUG] TTS fully initialized!');
 
