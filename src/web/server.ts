@@ -6,23 +6,44 @@ import type { Socket } from "node:net";
 import path from "node:path";
 import os from "node:os";
 
-import { ToolRegistry } from "../runtime/tools/registry.js";
-import { registerAllTools } from "../runtime/registerDefaultTools.js";
-import { resolveWorkspaceDir } from "../runtime/config/paths.js";
-import { runAgentTurn } from "../runtime/agentLoop.js";
 import { findRepoRoot } from "../runtime/config/repoRoot.js";
-import { resolveConfig } from "../runtime/config/loadConfig.js";
-import { createSession, loadSession, saveSession } from "../runtime/session/sessionStore.js";
-import { loadDefaultDotenv } from "../runtime/config/dotenv.js";
-import { withToolContext } from "../runtime/tools/context.js";
 
-type ClientMessage =
+// Types for web client messages (existing protocol)
+type WebClientMessage =
   | { type: "command"; data: { command: string } }
   | { type: "ping" }
   | { type: "get_history" }
   | { type: "clear_session" };
 
-function parseClientMessage(raw: string): ClientMessage | null {
+// Types for web server responses (existing protocol)
+type WebServerMessage =
+  | { type: "system"; content: string; session_id: string; timestamp: number }
+  | { type: "response"; content: string; session_id: string; timestamp: number }
+  | { type: "thinking"; content: string; session_id: string; timestamp: number }
+  | { type: "tool_call"; tool_name: string; content: string; session_id: string; timestamp: number }
+  | { type: "error"; content: string; session_id: string; timestamp: number }
+  | { type: "pong"; session_id: string; timestamp: number }
+  | { type: "command_received"; content: string; session_id: string; timestamp: number }
+  | { type: "history"; content: string; session_id: string; timestamp: number };
+
+// Daemon protocol types (from src/daemon/protocol.ts)
+type DaemonClientMessage =
+  | { type: "hello"; client: "ink" | "web"; version?: string }
+  | { type: "start_turn"; input: string; sessionId?: string }
+  | { type: "cancel_turn"; turnId: string }
+  | { type: "list_tools" };
+
+type DaemonServerMessage =
+  | { type: "hello"; daemonVersion: string }
+  | { type: "turn_started"; sessionId: string; turnId: string }
+  | { type: "chunk"; turnId: string; seq: number; chunk: string }
+  | { type: "turn_finished"; turnId: string; ok: boolean; error?: string }
+  | { type: "tools"; tools: string[] };
+
+const DAEMON_PORT = Number(process.env.FF_TERMINAL_PORT || 28888);
+const WEB_PORT = Number(process.env.FF_WEB_PORT || 8787);
+
+function parseWebClientMessage(raw: string): WebClientMessage | null {
   try {
     const obj = JSON.parse(raw) as any;
     if (!obj || typeof obj !== "object") return null;
@@ -38,25 +59,69 @@ function parseClientMessage(raw: string): ClientMessage | null {
   }
 }
 
-function sendJson(ws: WebSocket, payload: unknown): void {
-  ws.send(JSON.stringify(payload));
+function parseDaemonChunk(chunk: string): { kind: string; content?: string } {
+  if (chunk === "task_completed") return { kind: "task_completed" };
+  if (chunk.startsWith("content:")) return { kind: "content", content: chunk.slice(8) };
+  if (chunk.startsWith("thinking:")) return { kind: "thinking", content: chunk.slice(9) };
+  if (chunk.startsWith("error:")) return { kind: "error", content: chunk.slice(6) };
+  if (chunk.startsWith("status:")) {
+    const msg = chunk.slice(7);
+    if (msg.startsWith("tool_start:")) {
+      const toolName = msg.split("|")[0].replace("tool_start:", "").trim();
+      return { kind: "tool_start", content: toolName };
+    }
+    return { kind: "status", content: msg };
+  }
+  return { kind: "unknown", content: chunk };
 }
 
-const PORT = Number(process.env.FF_WEB_PORT || 8787);
+function sendWebMessage(ws: WebSocket, msg: WebServerMessage): void {
+  ws.send(JSON.stringify(msg));
+}
+
+// Daemon connection pool - reuse connections per session
+const daemonConnections = new Map<string, WebSocket>();
+
+function getDaemonConnection(sessionId: string): Promise<WebSocket> {
+  return new Promise((resolve, reject) => {
+    // Check if we already have a connection
+    const existing = daemonConnections.get(sessionId);
+    if (existing && existing.readyState === WebSocket.OPEN) {
+      resolve(existing);
+      return;
+    }
+
+    // Create new connection
+    const ws = new WebSocket(`ws://127.0.0.1:${DAEMON_PORT}`);
+
+    ws.on("open", () => {
+      // Send hello to daemon
+      ws.send(JSON.stringify({ type: "hello", client: "web", version: "1.0.0" } as DaemonClientMessage));
+      daemonConnections.set(sessionId, ws);
+      resolve(ws);
+    });
+
+    ws.on("error", (err) => {
+      reject(err);
+    });
+
+    ws.on("close", () => {
+      daemonConnections.delete(sessionId);
+    });
+  });
+}
 
 export async function startWebServer(): Promise<void> {
   const repoRoot = findRepoRoot();
-  loadDefaultDotenv({ repoRoot });
-  const runtimeCfg = resolveConfig({ repoRoot });
-  const workspaceDir = resolveWorkspaceDir(
-    (runtimeCfg as any).workspace_dir ?? process.env.FF_WORKSPACE_DIR ?? undefined,
-    { repoRoot }
-  );
-  const sessionDir = path.join(workspaceDir, "sessions");
   const frontendDistDirRaw = process.env.FF_FRONTEND_DIST_DIR;
+
+  // New Vite frontend (highest priority)
+  const newFrontendDistDir = path.join(repoRoot, "src", "web", "client", "dist");
+  // Old cyberpunk frontend
   const frontendDistDir = frontendDistDirRaw && frontendDistDirRaw.trim()
     ? path.resolve(frontendDistDirRaw.trim().replace(/^~(?=$|\/)/, os.homedir()))
     : path.join(repoRoot, "web-frontend-dist");
+  // Python reference frontend
   const bundledFrontendDistDir = path.join(
     repoRoot,
     "reference source code python ver",
@@ -66,24 +131,23 @@ export async function startWebServer(): Promise<void> {
     "dist"
   );
 
-  const registry = new ToolRegistry();
-  registerAllTools(registry, { workspaceDir });
-
   const server = http.createServer((req: IncomingMessage, res: ServerResponse) => {
-    // Minimal health endpoint to make local orchestration easier.
+    // Health endpoint
     if (req.url === "/health") {
       res.writeHead(200, { "content-type": "application/json" });
       res.end(JSON.stringify({ ok: true }) + "\n");
       return;
     }
 
-    // Serve the existing React frontend build if present.
+    // Serve React frontend build - check in priority order
     const selectedDistDir =
-      fs.existsSync(frontendDistDir) && fs.statSync(frontendDistDir).isDirectory()
-        ? frontendDistDir
-        : fs.existsSync(bundledFrontendDistDir) && fs.statSync(bundledFrontendDistDir).isDirectory()
-          ? bundledFrontendDistDir
-          : null;
+      fs.existsSync(newFrontendDistDir) && fs.statSync(newFrontendDistDir).isDirectory()
+        ? newFrontendDistDir
+        : fs.existsSync(frontendDistDir) && fs.statSync(frontendDistDir).isDirectory()
+          ? frontendDistDir
+          : fs.existsSync(bundledFrontendDistDir) && fs.statSync(bundledFrontendDistDir).isDirectory()
+            ? bundledFrontendDistDir
+            : null;
     if (selectedDistDir) {
       const url = new URL(req.url ?? "/", `http://${req.headers.host ?? "localhost"}`);
       const pathname = decodeURIComponent(url.pathname);
@@ -145,26 +209,108 @@ export async function startWebServer(): Promise<void> {
     });
   });
 
-  wss.on("connection", (ws: WebSocket, _req: IncomingMessage, info: any) => {
+  wss.on("connection", async (webWs: WebSocket, _req: IncomingMessage, info: any) => {
     const sessionId = String(info?.sessionId || "default-session");
+    let daemonWs: WebSocket | null = null;
+    let currentTurnId: string | null = null;
 
-    // Create or load session so that history endpoints are meaningful immediately.
-    const session = loadSession(sessionId, sessionDir) ?? createSession(sessionId);
-    saveSession(session, sessionDir);
-
-    sendJson(ws, {
+    // Send initial connection message
+    sendWebMessage(webWs, {
       type: "system",
       content: `Connected to FF-Terminal (TS) session ${sessionId}`,
       session_id: sessionId,
       timestamp: Date.now() / 1000
     });
 
-    let controller: AbortController | null = null;
+    // Set up daemon connection first BEFORE handling web client messages
+    try {
+      daemonWs = await getDaemonConnection(sessionId);
 
-    ws.on("message", async (buf: WebSocket.RawData) => {
-      const msg = parseClientMessage(String(buf));
+      // Set up daemon message listener
+      daemonWs.on("message", (data: Buffer) => {
+        const msg = JSON.parse(data.toString()) as DaemonServerMessage;
+
+        if (msg.type === "turn_started") {
+          currentTurnId = msg.turnId;
+          return;
+        }
+
+        if (msg.type === "chunk") {
+          const parsed = parseDaemonChunk(msg.chunk);
+
+          if (parsed.kind === "content") {
+            sendWebMessage(webWs, {
+              type: "response",
+              content: parsed.content || "",
+              session_id: sessionId,
+              timestamp: Date.now() / 1000
+            });
+          } else if (parsed.kind === "thinking") {
+            sendWebMessage(webWs, {
+              type: "thinking",
+              content: parsed.content || "",
+              session_id: sessionId,
+              timestamp: Date.now() / 1000
+            });
+          } else if (parsed.kind === "error") {
+            sendWebMessage(webWs, {
+              type: "error",
+              content: parsed.content || "",
+              session_id: sessionId,
+              timestamp: Date.now() / 1000
+            });
+          } else if (parsed.kind === "tool_start") {
+            sendWebMessage(webWs, {
+              type: "tool_call",
+              tool_name: parsed.content || "",
+              content: `Executing: ${parsed.content}`,
+              session_id: sessionId,
+              timestamp: Date.now() / 1000
+            });
+          } else if (parsed.kind === "status") {
+            sendWebMessage(webWs, {
+              type: "system",
+              content: parsed.content || "",
+              session_id: sessionId,
+              timestamp: Date.now() / 1000
+            });
+          } else if (parsed.kind === "task_completed") {
+            // Turn complete
+          }
+        }
+
+        if (msg.type === "turn_finished") {
+          currentTurnId = null;
+        }
+      });
+
+      daemonWs.on("error", (err) => {
+        sendWebMessage(webWs, {
+          type: "error",
+          content: `Daemon connection error: ${err.message}`,
+          session_id: sessionId,
+          timestamp: Date.now() / 1000
+        });
+      });
+
+      daemonWs.on("close", () => {
+        daemonWs = null;
+      });
+
+    } catch (err) {
+      sendWebMessage(webWs, {
+        type: "error",
+        content: err instanceof Error ? err.message : String(err),
+        session_id: sessionId,
+        timestamp: Date.now() / 1000
+      });
+    }
+
+    // Handle messages from web client
+    webWs.on("message", async (buf: WebSocket.RawData) => {
+      const msg = parseWebClientMessage(String(buf));
       if (!msg) {
-        sendJson(ws, {
+        sendWebMessage(webWs, {
           type: "error",
           content: "Invalid message",
           session_id: sessionId,
@@ -174,15 +320,16 @@ export async function startWebServer(): Promise<void> {
       }
 
       if (msg.type === "ping") {
-        sendJson(ws, { type: "pong", session_id: sessionId, timestamp: Date.now() / 1000 });
+        sendWebMessage(webWs, { type: "pong", session_id: sessionId, timestamp: Date.now() / 1000 });
         return;
       }
 
       if (msg.type === "get_history") {
-        const s = loadSession(sessionId, sessionDir) ?? createSession(sessionId);
-        sendJson(ws, {
+        // History is stored in daemon workspace - need to implement via daemon or file read
+        // For now, return placeholder
+        sendWebMessage(webWs, {
           type: "history",
-          content: JSON.stringify(s.conversation, null, 2),
+          content: "[]",
           session_id: sessionId,
           timestamp: Date.now() / 1000
         });
@@ -190,14 +337,22 @@ export async function startWebServer(): Promise<void> {
       }
 
       if (msg.type === "clear_session") {
-        const cleared = createSession(sessionId);
-        saveSession(cleared, sessionDir);
-        sendJson(ws, {
-          type: "system",
-          content: "Session cleared",
-          session_id: sessionId,
-          timestamp: Date.now() / 1000
-        });
+        // Start a new turn with clear command
+        try {
+          daemonWs = await getDaemonConnection(sessionId);
+          daemonWs.send(JSON.stringify({
+            type: "start_turn",
+            input: "/clear",
+            sessionId
+          } as DaemonClientMessage));
+        } catch (err) {
+          sendWebMessage(webWs, {
+            type: "error",
+            content: err instanceof Error ? err.message : String(err),
+            session_id: sessionId,
+            timestamp: Date.now() / 1000
+          });
+        }
         return;
       }
 
@@ -205,75 +360,27 @@ export async function startWebServer(): Promise<void> {
         const command = msg.data.command.trim();
         if (!command) return;
 
-        controller?.abort();
-        controller = new AbortController();
-        const localController = controller;
-
-        sendJson(ws, {
-          type: "command_received",
-          content: `Executing: ${command}`,
-          session_id: sessionId,
-          timestamp: Date.now() / 1000
-        });
-
         try {
-          await withToolContext({ sessionId, workspaceDir, repoRoot }, async () => {
-            for await (const chunk of runAgentTurn({
-              userInput: command,
-              registry,
-              sessionId,
-              repoRoot,
-              signal: localController.signal
-            })) {
-              if (chunk.kind === "content") {
-                sendJson(ws, {
-                  type: "response",
-                  content: chunk.delta,
-                  session_id: sessionId,
-                  timestamp: Date.now() / 1000
-                });
-              } else if (chunk.kind === "thinking") {
-                sendJson(ws, {
-                  type: "thinking",
-                  content: chunk.delta,
-                  session_id: sessionId,
-                  timestamp: Date.now() / 1000
-                });
-              } else if (chunk.kind === "status") {
-                if (chunk.message.startsWith("tool_start:")) {
-                  const tool_name = chunk.message.slice("tool_start:".length).trim();
-                  sendJson(ws, {
-                    type: "tool_call",
-                    tool_name,
-                    content: `Executing: ${tool_name}`,
-                    session_id: sessionId,
-                    timestamp: Date.now() / 1000
-                  });
-                  continue;
-                }
-                sendJson(ws, {
-                  type: "system",
-                  content: chunk.message,
-                  session_id: sessionId,
-                  timestamp: Date.now() / 1000
-                });
-              } else if (chunk.kind === "error") {
-                sendJson(ws, {
-                  type: "error",
-                  content: chunk.message,
-                  session_id: sessionId,
-                  timestamp: Date.now() / 1000
-                });
-              }
+          daemonWs = await getDaemonConnection(sessionId);
 
-              if (chunk.kind === "task_completed") break;
-            }
+          sendWebMessage(webWs, {
+            type: "command_received",
+            content: `Executing: ${command}`,
+            session_id: sessionId,
+            timestamp: Date.now() / 1000
           });
+
+          // Send to daemon
+          daemonWs.send(JSON.stringify({
+            type: "start_turn",
+            input: command,
+            sessionId
+          } as DaemonClientMessage));
+
         } catch (err) {
-          const message = err instanceof Error ? err.message : String(err);
-          sendJson(ws, {
+          sendWebMessage(webWs, {
             type: "error",
-            content: message,
+            content: err instanceof Error ? err.message : String(err),
             session_id: sessionId,
             timestamp: Date.now() / 1000
           });
@@ -281,15 +388,20 @@ export async function startWebServer(): Promise<void> {
       }
     });
 
-    ws.on("close", () => {
-      controller?.abort();
-      controller = null;
+    webWs.on("close", () => {
+      // Cancel any active turn
+      if (currentTurnId && daemonWs && daemonWs.readyState === WebSocket.OPEN) {
+        daemonWs.send(JSON.stringify({
+          type: "cancel_turn",
+          turnId: currentTurnId
+        } as DaemonClientMessage));
+      }
     });
   });
 
-  await new Promise<void>((resolve) => server.listen(PORT, "127.0.0.1", () => resolve()));
+  await new Promise<void>((resolve) => server.listen(WEB_PORT, "127.0.0.1", () => resolve()));
   // eslint-disable-next-line no-console
-  console.log(`ff-terminal web server listening on http://127.0.0.1:${PORT} (ws /ws/terminal/:session)`); 
+  console.log(`ff-terminal web server listening on http://127.0.0.1:${WEB_PORT} (proxy to daemon on port ${DAEMON_PORT})`);
 }
 
 const argv1 = process.argv[1] || "";
