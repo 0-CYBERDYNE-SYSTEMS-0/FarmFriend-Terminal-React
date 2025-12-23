@@ -5,6 +5,7 @@ import fs from "node:fs";
 import type { Socket } from "node:net";
 import path from "node:path";
 import os from "node:os";
+import Busboy from "busboy";
 
 import { findRepoRoot } from "../runtime/config/repoRoot.js";
 
@@ -24,7 +25,8 @@ type WebServerMessage =
   | { type: "error"; content: string; session_id: string; timestamp: number }
   | { type: "pong"; session_id: string; timestamp: number }
   | { type: "command_received"; content: string; session_id: string; timestamp: number }
-  | { type: "history"; content: string; session_id: string; timestamp: number };
+  | { type: "history"; content: string; session_id: string; timestamp: number }
+  | { type: "turn_finished"; session_id: string; timestamp: number };
 
 // Daemon protocol types (from src/daemon/protocol.ts)
 type DaemonClientMessage =
@@ -42,6 +44,103 @@ type DaemonServerMessage =
 
 const DAEMON_PORT = Number(process.env.FF_TERMINAL_PORT || 28888);
 const WEB_PORT = Number(process.env.FF_WEB_PORT || 8787);
+
+// File upload configuration
+const MAX_FILE_SIZE = 25 * 1024 * 1024; // 25MB
+
+const ALLOWED_TYPES = [
+  'image/',
+  'application/pdf',
+  'text/',
+  'application/json',
+  'application/javascript',
+  'text/html',
+  'text/markdown',
+  'text/x-python',
+  'text/x-java',
+  'text/x-c',
+  'text/x-c++',
+  'application/typescript',
+  'text/typescript',
+  'text/xml',
+  'application/xml',
+];
+
+type FileUploadResult = { file: { name: string; type: string; size: number; data: string } } | { error: string } | null;
+
+async function parseFileUpload(req: IncomingMessage): Promise<FileUploadResult> {
+  const contentType = req.headers['content-type'] || '';
+
+  if (!contentType.includes('multipart/form-data')) {
+    return null;
+  }
+
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    let fileName = '';
+    let fileType = '';
+    let fileSize = 0;
+
+    try {
+      const busboy = Busboy({
+        headers: { 'content-type': contentType },
+        limits: { fileSize: MAX_FILE_SIZE },
+      });
+
+      busboy.on('file', (_fieldName, file, { filename, mimeType, encoding, mimeType: detectedMime }) => {
+        fileName = filename;
+        fileType = detectedMime || mimeType || 'application/octet-stream';
+
+        // Check if file type is allowed
+        const allowed = ALLOWED_TYPES.some(t => fileType.startsWith(t));
+        if (!allowed) {
+          file.resume();
+          resolve({ error: `File type not allowed: ${fileType}` });
+          return;
+        }
+
+        file.on('data', (chunk: Buffer) => {
+          fileSize += chunk.length;
+          if (fileSize > MAX_FILE_SIZE) {
+            file.resume();
+            resolve({ error: 'File too large (max 25MB)' });
+            return;
+          }
+          chunks.push(chunk);
+        });
+
+        file.on('end', () => {
+          // File received completely
+        });
+      });
+
+      busboy.on('error', (err: Error) => {
+        reject(err);
+      });
+
+      busboy.on('finish', () => {
+        if (fileName && chunks.length > 0) {
+          const buffer = Buffer.concat(chunks);
+          const base64 = buffer.toString('base64');
+          resolve({
+            file: {
+              name: fileName,
+              type: fileType,
+              size: fileSize,
+              data: `data:${fileType};base64,${base64}`
+            }
+          });
+        } else {
+          resolve(null);
+        }
+      });
+
+      req.pipe(busboy);
+    } catch (err) {
+      reject(err);
+    }
+  });
+}
 
 function parseWebClientMessage(raw: string): WebClientMessage | null {
   try {
@@ -136,6 +235,35 @@ export async function startWebServer(): Promise<void> {
     if (req.url === "/health") {
       res.writeHead(200, { "content-type": "application/json" });
       res.end(JSON.stringify({ ok: true }) + "\n");
+      return;
+    }
+
+    // File upload endpoint (POST /api/upload)
+    if (req.method === "POST" && req.url?.startsWith("/api/upload")) {
+      parseFileUpload(req).then(result => {
+        if (!result) {
+          res.writeHead(400, { "content-type": "application/json" });
+          res.end(JSON.stringify({ error: "Invalid request" }) + "\n");
+          return;
+        }
+
+        if ('error' in result) {
+          res.writeHead(400, { "content-type": "application/json" });
+          res.end(JSON.stringify({ error: result.error }) + "\n");
+          return;
+        }
+
+        if ('file' in result && result.file) {
+          res.writeHead(200, { "content-type": "application/json" });
+          res.end(JSON.stringify(result.file) + "\n");
+        } else {
+          res.writeHead(400, { "content-type": "application/json" });
+          res.end(JSON.stringify({ error: "No file uploaded" }) + "\n");
+        }
+      }).catch(err => {
+        res.writeHead(500, { "content-type": "application/json" });
+        res.end(JSON.stringify({ error: err.message }) + "\n");
+      });
       return;
     }
 
@@ -281,6 +409,13 @@ export async function startWebServer(): Promise<void> {
 
         if (msg.type === "turn_finished") {
           currentTurnId = null;
+          // Forward to web client to signal completion
+          sendWebMessage(webWs, {
+            type: "turn_finished",
+            session_id: sessionId,
+            timestamp: Date.now() / 1000
+          });
+          return;
         }
       });
 

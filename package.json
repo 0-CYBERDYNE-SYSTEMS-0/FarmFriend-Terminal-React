@@ -15,6 +15,8 @@
     "dev:web": "tsx src/web/server.ts",
     "dev:run": "tsx src/bin/ff-terminal.ts run --prompt \"Hello\"",
     "dev:start": "tsx src/bin/ff-terminal.ts start",
+    "dev:web:start": "tsx src/bin/ff-terminal.ts start --web",
+    "dev:ws": "tsx src/bin/ff-terminal.ts start -w",
     "build": "tsc -p tsconfig.json",
     "test": "vitest",
     "test:ui": "vitest --ui",
@@ -25,6 +27,7 @@
   },
   "dependencies": {
     "@ast-grep/cli": "^0.40.1",
+    "busboy": "^1.6.0",
     "ink": "^5.0.0",
     "inquirer": "^9.2.12",
     "react": "^18.3.1",
@@ -32,6 +35,7 @@
   },
   "devDependencies": {
     "@swc/core": "^1.15.5",
+    "@types/busboy": "^1.5.4",
     "@types/inquirer": "^9.0.8",
     "@types/node": "^22.10.2",
     "@types/react": "^18.3.18",
