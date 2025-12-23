@@ -29,7 +29,7 @@ function usage(): void {
   console.log(`Usage:
   ff-terminal daemon
   ff-terminal ui
-  ff-terminal start [profile] [--display-mode verbose|clean]
+  ff-terminal start [profile] [--display-mode verbose|clean] [--web]
   ff-terminal local [profile] [--display-mode verbose|clean]
   ff-terminal web
   ff-terminal acp [--profile <name>]
@@ -163,6 +163,7 @@ async function run(): Promise<void> {
     const preferredProfile = rest[0] && !rest[0].startsWith("-") ? rest[0] : undefined;
     const displayModeRaw = pickArg(rest, "--display-mode") || "";
     const displayMode = displayModeRaw.trim().toLowerCase();
+    const useWeb = hasFlag(rest, "--web") || hasFlag(rest, "-w");
     if (displayMode && displayMode !== "verbose" && displayMode !== "clean") {
       throw new Error(`Invalid --display-mode: ${displayModeRaw} (expected verbose|clean)`);
     }
@@ -174,7 +175,15 @@ async function run(): Promise<void> {
       writeConfig(config);
     }
 
-    const profile = await promptSelectProfile({ config, preferredName: preferredProfile });
+    // Always prompt for profile selection unless explicitly specified
+    let profile: ReturnType<typeof getProfileByName>;
+    if (preferredProfile) {
+      profile = getProfileByName(config, preferredProfile);
+      if (!profile) throw new Error(`Profile not found: ${preferredProfile}`);
+    } else {
+      // Show picker (handles single profile auto-select internally)
+      profile = await promptSelectProfile({ config, preferredName: preferredProfile });
+    }
 
     // Apply profile-selected env + config path to this process (daemon + Ink UI run together here).
     sanitizeEnvInPlace();
@@ -228,6 +237,7 @@ async function run(): Promise<void> {
     // Match the ai-claude-start approach: spawn runtime + UI as child processes with the selected env.
     const env = { ...process.env } as Record<string, string>;
     const port = Number(env.FF_TERMINAL_PORT || 28888);
+    const webPort = Number(env.FF_WEB_PORT || 8787);
 
     // eslint-disable-next-line no-console
     console.log(`Using profile: ${profile.name} (${profile.provider})`);
@@ -256,11 +266,7 @@ async function run(): Promise<void> {
     const daemonCmd = isDevTs ? "tsx" : process.execPath;
     const daemonArgs = isDevTs ? ["src/daemon/daemon.ts"] : ["dist/daemon/daemon.js"];
 
-    const uiCmd = isDevTs ? "tsx" : process.execPath;
-    const uiArgs = isDevTs ? ["src/cli/app.tsx"] : ["dist/cli/app.js"];
-
     const daemonSpawnCmd = isDevTs ? tsxCmd : daemonCmd;
-    const uiSpawnCmd = isDevTs ? tsxCmd : uiCmd;
 
     // Important: do NOT inherit stdio for the daemon; any stdout/stderr output will fight with Ink and cause flicker.
     const daemon = spawn(daemonSpawnCmd, daemonArgs, { env, stdio: ["ignore", "pipe", "pipe"], shell: true, cwd: projectDir });
@@ -268,6 +274,40 @@ async function run(): Promise<void> {
       daemon.stdout?.on("data", (b) => process.stderr.write(String(b)));
       daemon.stderr?.on("data", (b) => process.stderr.write(String(b)));
     }
+
+    if (useWeb) {
+      // Start web server instead of Ink UI
+      // eslint-disable-next-line no-console
+      console.log(`Starting web server... (http://127.0.0.1:${webPort})`);
+      await new Promise((r) => setTimeout(r, 300));
+
+      const webCmd = isDevTs ? "tsx" : process.execPath;
+      const webArgs = isDevTs ? ["src/web/server.ts"] : ["dist/web/server.js"];
+      const webSpawnCmd = isDevTs ? tsxCmd : webCmd;
+
+      const web = spawn(webSpawnCmd, webArgs, { env, stdio: "inherit", shell: true, cwd: projectDir });
+
+      const shutdown = () => {
+        try {
+          daemon.kill("SIGTERM");
+        } catch {
+          // ignore
+        }
+      };
+
+      web.on("exit", (code: number | null) => {
+        shutdown();
+        process.exit(code || 0);
+      });
+      web.on("error", () => shutdown());
+      daemon.on("exit", () => {});
+      return;
+    }
+
+    // Start Ink UI (default behavior)
+    const uiCmd = isDevTs ? "tsx" : process.execPath;
+    const uiArgs = isDevTs ? ["src/cli/app.tsx"] : ["dist/cli/app.js"];
+    const uiSpawnCmd = isDevTs ? tsxCmd : uiCmd;
 
     // Start UI shortly after daemon starts; UI has reconnect logic anyway.
     await new Promise((r) => setTimeout(r, 300));
