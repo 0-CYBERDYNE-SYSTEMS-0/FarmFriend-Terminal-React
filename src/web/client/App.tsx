@@ -12,6 +12,7 @@ type WebSocketMessage =
   | { type: 'error'; content: string; session_id: string; timestamp: number }
   | { type: 'pong'; session_id: string; timestamp: number }
   | { type: 'command_received'; content: string; session_id: string; timestamp: number }
+  | { type: 'turn_finished'; session_id: string; timestamp: number }
 
 type ChatMessage = {
   id: string
@@ -178,6 +179,22 @@ export default function App() {
             case 'command_received':
               setIsProcessing(true)
               break
+
+            case 'turn_finished':
+              // Finalize any pending content using functional update to avoid stale closure
+              setAssistantContent(prevContent => {
+                if (prevContent) {
+                  setMessages(messages => [...messages, {
+                    id: `${Date.now()}-assistant`,
+                    role: 'assistant',
+                    content: prevContent,
+                    timestamp: msg.timestamp * 1000
+                  }])
+                }
+                return ''  // Always clear assistantContent
+              })
+              setIsProcessing(false)
+              break
           }
         }
 
@@ -212,7 +229,7 @@ export default function App() {
     }
   }, [])
 
-  // Detect when streaming ends (no new content for 500ms)
+  // Fallback timeout for streaming detection (in case turn_finished is missed)
   useEffect(() => {
     if (!isProcessing || assistantContent === '') return
 
@@ -227,7 +244,7 @@ export default function App() {
         setAssistantContent('')
         setIsProcessing(false)
       }
-    }, 500)
+    }, 5000)
 
     return () => clearTimeout(timeout)
   }, [assistantContent, isProcessing])

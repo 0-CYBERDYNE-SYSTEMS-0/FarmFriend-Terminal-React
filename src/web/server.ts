@@ -25,7 +25,8 @@ type WebServerMessage =
   | { type: "error"; content: string; session_id: string; timestamp: number }
   | { type: "pong"; session_id: string; timestamp: number }
   | { type: "command_received"; content: string; session_id: string; timestamp: number }
-  | { type: "history"; content: string; session_id: string; timestamp: number };
+  | { type: "history"; content: string; session_id: string; timestamp: number }
+  | { type: "turn_finished"; session_id: string; timestamp: number };
 
 // Daemon protocol types (from src/daemon/protocol.ts)
 type DaemonClientMessage =
@@ -408,6 +409,13 @@ export async function startWebServer(): Promise<void> {
 
         if (msg.type === "turn_finished") {
           currentTurnId = null;
+          // Forward to web client to signal completion
+          sendWebMessage(webWs, {
+            type: "turn_finished",
+            session_id: sessionId,
+            timestamp: Date.now() / 1000
+          });
+          return;
         }
       });
 
