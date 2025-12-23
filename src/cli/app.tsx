@@ -4,6 +4,7 @@ import WebSocket from "ws";
 import { pathToFileURL } from "node:url";
 import fs from "node:fs";
 import path from "node:path";
+import { ChildProcess } from "node:child_process";
 import { readConfig, writeConfig } from "../runtime/profiles/storage.js";
 import type { Profile } from "../runtime/profiles/types.js";
 import { loadToolSchemas } from "../runtime/tools/toolSchemas.js";
@@ -18,6 +19,7 @@ import type { Command } from "../runtime/commands/types.js";
 import type { AgentConfig, AgentTemplate } from "../runtime/agents/types.js";
 import { validateWorkspace, generateReport } from "../runtime/workspace/doctor.js";
 import { planMigration, executeMigration } from "../runtime/workspace/migration.js";
+import { startTtsService, stopTtsService, TextBuffer, synthesize, AudioPlaybackQueue } from "./tts/index.js";
 
 type ServerMessage =
   | { type: "hello"; daemonVersion: string }
@@ -223,6 +225,8 @@ const ChatPrompt = memo(function ChatPrompt(props: {
   showTodoPanel: boolean;
   showToolDetails: boolean;
   thinkingCount: number;
+  ttsEnabled?: boolean;
+  currentVoice?: string;
 }) {
   const value = useSyncExternalStore(
     (cb) => {
@@ -240,6 +244,9 @@ const ChatPrompt = memo(function ChatPrompt(props: {
     : `hidden (${props.thinkingCount})`;
   const todosText = props.showTodoPanel ? "shown" : "hidden";
   const toolsText = props.showToolDetails ? "expanded" : "collapsed";
+  const voiceStatus = process.env.FF_TTS_ENABLED === "true"
+    ? (props.ttsEnabled ? `voice:on (${props.currentVoice || "af_heart"})` : "voice:off")
+    : "";
 
   return (
     <>
@@ -247,7 +254,7 @@ const ChatPrompt = memo(function ChatPrompt(props: {
       <Box gap={1}>
         <Spinner active={props.processing} />
         <Text color="gray">
-          Enter to send • Ctrl+C to cancel • Shift+Tab: mode={props.operationMode} • Ctrl+T: thinking {thinkingText} • Ctrl+D: todos {todosText} • Ctrl+E: tools {toolsText} • /help
+          Enter to send • Ctrl+C to cancel • Shift+Tab: mode={props.operationMode} • Ctrl+T: thinking {thinkingText} • Ctrl+D: todos {todosText} • Ctrl+E: tools {toolsText} {voiceStatus && `• Ctrl+V: ${voiceStatus}`} • /help
         </Text>
       </Box>
     </>
@@ -1209,6 +1216,15 @@ function App(props: { port: number }) {
   const [showToolDetails, setShowToolDetails] = useState(false);
   const [scrollOffset, setScrollOffset] = useState(0);
 
+  // TTS state
+  const [ttsEnabled, setTtsEnabled] = useState(process.env.FF_TTS_ENABLED === "true");
+  const [ttsServiceReady, setTtsServiceReady] = useState(false);
+  const [ttsSpeaking, setTtsSpeaking] = useState(false);
+  const [currentVoice] = useState(process.env.FF_TTS_VOICE || "af_heart");
+  const textBufferRef = useRef<TextBuffer | null>(null);
+  const playbackQueueRef = useRef<AudioPlaybackQueue | null>(null);
+  const ttsProcessRef = useRef<ChildProcess | null>(null);
+
   const [doctorRunning, setDoctorRunning] = useState(false);
   const [doctorWaitingForConfirm, setDoctorWaitingForConfirm] = useState(false);
 
@@ -1428,6 +1444,15 @@ function App(props: { port: number }) {
   }, [pushLines]);
 
   const sendTurn = (prompt: string, opts?: { echoUser?: boolean }) => {
+    // Interrupt TTS playback when user sends new message
+    if (playbackQueueRef.current) {
+      playbackQueueRef.current.interrupt();
+    }
+    if (textBufferRef.current) {
+      textBufferRef.current.flush();
+    }
+    setTtsSpeaking(false);
+
     const echoUser = opts?.echoUser !== false;
     const wrapped =
       operationMode === "planning"
@@ -1624,6 +1649,17 @@ ${fullContext}`;
           if (!processing) setProcessing(true);
           const parsed = parseWireChunk(msg.chunk, displayMode);
           if (!parsed) return;
+
+          // TTS integration: add content to text buffer for speech synthesis
+          if (
+            ttsEnabled &&
+            ttsServiceReady &&
+            parsed.kind === "assistant" &&
+            textBufferRef.current
+          ) {
+            textBufferRef.current.add(parsed.text);
+          }
+
           if (parsed.kind === "assistant" || parsed.kind === "thinking") {
             const merged = appendToLastLine(parsed.kind, parsed.text);
             if (merged) return;
@@ -1633,6 +1669,11 @@ ${fullContext}`;
         }
 
         if (msg.type === "turn_finished") {
+          // Flush TTS buffer on turn completion
+          if (ttsEnabled && ttsServiceReady && textBufferRef.current) {
+            textBufferRef.current.flush();
+          }
+
           setTurnId(null);
           setProcessing(false);
           // Hide verbose turn end markers in clean mode
@@ -1669,6 +1710,61 @@ ${fullContext}`;
       }
     };
   }, [appendToLastLine, props.port, pushLines]);
+
+  // TTS service lifecycle management
+  useEffect(() => {
+    if (!ttsEnabled) return;
+
+    (async () => {
+      try {
+        // Start TTS service
+        const { process: ttsProc, ready } = await startTtsService();
+        ttsProcessRef.current = ttsProc;
+        setTtsServiceReady(ready);
+
+        if (!ready) {
+          pushLines({
+            kind: "system",
+            text: "⚠️  TTS service unavailable. Voice output disabled."
+          });
+          setTtsEnabled(false);
+          return;
+        }
+
+        // Initialize playback queue
+        playbackQueueRef.current = new AudioPlaybackQueue();
+
+        // Initialize text buffer
+        textBufferRef.current = new TextBuffer({
+          onSentence: async (text: string) => {
+            try {
+              const audio = await synthesize(text, { voice: currentVoice });
+              playbackQueueRef.current?.enqueue(audio);
+              setTtsSpeaking(true);
+            } catch (err) {
+              console.error("TTS synthesis failed:", err);
+            }
+          }
+        });
+      } catch (err) {
+        console.error("Failed to initialize TTS:", err);
+        pushLines({
+          kind: "error",
+          text: `TTS initialization failed: ${err instanceof Error ? err.message : String(err)}`
+        });
+        setTtsEnabled(false);
+      }
+    })();
+
+    // Cleanup
+    return () => {
+      playbackQueueRef.current?.interrupt();
+      textBufferRef.current?.flush();
+      if (ttsProcessRef.current) {
+        stopTtsService(ttsProcessRef.current).catch(console.error);
+      }
+    };
+  }, [ttsEnabled, currentVoice, pushLines]);
 
   const saveAgentFromForm = useCallback(
     (formData: Partial<AgentConfig>) => {
@@ -2620,6 +2716,34 @@ Use skill_draft first to create the draft, then skill_apply to create the final 
       return;
     }
 
+    if (key.ctrl && ch === "v") {
+      // TTS toggle (only if TTS is enabled via flag)
+      if (process.env.FF_TTS_ENABLED !== "true") {
+        pushLines({
+          kind: "system",
+          text: "⚠️  TTS not enabled. Start with --tts flag to use voice output."
+        });
+        return;
+      }
+
+      setTtsEnabled(prev => {
+        const next = !prev;
+        pushLines({
+          kind: "system",
+          text: `🔊 Voice output ${next ? "enabled" : "disabled"} (${currentVoice})`
+        });
+
+        // Interrupt playback if disabling
+        if (!next && playbackQueueRef.current) {
+          playbackQueueRef.current.interrupt();
+          setTtsSpeaking(false);
+        }
+
+        return next;
+      });
+      return;
+    }
+
     if (key.return) {
       const currentInput = inputStore.current.value;
       let trimmed = currentInput.trim();
@@ -3013,6 +3137,8 @@ Use skill_draft first to create the draft, then skill_apply to create the final 
           showTodoPanel={showTodoPanel}
           showToolDetails={showToolDetails}
           thinkingCount={lines.filter(l => l.kind === "thinking").length}
+          ttsEnabled={ttsEnabled}
+          currentVoice={currentVoice}
         />
       ) : null}
     </Box>

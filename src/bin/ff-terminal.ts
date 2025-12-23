@@ -29,8 +29,8 @@ function usage(): void {
   console.log(`Usage:
   ff-terminal daemon
   ff-terminal ui
-  ff-terminal start [profile] [--display-mode verbose|clean]
-  ff-terminal local [profile] [--display-mode verbose|clean]
+  ff-terminal start [profile] [--display-mode verbose|clean] [--tts] [--voice <voice>]
+  ff-terminal local [profile] [--display-mode verbose|clean] [--tts] [--voice <voice>]
   ff-terminal web
   ff-terminal acp [--profile <name>]
   ff-terminal run --prompt "..." [--profile <name>] [--session <id>] [--headless]
@@ -45,6 +45,8 @@ function usage(): void {
   ff-terminal profile tool-keys
   --allow-macos-control       Enable macOS automation tool (FF_ALLOW_MACOS_CONTROL=1)
   --allow-browser-use         Enable browser-use automation (FF_ALLOW_BROWSER_USE=1)
+  --tts                       Enable text-to-speech voice output
+  --voice <voice>             Set TTS voice (af_heart, af_bella, af_sarah, am_adam, am_michael, bf_emma, bm_george)
 `);
 }
 
@@ -166,6 +168,11 @@ async function run(): Promise<void> {
     if (displayMode && displayMode !== "verbose" && displayMode !== "clean") {
       throw new Error(`Invalid --display-mode: ${displayModeRaw} (expected verbose|clean)`);
     }
+
+    // TTS flag handling
+    const ttsEnabled = hasFlag(rest, "--tts");
+    const ttsVoice = pickArg(rest, "--voice");
+
     let config = readConfig();
 
     if (config.profiles.length === 0) {
@@ -179,6 +186,12 @@ async function run(): Promise<void> {
     // Apply profile-selected env + config path to this process (daemon + Ink UI run together here).
     sanitizeEnvInPlace();
     applyToolAllowFlags(rest);
+
+    // Set TTS environment variables
+    if (ttsEnabled || ttsVoice) {
+      process.env.FF_TTS_ENABLED = "true";
+      if (ttsVoice) process.env.FF_TTS_VOICE = ttsVoice;
+    }
 
     process.env.FF_PROFILE = profile.name;
     process.env.FF_PROVIDER = profile.provider;
@@ -297,6 +310,11 @@ async function run(): Promise<void> {
     if (displayMode && displayMode !== "verbose" && displayMode !== "clean") {
       throw new Error(`Invalid --display-mode: ${displayModeRaw} (expected verbose|clean)`);
     }
+
+    // TTS flag handling
+    const ttsEnabled = hasFlag(rest, "--tts");
+    const ttsVoice = pickArg(rest, "--voice");
+
     let config = readConfig();
 
     if (config.profiles.length === 0) {
@@ -309,6 +327,12 @@ async function run(): Promise<void> {
 
     // Apply profile-selected env + config path to this process (daemon + Ink UI run together here).
     sanitizeEnvInPlace();
+
+    // Set TTS environment variables
+    if (ttsEnabled || ttsVoice) {
+      process.env.FF_TTS_ENABLED = "true";
+      if (ttsVoice) process.env.FF_TTS_VOICE = ttsVoice;
+    }
 
     process.env.FF_PROFILE = profile.name;
     process.env.FF_PROVIDER = profile.provider;
