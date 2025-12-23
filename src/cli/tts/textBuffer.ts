@@ -13,9 +13,48 @@ export class TextBuffer {
   private onSentence: (text: string) => void | Promise<void>;
   private processingSentence: boolean = false; // Track if we're processing a sentence
   private pendingSentences: string[] = []; // Queue of sentences waiting to be processed
+  // Pre-buffering state for aggressive early emit
+  private lastEmitTime: number = 0;
+  private lastEmitLength: number = 0;
+  // Cached regex for performance (avoid recompiling on every call)
+  private static readonly SENTENCE_REGEX = /([^.!?]*[.!?]+)(?:\s+|$)/g;
+  private static readonly WORD_BOUNDARY_REGEX = /\s/;
 
   constructor(options: TextBufferOptions) {
     this.onSentence = options.onSentence;
+  }
+
+  /**
+   * Check if we should emit early (before sentence boundary).
+   * This helps reduce time-to-first-audio for long first sentences.
+   */
+  private shouldEmitEarly(): boolean {
+    const now = Date.now();
+    const timeSinceLastEmit = now - this.lastEmitTime;
+    const bufferGrowth = this.buffer.length - this.lastEmitLength;
+
+    // Emit if: buffer has grown significantly AND time has passed
+    // This prevents chopping mid-word while still being aggressive
+    const THRESHOLD_CHARS = 40;      // Minimum characters to consider
+    const THRESHOLD_TIME = 150;      // Minimum ms between emits
+
+    return this.buffer.length > THRESHOLD_CHARS &&
+           timeSinceLastEmit > THRESHOLD_TIME &&
+           bufferGrowth > 0;
+  }
+
+  /**
+   * Find a safe point to emit text (prioritizes sentence end > word boundary).
+   */
+  private findSafeEmitPoint(): number {
+    // Prioritize: sentence end > word boundary
+    const sentenceEnd = this.buffer.search(/[.!?]\s/);
+    if (sentenceEnd > 0) return sentenceEnd + 2;
+
+    const wordBoundary = this.buffer.search(TextBuffer.WORD_BOUNDARY_REGEX);
+    if (wordBoundary > 0) return wordBoundary + 1;
+
+    return 0; // No safe point found
   }
 
   /**
@@ -34,12 +73,31 @@ export class TextBuffer {
       return; // Don't extract sentences from code blocks
     }
 
-    // Extract complete sentences
+    // Check for early emit BEFORE sentence detection (aggressive optimization)
+    if (this.shouldEmitEarly()) {
+      const emitPoint = this.findSafeEmitPoint();
+      if (emitPoint > 0) {
+        const toEmit = this.buffer.slice(0, emitPoint).trim();
+        if (toEmit.length > 5) {  // Minimum meaningful chunk
+          console.log('[TTS DEBUG] Early emit:', toEmit);
+          this.pendingSentences.push(toEmit);
+          this.buffer = this.buffer.slice(emitPoint);
+          this.lastEmitTime = Date.now();
+          this.lastEmitLength = 0;
+          this.processQueue();
+          return;
+        }
+      }
+    }
+
+    // Extract complete sentences (normal path)
     const sentences = this.extractCompleteSentences();
     console.log('[TTS DEBUG] Sentences detected:', sentences);
     if (sentences.length > 0) {
       // Add to pending queue
       this.pendingSentences.push(...sentences);
+      this.lastEmitTime = Date.now();
+      this.lastEmitLength = this.buffer.length;
       // Process queue if not already processing
       this.processQueue();
     }
@@ -71,14 +129,12 @@ export class TextBuffer {
    * Keep incomplete sentences in buffer for next delta.
    */
   private extractCompleteSentences(): string[] {
-    // Match: any chars + sentence ending punctuation + (space/newline or end)
-    // This regex ensures we get complete sentences
-    const sentenceRegex = /([^.!?]*[.!?]+)(?:\s+|$)/g;
     const sentences: string[] = [];
     let lastIndex = 0;
 
     let match;
-    while ((match = sentenceRegex.exec(this.buffer)) !== null) {
+    // Use cached regex (static readonly) to avoid recompilation
+    while ((match = TextBuffer.SENTENCE_REGEX.exec(this.buffer)) !== null) {
       const sentence = match[1].trim();
       if (sentence.length > 0) {
         sentences.push(sentence);
@@ -119,6 +175,8 @@ export class TextBuffer {
     this.inCodeBlock = false;
     this.pendingSentences = [];
     this.processingSentence = false;
+    this.lastEmitTime = 0;
+    this.lastEmitLength = 0;
   }
 
   /**
