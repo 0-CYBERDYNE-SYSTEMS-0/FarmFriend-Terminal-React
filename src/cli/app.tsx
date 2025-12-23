@@ -1747,10 +1747,10 @@ ${fullContext}`;
       try {
         console.log('[TTS DEBUG] Starting TTS service...');
         // Start TTS service
-        const { process: ttsProc, ready } = await startTtsService();
+        const { process: ttsProc, ready, alreadyRunning } = await startTtsService();
         ttsProcessRef.current = ttsProc;
         setTtsServiceReady(ready);
-        console.log('[TTS DEBUG] Service started, ready:', ready);
+        console.log('[TTS DEBUG] Service started, ready:', ready, 'alreadyRunning:', alreadyRunning);
 
         if (!ready) {
           console.log('[TTS DEBUG] Service not ready, disabling TTS');
