@@ -1224,6 +1224,8 @@ function App(props: { port: number }) {
   const textBufferRef = useRef<TextBuffer | null>(null);
   const playbackQueueRef = useRef<AudioPlaybackQueue | null>(null);
   const ttsProcessRef = useRef<ChildProcess | null>(null);
+  // Buffer for early chunks that arrive before TTS is ready
+  const earlyTtsChunksRef = useRef<string[]>([]);
 
   const [doctorRunning, setDoctorRunning] = useState(false);
   const [doctorWaitingForConfirm, setDoctorWaitingForConfirm] = useState(false);
@@ -1637,6 +1639,15 @@ ${fullContext}`;
           setSessionId(msg.sessionId);
           setTurnId(msg.turnId);
           setProcessing(true);
+          // Clear any buffered early chunks from previous turn
+          if (earlyTtsChunksRef.current.length > 0) {
+            console.log('[TTS DEBUG] Clearing', earlyTtsChunksRef.current.length, 'early chunks from previous turn');
+          }
+          earlyTtsChunksRef.current = [];
+          // Reset text buffer for new turn
+          if (textBufferRef.current) {
+            textBufferRef.current.reset();
+          }
           // Hide verbose turn markers in clean mode
           if (displayMode !== "clean") {
             pushLines({ kind: "system", text: `--- turn ${msg.turnId} ---` }, { immediate: true });
@@ -1660,6 +1671,14 @@ ${fullContext}`;
           ) {
             console.log('[TTS DEBUG] Adding text to buffer:', parsed.text);
             textBufferRef.current.add(parsed.text);
+          } else if (
+            ttsEnabled &&
+            parsed.kind === "assistant" &&
+            (!ttsServiceReady || !textBufferRef.current)
+          ) {
+            // TTS enabled but not ready yet - buffer early chunks
+            console.log('[TTS DEBUG] TTS not ready, buffering early chunk:', parsed.text);
+            earlyTtsChunksRef.current.push(parsed.text);
           } else {
             console.log('[TTS DEBUG] Skipping TTS - conditions not met');
           }
@@ -1765,6 +1784,15 @@ ${fullContext}`;
           }
         });
         console.log('[TTS DEBUG] TTS fully initialized!');
+
+        // Process any early chunks that arrived before TTS was ready
+        const earlyChunks = earlyTtsChunksRef.current;
+        if (earlyChunks.length > 0) {
+          console.log('[TTS DEBUG] Processing', earlyChunks.length, 'early chunks...');
+          const combined = earlyChunks.join('');
+          textBufferRef.current.add(combined);
+          earlyTtsChunksRef.current = [];
+        }
       } catch (err) {
         console.error('[TTS DEBUG] Failed to initialize TTS:', err);
         pushLines({
