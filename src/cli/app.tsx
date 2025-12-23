@@ -1218,7 +1218,7 @@ function App(props: { port: number }) {
 
   // TTS state
   const [ttsEnabled, setTtsEnabled] = useState(process.env.FF_TTS_ENABLED === "true");
-  const [ttsServiceReady, setTtsServiceReady] = useState(false);
+  const ttsServiceReadyRef = useRef(false); // Use ref to avoid closure staleness in WebSocket handler
   const [ttsSpeaking, setTtsSpeaking] = useState(false);
   const [currentVoice] = useState(process.env.FF_TTS_VOICE || "af_heart");
   const textBufferRef = useRef<TextBuffer | null>(null);
@@ -1663,10 +1663,10 @@ ${fullContext}`;
           if (!parsed) return;
 
           // TTS integration: add content to text buffer for speech synthesis
-          console.log('[TTS DEBUG] Chunk received, kind:', parsed.kind, 'ttsEnabled:', ttsEnabled, 'ttsServiceReady:', ttsServiceReady, 'textBuffer exists:', !!textBufferRef.current);
+          console.log('[TTS DEBUG] Chunk received, kind:', parsed.kind, 'ttsEnabled:', ttsEnabled, 'ttsServiceReady:', ttsServiceReadyRef.current, 'textBuffer exists:', !!textBufferRef.current);
           if (
             ttsEnabled &&
-            ttsServiceReady &&
+            ttsServiceReadyRef.current &&
             parsed.kind === "assistant" &&
             textBufferRef.current
           ) {
@@ -1675,7 +1675,7 @@ ${fullContext}`;
           } else if (
             ttsEnabled &&
             parsed.kind === "assistant" &&
-            (!ttsServiceReady || !textBufferRef.current)
+            (!ttsServiceReadyRef.current || !textBufferRef.current)
           ) {
             // TTS enabled but not ready yet - buffer early chunks
             console.log('[TTS DEBUG] TTS not ready, buffering early chunk:', parsed.text);
@@ -1695,11 +1695,11 @@ ${fullContext}`;
         if (msg.type === "turn_finished") {
           // Flush TTS buffer on turn completion
           console.log('[TTS DEBUG] Turn finished, flushing buffer...');
-          if (ttsEnabled && ttsServiceReady && textBufferRef.current) {
+          if (ttsEnabled && ttsServiceReadyRef.current && textBufferRef.current) {
             textBufferRef.current.flush();
             console.log('[TTS DEBUG] Buffer flushed');
           } else {
-            console.log('[TTS DEBUG] Skipping flush - ttsEnabled:', ttsEnabled, 'ttsServiceReady:', ttsServiceReady, 'buffer exists:', !!textBufferRef.current);
+            console.log('[TTS DEBUG] Skipping flush - ttsEnabled:', ttsEnabled, 'ttsServiceReady:', ttsServiceReadyRef.current, 'buffer exists:', !!textBufferRef.current);
           }
 
           setTurnId(null);
@@ -1750,7 +1750,7 @@ ${fullContext}`;
         // Start TTS service
         const { process: ttsProc, ready, alreadyRunning } = await startTtsService();
         ttsProcessRef.current = ttsProc;
-        setTtsServiceReady(ready);
+        ttsServiceReadyRef.current = ready; // Use ref to avoid closure staleness
         console.log('[TTS DEBUG] Service started, ready:', ready, 'alreadyRunning:', alreadyRunning);
 
         if (!ready) {
