@@ -11,10 +11,8 @@ import { OpenAIMessage } from "./providers/types.js";
 import fs from "node:fs";
 import path from "node:path";
 import { getToolContext } from "./tools/context.js";
-import { ExecutionRecord } from "./hooks/completionValidator.js";
 import { listSkillStubs } from "./tools/implementations/skills.js";
 import { HookRegistry } from "./hooks/registry.js";
-import { createCompletionValidationStopHook } from "./hooks/builtin/completionValidationStopHook.js";
 import { createSkillAllowedToolsHooks } from "./hooks/builtin/skillAllowedToolsHook.js";
 import { StructuredLogger, parseLogLevel, redactValue, truncateForLog } from "./logging/structuredLogger.js";
 import { newId } from "../shared/ids.js";
@@ -361,9 +359,6 @@ export async function* runAgentTurn(params: {
   const hooksEnabled = (cfg as any).hooks_enabled !== false;
   const hooksToolLogging = (cfg as any).hooks_tool_logging !== false;
   const hooksLogDirectory = String((cfg as any).hooks_log_directory || "logs/hooks");
-  const completionValidationEnabled =
-    hooksEnabled && (cfg as any).hooks_completion_validation !== false && String(process.env.FF_DISABLE_COMPLETION_VALIDATION || "") !== "1";
-  const completionValidationMaxAttempts = Number((cfg as any).hooks_completion_validation_max_attempts ?? 1);
   logger.log("info", "turn_start", {
     session_id: sessionId,
     turn_id: turnId,
@@ -375,8 +370,7 @@ export async function* runAgentTurn(params: {
     max_iterations: maxIterations,
     tool_limit_total: toolLimitTotal,
     hooks_enabled: hooksEnabled,
-    hooks_tool_logging: hooksToolLogging,
-    completion_validation: completionValidationEnabled
+    hooks_tool_logging: hooksToolLogging
   });
   const toolsLogPath =
     hooksEnabled && hooksToolLogging
@@ -406,7 +400,6 @@ export async function* runAgentTurn(params: {
     }
   };
 
-  const executionsThisTurn: ExecutionRecord[] = [];
   const hookRegistry = new HookRegistry();
   let iterationCount = 0;
   let consecutiveNoAction = 0;
@@ -418,16 +411,6 @@ export async function* runAgentTurn(params: {
   }
 
   const stepAttempts = new Map<string, { attempts: number; lastError?: string }>();
-
-  if (completionValidationEnabled) {
-    hookRegistry.register(
-      createCompletionValidationStopHook({
-        enabled: true,
-        maxAttempts: completionValidationMaxAttempts,
-        workspaceDir
-      })
-    );
-  }
 
   if (planValidationEnabled) {
     hookRegistry.register(
@@ -565,7 +548,7 @@ export async function* runAgentTurn(params: {
         assistantContent,
         iteration: i,
         maxIterations,
-        toolExecutionsCount: executionsThisTurn.length
+        toolExecutionsCount: toolCallsExecuted
       });
       const stopReason = stop.action === "allow" ? undefined : (stop as any).reason ?? (stop as any).statusMessage;
       logger.log("info", "agent_stop_decision", {
@@ -677,18 +660,6 @@ export async function* runAgentTurn(params: {
     });
     const results = [...blockedResults, ...resultsRan] as Array<{ id: string; name: string; ok: boolean; output: string }>;
     toolCallsExecuted += callsToRun.length;
-
-    if (completionValidationEnabled) {
-      for (const r of results) {
-        executionsThisTurn.push({
-          id: r.id,
-          toolName: r.name,
-          parameters: (toolCalls.find((tc) => tc.id === r.id) as any)?.arguments,
-          success: r.ok,
-          resultSummary: String(r.output || "").slice(0, 200)
-        });
-      }
-    }
 
     if (planValidationEnabled && activePlan && planStore) {
       const currentStep = activePlan.steps.find((s) => s.status === "in_progress");
@@ -835,7 +806,7 @@ export async function* runAgentTurn(params: {
 
       if (activePlan && planStore) {
         const updatedStore = { ...planStore };
-        const planIndex = updatedStore.plans.findIndex((p) => p.id === activePlan.id);
+        const planIndex = updatedStore.plans.findIndex((p) => p.id === activePlan!.id);
         if (planIndex !== -1) {
           updatedStore.plans[planIndex] = activePlan;
           savePlanStore(workspaceDir, sessionId, updatedStore);
@@ -866,7 +837,7 @@ export async function* runAgentTurn(params: {
         assistantContent: finalAssistantContent,
         iteration: i,
         maxIterations,
-        toolExecutionsCount: executionsThisTurn.length
+        toolExecutionsCount: toolCallsExecuted
       });
       const stopReason = finalStop.action === "allow" ? undefined : (finalStop as any).reason ?? (finalStop as any).statusMessage;
       logger.log("info", "agent_stop_decision", {

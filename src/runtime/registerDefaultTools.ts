@@ -15,8 +15,6 @@ import { searchCodeTool, semanticSearchTool } from "./tools/implementations/sear
 import { thinkTool } from "./tools/implementations/think.js";
 import { quickUpdateTool } from "./tools/implementations/quickUpdate.js";
 import { sessionSummaryTool } from "./tools/implementations/sessionSummary.js";
-import { manageTaskTool } from "./tools/implementations/manageTask.js";
-import { completionValidationTool } from "./tools/implementations/completionValidation.js";
 import { skillDocumentationTool, skillImportTool, skillLoaderTool } from "./tools/implementations/skills.js";
 import { subagentTool } from "./tools/implementations/subagentTool.js";
 import { tavilyCrawlTool, tavilyExtractTool, tavilyMapTool } from "./tools/implementations/tavilyAdvanced.js";
@@ -49,8 +47,6 @@ export function registerDefaultTools(registry: ToolRegistry, opts: { workspaceDi
   registry.register("think", async (args) => thinkTool(args));
   registry.register("quick_update", async (args) => quickUpdateTool(args));
   registry.register("session_summary", async (args) => sessionSummaryTool(args));
-  registry.register("manage_task", async (args) => manageTaskTool(args));
-  registry.register("completion_validation", async (args) => completionValidationTool(args));
   registry.register("skill_loader", async (args) => skillLoaderTool(args));
   registry.register("skill_documentation", async (args) => skillDocumentationTool(args));
   registry.register("skill_import", async (args) => skillImportTool(args));
