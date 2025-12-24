@@ -2,7 +2,7 @@ import { openAICompatProvider } from "./openaiCompat.js";
 import { Provider } from "./types.js";
 
 export function openRouterProvider(params: { apiKey: string }): Provider {
-  return openAICompatProvider({
+  const baseProvider = openAICompatProvider({
     name: "openrouter",
     baseUrl: "https://openrouter.ai/api/v1",
     apiKey: params.apiKey,
@@ -12,4 +12,9 @@ export function openRouterProvider(params: { apiKey: string }): Provider {
       "X-Title": "FF-Terminal"
     }
   });
+
+  return {
+    name: baseProvider.name,
+    streamChat: (params) => baseProvider.streamChat(params)
+  };
 }
