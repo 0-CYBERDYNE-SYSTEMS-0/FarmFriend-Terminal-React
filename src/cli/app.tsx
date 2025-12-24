@@ -6,6 +6,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { readConfig, writeConfig } from "../runtime/profiles/storage.js";
 import type { Profile } from "../runtime/profiles/types.js";
+import type { ExecutionPlan } from "../runtime/planning/types.js";
 import { loadToolSchemas } from "../runtime/tools/toolSchemas.js";
 import { readMountsConfig, setMountEnabled } from "../runtime/config/mounts.js";
 import { findRepoRoot } from "../runtime/config/repoRoot.js";
@@ -581,6 +582,137 @@ const TodoPanel = memo(function TodoPanel(props: {
       <Box marginTop={1}>
         <Text color="gray">
           Press Ctrl+D to hide • Auto-refreshes every 2s
+        </Text>
+      </Box>
+    </Box>
+  );
+});
+
+const PlanPanel = memo(function PlanPanel(props: {
+  sessionId: string | null;
+  workspaceDir: string;
+  visible: boolean;
+}) {
+  const [plan, setPlan] = useState<ExecutionPlan | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [lastModified, setLastModified] = useState<number>(0);
+
+  useEffect(() => {
+    if (!props.visible || !props.sessionId) return;
+    if (!isValidSessionId(props.sessionId)) {
+      setError("Invalid session ID format");
+      return;
+    }
+
+    const planPath = path.join(
+      props.workspaceDir,
+      "plans",
+      "sessions",
+      `${props.sessionId}.json`
+    );
+
+    try {
+      if (!fs.existsSync(planPath)) {
+        setPlan(null);
+        setError(null);
+        return;
+      }
+
+      const content = fs.readFileSync(planPath, "utf8");
+      const store = JSON.parse(content);
+      const activePlan = store.plans.find((p: ExecutionPlan) => p.id === store.activePlanId);
+      setPlan(activePlan || null);
+      setError(null);
+
+      const stat = fs.statSync(planPath);
+      setLastModified(stat.mtimeMs);
+    } catch (err) {
+      setError(`Failed to load plan: ${(err as Error).message}`);
+      setPlan(null);
+    }
+  }, [props.visible, props.sessionId, props.workspaceDir, lastModified]);
+
+  useEffect(() => {
+    if (!props.visible || !props.sessionId) return;
+    if (!isValidSessionId(props.sessionId)) return;
+
+    const planPath = path.join(
+      props.workspaceDir,
+      "plans",
+      "sessions",
+      `${props.sessionId}.json`
+    );
+
+    const interval = setInterval(() => {
+      try {
+        if (fs.existsSync(planPath)) {
+          const stat = fs.statSync(planPath);
+          if (stat.mtimeMs !== lastModified) {
+            setLastModified(stat.mtimeMs);
+          }
+        }
+      } catch {
+        // Ignore refresh errors
+      }
+    }, 4000);
+
+    return () => clearInterval(interval);
+  }, [props.visible, props.sessionId, props.workspaceDir, lastModified]);
+
+  if (!props.visible) return null;
+
+  if (error) {
+    return (
+      <Box flexDirection="column" borderStyle="single" borderColor="red">
+        <Text color="red">Plan Panel - Error</Text>
+        <Text dimColor>{error}</Text>
+      </Box>
+    );
+  }
+
+  if (!plan) {
+    return (
+      <Box flexDirection="column" borderStyle="single" borderColor="gray">
+        <Text color="yellow">Plan Panel</Text>
+        <Text color="gray">No active plan for this session.</Text>
+      </Box>
+    );
+  }
+
+  const getStatusIcon = (status: string) => {
+    switch (status) {
+      case "completed": return "✓";
+      case "in_progress": return "⧗";
+      case "blocked": return "✗";
+      default: return " ";
+    }
+  };
+
+  return (
+    <Box flexDirection="column" borderStyle="single" borderColor="cyan">
+      <Text color="cyan" bold>
+        Plan: {plan.objective}
+      </Text>
+      <Text dimColor>
+        Progress: {plan.completedSteps}/{plan.totalSteps} steps
+      </Text>
+      {plan.steps.map((step) => (
+        <Box key={step.id} flexDirection="column" marginLeft={1}>
+          <Text>
+            {getStatusIcon(step.status)} Step {step.id}: {step.description}
+          </Text>
+          {step.status === "blocked" && step.lastError && (
+            <Box marginLeft={2}>
+              <Text color="red">
+                ↳ BLOCKED: {step.lastError.slice(0, 60)}
+              </Text>
+            </Box>
+          )}
+        </Box>
+      ))}
+      <Box marginTop={1}>
+        <Text color="gray">
+          Press Ctrl+P to hide • Auto-refreshes every 4s
         </Text>
       </Box>
     </Box>
@@ -1297,6 +1429,7 @@ function App(props: { port: number }) {
 
   const [showThinking, setShowThinking] = useState(false);
   const [showTodoPanel, setShowTodoPanel] = useState(false);
+  const [showPlanPanel, setShowPlanPanel] = useState(false);
   const [showToolDetails, setShowToolDetails] = useState(false);
   const [scrollOffset, setScrollOffset] = useState(0);
 
@@ -2702,6 +2835,7 @@ Use skill_draft first to create the draft, then skill_apply to create the final 
             { kind: "system", text: "  Shift+Tab        Cycle operation mode" },
             { kind: "system", text: "  Ctrl+T           Toggle thinking visibility" },
             { kind: "system", text: "  Ctrl+D           Toggle todo panel" },
+            { kind: "system", text: "  Ctrl+P           Toggle plan panel" },
             { kind: "system", text: "  Ctrl+E           Toggle tool details" },
             { kind: "system", text: "  PageUp/PageDown  Scroll transcript" },
             { kind: "system", text: "  Home             Jump to bottom" }
@@ -2775,6 +2909,18 @@ Use skill_draft first to create the draft, then skill_apply to create the final 
         pushLines({
           kind: "system",
           text: `Todo panel ${next ? "shown" : "hidden"}`
+        });
+        return next;
+      });
+      return;
+    }
+
+    if (key.ctrl && ch === "p") {
+      setShowPlanPanel(prev => {
+        const next = !prev;
+        pushLines({
+          kind: "system",
+          text: `Plan panel ${next ? "shown" : "hidden"}`
         });
         return next;
       });
@@ -3166,6 +3312,11 @@ Use skill_draft first to create the draft, then skill_apply to create the final 
         sessionId={sessionId}
         workspaceDir={workspaceDir}
         visible={showTodoPanel}
+      />
+      <PlanPanel
+        sessionId={sessionId}
+        workspaceDir={workspaceDir}
+        visible={showPlanPanel}
       />
       <TodoSummary
         sessionId={sessionId}
