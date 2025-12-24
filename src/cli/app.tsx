@@ -606,8 +606,8 @@ const PlanPanel = memo(function PlanPanel(props: {
 
     const planPath = path.join(
       props.workspaceDir,
-      "plans",
       "sessions",
+      "plans",
       `${props.sessionId}.json`
     );
 
@@ -638,8 +638,8 @@ const PlanPanel = memo(function PlanPanel(props: {
 
     const planPath = path.join(
       props.workspaceDir,
-      "plans",
       "sessions",
+      "plans",
       `${props.sessionId}.json`
     );
 
