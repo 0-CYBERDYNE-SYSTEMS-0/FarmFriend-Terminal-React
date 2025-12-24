@@ -84,6 +84,17 @@ export function resolveConfig(params?: { repoRoot?: string; userConfigPath?: str
     merged.lm_studio_base_url = process.env.LM_STUDIO_BASE_URL;
   }
 
+  // Forced tool calling environment variables
+  if (typeof process.env.FF_FORCE_TOOL_CALLS === "string") {
+    merged.force_tool_calls = process.env.FF_FORCE_TOOL_CALLS.toLowerCase() === "true";
+  }
+  if (typeof process.env.FF_FORCE_TOOL_CALLS_THRESHOLD === "string") {
+    const threshold = parseInt(process.env.FF_FORCE_TOOL_CALLS_THRESHOLD, 10);
+    if (!isNaN(threshold)) {
+      merged.force_tool_calls_threshold = threshold;
+    }
+  }
+
   return merged;
 }
 

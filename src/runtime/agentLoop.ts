@@ -679,6 +679,20 @@ export async function* runAgentTurn(params: {
       // Note: Tool outputs are not added to session.conversation to keep UI clean
       // They're only in messages[] for LLM context
     }
+
+    // Update no-action counter
+    if (!toolCalls.length) {
+      consecutiveNoAction++;
+      logger.log("debug", "no_action_iteration", {
+        session_id: sessionId,
+        turn_id: turnId,
+        iteration: i + 1,
+        consecutive_count: consecutiveNoAction
+      });
+    } else {
+      consecutiveNoAction = 0;
+    }
+
     // If we've reached the last iteration, run a final stop-check to avoid silent exit with open promises.
     if (iterationCount === maxIterations - 1) {
       const finalStop = await hookRegistry.runAgentStop({
