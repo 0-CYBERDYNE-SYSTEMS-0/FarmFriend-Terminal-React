@@ -12,6 +12,7 @@ export function buildSystemPrompt(params: {
   parallelMode: boolean;
   skillSections?: string;
   sessionSummary?: string;
+  planContext?: string;
   availableToolNames?: string[];
 }): string {
   const repoRoot = params.repoRoot ?? findRepoRoot();
@@ -32,6 +33,7 @@ export function buildSystemPrompt(params: {
     parallel_section,
     tools_compact,
     skill_sections: params.skillSections ?? "",
+    plan_context: params.planContext ?? "",
     essential_tools: tools_compact,
     simple_context: env_context,
     ...footer
