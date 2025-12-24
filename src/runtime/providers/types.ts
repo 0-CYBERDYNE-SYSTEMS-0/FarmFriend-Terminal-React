@@ -2,11 +2,11 @@ export type OpenAIRole = "system" | "developer" | "user" | "assistant" | "tool";
 
 // Content block types for multimodal support
 type ContentBlock =
-  | { type: "text"; text: string }
-  | { type: "image_url"; image_url: { url: string } };
+  | { type: "text"; text: string; cache_control?: { type: "ephemeral"; ttl?: "5m" | "1h" } }
+  | { type: "image_url"; image_url: { url: string }; cache_control?: { type: "ephemeral"; ttl?: "5m" | "1h" } };
 
 export type OpenAIMessage =
-  | { role: "system" | "developer"; content: string }
+  | { role: "system" | "developer"; content: string | ContentBlock[] }
   | { role: "user"; content: string | ContentBlock[] }
   | { role: "assistant"; content: string }
   | { role: "tool"; tool_call_id: string; name?: string; content: string };

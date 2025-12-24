@@ -1,7 +1,7 @@
 import { ToolRegistry } from "./tools/registry.js";
 import { executeToolCalls } from "./tools/executeTools.js";
 import { StreamChunk } from "./streamProtocol.js";
-import { buildSystemPrompt } from "./prompts/systemPrompt.js";
+import { buildSystemPrompt, buildCacheableSystemPrompt } from "./prompts/systemPrompt.js";
 import { createSession, loadSession, saveSession } from "./session/sessionStore.js";
 import { findRepoRoot } from "./config/repoRoot.js";
 import { resolveConfig } from "./config/loadConfig.js";
@@ -19,6 +19,10 @@ import { createSkillAllowedToolsHooks } from "./hooks/builtin/skillAllowedToolsH
 import { StructuredLogger, parseLogLevel, redactValue, truncateForLog } from "./logging/structuredLogger.js";
 import { newId } from "../shared/ids.js";
 import { resolveWorkspaceDir } from "./config/paths.js";
+import { extractPlansFromContent, updatePlanStepStatus as updatePlanStepStatusInPlan, formatPlanForPrompt, isPlanComplete, trackStepAttempt } from "./planning/planExtractor.js";
+import { loadPlanStore, savePlanStore, getActivePlan, addPlan } from "./planning/planStore.js";
+import { createPlanValidationStopHook } from "./hooks/builtin/planValidationStopHook.js";
+import type { ExecutionPlan, PlanStore } from "./planning/types.js";
 
 function smartTruncate(text: string, maxLen: number): string {
   if (text.length <= maxLen) return text;
@@ -298,6 +302,15 @@ export async function* runAgentTurn(params: {
     return `\n## Relevant Skills\nIf helpful, call \`skill_loader\` with \`skill_slug\` to load one of these skills:\n${ranked.join("\n")}\n`;
   })();
 
+  const planValidationEnabled = (cfg as any).plan_validation_enabled ?? false;
+  let activePlan: ExecutionPlan | null = null;
+  if (planValidationEnabled) {
+    const planStore = loadPlanStore({ workspaceDir, sessionId });
+    activePlan = getActivePlan(planStore);
+  }
+
+  const planContext = activePlan ? formatPlanForPrompt(activePlan) : "";
+
   const systemPrompt = buildSystemPrompt({
     variant: (cfg.system_message_variant as any) ?? "a",
     repoRoot,
@@ -305,6 +318,7 @@ export async function* runAgentTurn(params: {
     parallelMode: (cfg.parallel_mode as any) ?? true,
     skillSections,
     sessionSummary,
+    planContext,
     availableToolNames: registry.listNames()
   });
 
@@ -385,11 +399,28 @@ export async function* runAgentTurn(params: {
   let consecutiveNoAction = 0;
   const forceToolCalls = (cfg as any).force_tool_calls ?? true;
 
+  let planStore: PlanStore | null = null;
+  if (planValidationEnabled) {
+    planStore = loadPlanStore({ workspaceDir, sessionId });
+  }
+
+  const stepAttempts = new Map<string, { attempts: number; lastError?: string }>();
+
   if (completionValidationEnabled) {
     hookRegistry.register(
       createCompletionValidationStopHook({
         enabled: true,
         maxAttempts: completionValidationMaxAttempts,
+        workspaceDir
+      })
+    );
+  }
+
+  if (planValidationEnabled) {
+    hookRegistry.register(
+      createPlanValidationStopHook({
+        enabled: true,
+        maxBlockAttempts: 3,
         workspaceDir
       })
     );
@@ -479,6 +510,28 @@ export async function* runAgentTurn(params: {
       content_preview: smartTruncate(assistantContent, 800),
       tool_calls_count: toolCalls.length
     });
+
+    // Extract plans from assistant response
+    if (planValidationEnabled && planStore !== null) {
+      const extractedPlans = extractPlansFromContent(assistantContent);
+
+      for (const newPlan of extractedPlans) {
+        addPlan(planStore, newPlan);
+        activePlan = newPlan;
+
+        logger.log("info", "plan_created", {
+          session_id: sessionId,
+          turn_id: turnId,
+          plan_id: newPlan.id,
+          objective: newPlan.objective,
+          steps_count: newPlan.steps.length
+        });
+      }
+
+      if (extractedPlans.length > 0) {
+        savePlanStore(workspaceDir, sessionId, planStore);
+      }
+    }
 
     // Record assistant content (even if empty; tool-calling turns often have little text).
     session.conversation.push({
@@ -624,6 +677,67 @@ export async function* runAgentTurn(params: {
       }
     }
 
+    if (planValidationEnabled && activePlan && planStore) {
+      const currentStep = activePlan.steps.find((s) => s.status === "in_progress");
+
+      if (currentStep) {
+        for (const result of results) {
+          if (!result.ok) {
+            const attempt = stepAttempts.get(currentStep.id) || { attempts: 0 };
+            attempt.attempts++;
+            attempt.lastError = result.output;
+            stepAttempts.set(currentStep.id, attempt);
+
+            logger.log("warn", "step_attempt_failed", {
+              session_id: sessionId,
+              step_id: currentStep.id,
+              attempt_number: attempt.attempts,
+              tool: result.name,
+              error: result.output.slice(0, 200)
+            });
+
+            if (attempt.attempts >= 3 && activePlan) {
+              activePlan = updatePlanStepStatusInPlan(
+                activePlan,
+                currentStep.id,
+                "blocked",
+                `Failed after 3 attempts: ${attempt.lastError?.slice(0, 100)}`
+              );
+
+              if (activePlan) {
+                logger.log("error", "step_blocked", {
+                  session_id: sessionId,
+                  plan_id: activePlan.id,
+                  step_id: currentStep.id,
+                  reason: "max_attempts_exceeded"
+                });
+              }
+
+              if (planStore && activePlan) {
+                const updatedStore = { ...planStore };
+                const planIndex = updatedStore.plans.findIndex((p) => p.id === activePlan.id);
+                if (planIndex !== -1) {
+                  updatedStore.plans[planIndex] = activePlan;
+                  savePlanStore(workspaceDir, sessionId, updatedStore);
+                }
+              }
+
+              messages.push({
+                role: "system",
+                content:
+                  `Step ${currentStep.id} failed 3 times.\n` +
+                  `Last error: ${attempt.lastError?.slice(0, 200)}\n\n` +
+                  `Options:\n` +
+                  `1. Try a different approach (different tools or strategy)\n` +
+                  `2. Skip this step and continue to next\n` +
+                  `3. Output <escalate>reason</escalate> for user help`
+              });
+            }
+          }
+        }
+      }
+    }
+
     for (const r of results) {
       const durationMs = durationById.get(r.id) ?? 0;
       const durationSec = (durationMs / 1000).toFixed(1);
@@ -678,6 +792,40 @@ export async function* runAgentTurn(params: {
       });
       // Note: Tool outputs are not added to session.conversation to keep UI clean
       // They're only in messages[] for LLM context
+    }
+
+    // Track plan fulfillment based on tool executions
+    if (planValidationEnabled && activePlan && planStore) {
+      for (const execution of results) {
+        if (!execution.ok) continue;
+
+        for (const step of activePlan.steps) {
+          if (step.status === "completed") continue;
+
+          const stepLower = step.description.toLowerCase();
+          const toolLower = execution.name.toLowerCase();
+
+          if (stepLower.includes(toolLower) ||
+              stepLower.includes(execution.name.replace(/_/g, " "))) {
+
+            activePlan = updatePlanStepStatusInPlan(activePlan, step.id, "completed");
+
+            logger.log("info", "plan_step_completed", {
+              session_id: sessionId,
+              plan_id: activePlan.id,
+              step_id: step.id,
+              tool_used: execution.name
+            });
+          }
+        }
+      }
+
+      const updatedStore = { ...planStore };
+      const planIndex = updatedStore.plans.findIndex((p) => p.id === activePlan.id);
+      if (planIndex !== -1) {
+        updatedStore.plans[planIndex] = activePlan;
+        savePlanStore(workspaceDir, sessionId, updatedStore);
+      }
     }
 
     // Update no-action counter

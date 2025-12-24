@@ -13,13 +13,26 @@ function textContentOf(msg: OpenAIMessage): string {
   return String(msg.content || '');
 }
 
-function convertMessages(messages: OpenAIMessage[]): { anthropicMessages: any[]; system?: string } {
-  const systemParts: string[] = [];
+function convertMessages(messages: OpenAIMessage[]): { anthropicMessages: any[]; system?: any[] } {
+  const systemBlocks: any[] = [];
   const out: any[] = [];
 
   for (const m of messages) {
     if (m.role === "system" || m.role === "developer") {
-      systemParts.push(textContentOf(m));
+      // System messages can be content blocks with cache_control
+      if (typeof m.content === 'string') {
+        systemBlocks.push({ type: "text", text: m.content });
+      } else if (Array.isArray(m.content)) {
+        for (const block of m.content) {
+          if (block.type === 'text') {
+            systemBlocks.push({
+              type: "text",
+              text: block.text,
+              ...(block.cache_control && { cache_control: block.cache_control })
+            });
+          }
+        }
+      }
       continue;
     }
 
@@ -29,18 +42,30 @@ function convertMessages(messages: OpenAIMessage[]): { anthropicMessages: any[];
     if (Array.isArray(m.content)) {
       const contentBlocks = m.content.map(block => {
         if (block.type === "text" && block.text) {
-          return { type: "text", text: block.text };
+          return {
+            type: "text",
+            text: block.text,
+            ...(block.cache_control && { cache_control: block.cache_control })
+          };
         }
         if (block.type === "image_url" && block.image_url?.url) {
           const url = block.image_url.url;
           // Handle base64 data URLs
           const base64Match = url.match(/^data:([^;]+);base64,(.+)$/);
           if (base64Match) {
-            return { type: "image", source: { type: "base64", media_type: base64Match[1], data: base64Match[2] } };
+            return {
+              type: "image",
+              source: { type: "base64", media_type: base64Match[1], data: base64Match[2] },
+              ...(block.cache_control && { cache_control: block.cache_control })
+            };
           }
           // Handle regular URLs - return as URL source
           if (url.startsWith("http://") || url.startsWith("https://")) {
-            return { type: "image", source: { type: "url", url } };
+            return {
+              type: "image",
+              source: { type: "url", url },
+              ...(block.cache_control && { cache_control: block.cache_control })
+            };
           }
         }
         return null;
@@ -51,8 +76,7 @@ function convertMessages(messages: OpenAIMessage[]): { anthropicMessages: any[];
     }
   }
 
-  const system = systemParts.join("\n\n").trim();
-  return { anthropicMessages: out, system: system.length ? system : undefined };
+  return { anthropicMessages: out, system: systemBlocks.length ? systemBlocks : undefined };
 }
 
 function convertTools(tools: OpenAIToolSchema[]): any[] {
