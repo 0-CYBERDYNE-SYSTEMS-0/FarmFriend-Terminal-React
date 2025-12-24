@@ -93,7 +93,7 @@ export function minimaxProvider(params: {
 
   return {
     name: "minimax",
-    async *streamChat({ model, messages, tools, temperature, maxTokens, signal }: Parameters<Provider["streamChat"]>[0]): AsyncGenerator<ProviderStreamEvent> {
+    async *streamChat({ model, messages, tools, temperature, maxTokens, signal, tool_choice }: Parameters<Provider["streamChat"]>[0]): AsyncGenerator<ProviderStreamEvent> {
       const url = `${baseUrl}/v1/messages`;
       const { anthropicMessages, system } = convertMessages(messages);
       const actualModel = modelMapping[model] || modelMapping.default;
@@ -105,6 +105,7 @@ export function minimaxProvider(params: {
       };
       if (system) payload.system = system;
       if (tools?.length) payload.tools = convertTools(tools);
+      if (tool_choice) payload.tool_choice = tool_choice;
 
       const res = await fetch(url, {
         method: "POST",

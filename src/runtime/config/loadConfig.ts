@@ -15,6 +15,12 @@ export type RuntimeConfig = Record<string, unknown> & {
   log_retention?: number;
   workspace_dir?: string;
 
+  // Forced tool calling configuration
+  // force_tool_calls: Enable/disable forced tool calling behavior
+  // force_tool_calls_threshold: Minimum number of turns before forcing tool calls
+  force_tool_calls?: boolean;
+  force_tool_calls_threshold?: number;
+
   // Optional key locations (recommended for background runs where env vars may be missing)
   openai_api_key?: string;
   anthropic_api_key?: string;

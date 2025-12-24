@@ -73,5 +73,7 @@
   "browser_auto_detect_forms": true,
   "browser_wait_for_user_input": true,
   "browser_max_sessions": 5,
+  "force_tool_calls": true,
+  "force_tool_calls_threshold": 2,
   "_providers": {}
 }

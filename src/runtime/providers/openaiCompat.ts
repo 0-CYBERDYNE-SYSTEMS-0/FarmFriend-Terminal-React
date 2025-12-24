@@ -162,7 +162,7 @@ export function openAICompatProvider(params: {
 
   return {
     name: params.name,
-    async *streamChat({ model, messages, tools, temperature, maxTokens, signal }): AsyncGenerator<ProviderStreamEvent> {
+    async *streamChat({ model, messages, tools, temperature, maxTokens, signal, tool_choice }): AsyncGenerator<ProviderStreamEvent> {
       const url = `${baseUrl}/chat/completions`;
       const debug = ["1", "true", "yes", "on"].includes(String(process.env.FF_DEBUG_PROVIDER || "").trim().toLowerCase());
       const debugLog = (...args: any[]) => {
@@ -175,6 +175,7 @@ export function openAICompatProvider(params: {
         model: mapModel(model),
         messages: normalizeMessages(messages),
         tools: tools?.length ? tools : undefined,
+        tool_choice,
         temperature,
         max_tokens: maxTokens
       };

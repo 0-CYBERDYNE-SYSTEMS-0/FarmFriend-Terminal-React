@@ -382,6 +382,8 @@ export async function* runAgentTurn(params: {
   const executionsThisTurn: ExecutionRecord[] = [];
   const hookRegistry = new HookRegistry();
   let iterationCount = 0;
+  let consecutiveNoAction = 0;
+  const forceToolCalls = (cfg as any).force_tool_calls ?? true;
 
   if (completionValidationEnabled) {
     hookRegistry.register(
@@ -409,10 +411,18 @@ export async function* runAgentTurn(params: {
       let emittedAnyContent = false;
       let emittedAnyThinking = false;
 
+      const shouldForceTools = forceToolCalls && (
+        consecutiveNoAction >= 2 ||
+        (i > 1 && !toolCalls.length)
+      );
+
+      const toolChoice = shouldForceTools && tools?.length ? "any" : "auto";
+
       for await (const ev of provider.streamChat({
         model,
         messages,
         tools,
+        tool_choice: toolChoice,
         temperature: Number((cfg as any).temperature ?? 0.7),
         maxTokens: Number((cfg as any).max_tokens ?? 12000),
         signal,
