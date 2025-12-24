@@ -84,7 +84,10 @@ function getToolContextMessage(toolName: string, args: unknown): string {
   if (formatter) {
     try {
       return formatter(args);
-    } catch {
+    } catch (err) {
+      if (process.env.FF_DEBUG === "1") {
+        console.debug(`[agentLoop] Tool context formatter failed for ${toolName}:`, err);
+      }
       return `⚙️  ${toolName}...`;
     }
   }
@@ -178,7 +181,10 @@ function getToolPreview(toolName: string, output: string, ok: boolean): string {
         return "";
       }
     }
-  } catch {
+  } catch (err) {
+    if (process.env.FF_DEBUG === "1") {
+      console.debug(`[agentLoop] Tool preview extraction failed for ${toolName}:`, err);
+    }
     return "";
   }
 }
@@ -233,7 +239,12 @@ export async function* runAgentTurn(params: {
       if (!trimmed) return undefined;
       const MAX = 8000;
       return trimmed.length > MAX ? trimmed.slice(0, MAX) + "\n\n...(truncated)" : trimmed;
-    } catch {
+    } catch (err) {
+      // Session summary loading failed - log but continue without summary
+      logger.log("warn", "session_summary_load_failed", {
+        path: p,
+        error: err instanceof Error ? err.message : String(err)
+      });
       return undefined;
     }
   })();
@@ -386,8 +397,11 @@ export async function* runAgentTurn(params: {
         arguments: ev.arguments ? redactValue(ev.arguments) : undefined,
         output_preview: ev.output_preview ? truncateForLog(String(ev.output_preview)) : undefined
       });
-    } catch {
-      // ignore structured logger errors
+    } catch (err) {
+      // Intentionally ignore structured logger errors to avoid blocking agent loops
+      if (process.env.FF_DEBUG === "1") {
+        console.debug(`[agentLoop] Structured logger failed:`, err);
+      }
     }
 
     // Legacy per-session tool log file
@@ -487,6 +501,8 @@ export async function* runAgentTurn(params: {
             iteration: i + 1,
             message: ev.message
           });
+          // Provider error is terminal - stop processing this iteration
+          break;
         } else if (ev.type === "final") {
           assistantContent = ev.content.replace("[AWAITING_INPUT]", "");
           toolCalls = ev.toolCalls;
@@ -571,12 +587,18 @@ export async function* runAgentTurn(params: {
     // Guard: if we are at the final iteration and toolCalls exist, we'll still process them,
     // but after that, if maxIterations reached, we will run stop hook once more before exit.
     if (toolCallsExecuted + toolCalls.length > toolLimitTotal) {
-      yield { kind: "error", message: `Tool call limit exceeded (${toolLimitTotal}). Refusing to execute more tools.` };
-      logger.log("warn", "tool_limit_reached", {
+      const wouldExecute = toolCallsExecuted + toolCalls.length;
+      yield {
+        kind: "error",
+        message: `Would exceed tool call limit (${wouldExecute}/${toolLimitTotal}). Refusing to execute ${toolCalls.length} more tools.`
+      };
+      logger.log("warn", "would_exceed_tool_limit", {
         session_id: sessionId,
         turn_id: turnId,
         iteration: i + 1,
-        attempted: toolCallsExecuted + toolCalls.length,
+        currently_executed: toolCallsExecuted,
+        requested: toolCalls.length,
+        total_would_be: wouldExecute,
         limit: toolLimitTotal
       });
       break;
@@ -851,10 +873,9 @@ export async function* runAgentTurn(params: {
       if (finalStop.action === "block") {
         if (finalStop.statusMessage) yield { kind: "status", message: finalStop.statusMessage };
         messages.push({ role: "system", content: finalStop.systemPrompt });
-        // Allow one extra loop beyond nominal max to honor the block.
-        if (i >= maxIterations - 1) {
-          maxIterations + 1; // no-op, documentation only
-        }
+        // Note: This executes on the final iteration (i === maxIterations - 1).
+        // The injected system prompt will be processed, then the loop completes naturally.
+        // Hooks have one chance to inject guidance before the turn ends.
       }
     }
     }

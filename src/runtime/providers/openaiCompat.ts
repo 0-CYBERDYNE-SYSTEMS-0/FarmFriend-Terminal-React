@@ -409,7 +409,7 @@ export function openAICompatProvider(params: {
                 ? obj.error
                 : JSON.stringify(obj.error);
           yield { type: "error", message: `Provider error (stream) at ${url}: ${msg}` };
-          continue;
+          return;
         }
 
         // OpenAI-style SSE: { choices: [{ delta: { content, tool_calls }, finish_reason }] }
@@ -567,6 +567,11 @@ export function openAICompatProvider(params: {
           }
         } catch (err) {
           debugLog("empty_stream_retry_failed", { message: String(err || "unknown error") });
+          yield {
+            type: "error",
+            message: `Empty stream retry failed for ${url}. Provider returned no content or tool calls.`
+          };
+          return;
         }
       }
 
@@ -581,12 +586,14 @@ export function openAICompatProvider(params: {
       }
       if (!sawAnyEvent && isEmpty) {
         yield { type: "error", message: `No streaming events received from ${url} (content-type: ${contentType || "unknown"})` };
+        return;
       }
       if (sawAnyEvent && isEmpty) {
         yield {
           type: "error",
           message: `Empty response from ${url} (no content/tool calls). Try a different base URL or set FF_DEBUG_PROVIDER=1.`
         };
+        return;
       }
       yield { type: "final", content, toolCalls, rawModel };
     }

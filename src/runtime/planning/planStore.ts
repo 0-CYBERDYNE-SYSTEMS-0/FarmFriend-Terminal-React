@@ -57,8 +57,12 @@ export function savePlanStore(
   sessionId: string,
   store: PlanStore
 ): void {
-  const storePath = planStorePath({ workspaceDir, sessionId });
-  writeStore(storePath, store);
+  try {
+    const storePath = planStorePath({ workspaceDir, sessionId });
+    writeStore(storePath, store);
+  } catch (err) {
+    console.error(`[planStore] Failed to save plan store for session ${sessionId}:`, err);
+  }
 }
 
 export function addPlan(store: PlanStore, plan: ExecutionPlan): PlanStore {

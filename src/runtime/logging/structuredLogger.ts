@@ -73,6 +73,15 @@ export class StructuredLogger {
     fs.mkdirSync(path.dirname(this.filePath), { recursive: true });
   }
 
+  /**
+   * Log an event with structured data.
+   *
+   * NOTE: This method is intentionally fire-and-forget (synchronous return,
+   * async I/O) to avoid blocking agent loops. Logs are eventually consistent
+   * with a slight delay. In rare cases (process exit immediately after log),
+   * the final log entry may be lost. This is an acceptable trade-off for
+   * performance.
+   */
   log(level: LogLevel, event: string, data?: Record<string, unknown>): void {
     if (!this.isEnabled(level)) return;
     const payload = {
