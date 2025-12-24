@@ -50,7 +50,7 @@ export function buildCacheableSystemPrompt(params: {
   planContext?: string;
   availableToolNames?: string[];
   enableCaching?: boolean;
-}): Array<{ type: string; text: string; cache_control?: { type: "ephemeral"; ttl?: "5m" | "1h" } }> {
+}): Array<{ type: "text"; text: string; cache_control?: { type: "ephemeral"; ttl?: "5m" | "1h" } }> {
   if (!params.enableCaching) {
     const prompt = buildSystemPrompt(params);
     return [{ type: "text", text: prompt }];

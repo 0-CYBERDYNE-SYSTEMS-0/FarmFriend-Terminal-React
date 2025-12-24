@@ -311,21 +311,34 @@ export async function* runAgentTurn(params: {
 
   const planContext = activePlan ? formatPlanForPrompt(activePlan) : "";
 
-  const systemPrompt = buildSystemPrompt({
-    variant: (cfg.system_message_variant as any) ?? "a",
-    repoRoot,
-    workingDir,
-    parallelMode: (cfg.parallel_mode as any) ?? true,
-    skillSections,
-    sessionSummary,
-    planContext,
-    availableToolNames: registry.listNames()
-  });
+  const enablePromptCaching = (cfg as any).enable_prompt_caching !== false;
+  const systemPromptBlocks = enablePromptCaching
+    ? buildCacheableSystemPrompt({
+        variant: (cfg.system_message_variant as any) ?? "a",
+        repoRoot,
+        workingDir,
+        parallelMode: (cfg.parallel_mode as any) ?? true,
+        skillSections,
+        sessionSummary,
+        planContext,
+        availableToolNames: registry.listNames(),
+        enableCaching: true
+      })
+    : [{ type: "text" as const, text: buildSystemPrompt({
+        variant: (cfg.system_message_variant as any) ?? "a",
+        repoRoot,
+        workingDir,
+        parallelMode: (cfg.parallel_mode as any) ?? true,
+        skillSections,
+        sessionSummary,
+        planContext,
+        availableToolNames: registry.listNames()
+      }) }];
 
   const { provider, model } = createProvider({ repoRoot, modelOverride: params.modelOverride });
   // Only advertise tools we can actually execute (prevents the model from calling unimplemented tools).
   const tools = loadToolSchemas(repoRoot).filter((t) => registry.has(t.function.name));
-  const messages: OpenAIMessage[] = [{ role: "system", content: systemPrompt }];
+  const messages: OpenAIMessage[] = [{ role: "system", content: systemPromptBlocks }];
   for (const m of session.conversation.slice(-40)) {
     if (m.role === "user") {
       // For the current turn's user message, use content blocks if available
@@ -698,7 +711,7 @@ export async function* runAgentTurn(params: {
 
             if (attempt.attempts >= 3 && activePlan) {
               activePlan = updatePlanStepStatusInPlan(
-                activePlan,
+                activePlan!,
                 currentStep.id,
                 "blocked",
                 `Failed after 3 attempts: ${attempt.lastError?.slice(0, 100)}`
@@ -715,7 +728,7 @@ export async function* runAgentTurn(params: {
 
               if (planStore && activePlan) {
                 const updatedStore = { ...planStore };
-                const planIndex = updatedStore.plans.findIndex((p) => p.id === activePlan.id);
+                const planIndex = updatedStore.plans.findIndex((p) => p.id === activePlan!.id);
                 if (planIndex !== -1) {
                   updatedStore.plans[planIndex] = activePlan;
                   savePlanStore(workspaceDir, sessionId, updatedStore);
@@ -820,11 +833,13 @@ export async function* runAgentTurn(params: {
         }
       }
 
-      const updatedStore = { ...planStore };
-      const planIndex = updatedStore.plans.findIndex((p) => p.id === activePlan.id);
-      if (planIndex !== -1) {
-        updatedStore.plans[planIndex] = activePlan;
-        savePlanStore(workspaceDir, sessionId, updatedStore);
+      if (activePlan && planStore) {
+        const updatedStore = { ...planStore };
+        const planIndex = updatedStore.plans.findIndex((p) => p.id === activePlan.id);
+        if (planIndex !== -1) {
+          updatedStore.plans[planIndex] = activePlan;
+          savePlanStore(workspaceDir, sessionId, updatedStore);
+        }
       }
     }
 

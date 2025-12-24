@@ -155,8 +155,10 @@ describe("planValidationStopHook", () => {
       const result = await hook.run(ctx);
 
       expect(result.action).toBe("block");
-      expect(result.reason).toBe("plan_validation: incomplete steps remain");
-      expect(result.statusMessage).toContain("3 steps incomplete");
+      if (result.action === "block") {
+        expect((result as any).reason).toBe("plan_validation: incomplete steps remain");
+        expect((result as any).statusMessage).toContain("3 steps incomplete");
+      }
     });
   });
 
