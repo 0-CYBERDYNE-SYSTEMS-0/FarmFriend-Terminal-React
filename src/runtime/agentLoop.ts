@@ -397,11 +397,12 @@ export async function* runAgentTurn(params: {
     for (const hook of createSkillAllowedToolsHooks()) hookRegistry.register(hook);
   }
 
+  yield { kind: "status", message: `Provider: ${provider.name} | Model: ${model}` };
+
   try {
     for (let i = 0; i < maxIterations; i += 1) {
       iterationCount = i + 1;
       logger.log("debug", "iteration_start", { session_id: sessionId, turn_id: turnId, iteration: i + 1 });
-      yield { kind: "status", message: `Provider: ${provider.name} | Model: ${model}` };
 
       let toolCalls: { id: string; name: string; arguments: unknown }[] = [];
       let assistantContent = "";
@@ -567,11 +568,6 @@ export async function* runAgentTurn(params: {
     for (const tc of callsToRun) {
       const contextMsg = getToolContextMessage(tc.name, tc.arguments);
       yield { kind: "status", message: `tool_start:${tc.name}|${contextMsg}` };
-      if (contextMsg) {
-        yield { kind: "thinking", delta: `Tool: ${contextMsg}` };
-      } else {
-        yield { kind: "thinking", delta: `Tool: ${tc.name}` };
-      }
     }
 
     const durationById = new Map<string, number>();

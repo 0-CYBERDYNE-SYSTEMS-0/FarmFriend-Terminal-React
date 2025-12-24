@@ -1,4 +1,6 @@
+import fs from "node:fs";
 import http from "node:http";
+import path from "node:path";
 import { pathToFileURL } from "node:url";
 import WebSocket, { WebSocketServer } from "ws";
 import { ToolRegistry } from "../runtime/tools/registry.js";
@@ -17,11 +19,59 @@ import {
   isClientMessage,
   newSessionId,
   newTurnId,
-  safeJsonParse
+  safeJsonParse,
+  isValidSessionId
 } from "./protocol.js";
 
 const PORT = Number(process.env.FF_TERMINAL_PORT || 28888);
 const DAEMON_VERSION = "0.0.0";
+
+function loadLastActiveSession(workspaceDir: string): string | null {
+  try {
+    const filePath = path.join(workspaceDir, ".last-session-id");
+    if (!fs.existsSync(filePath)) return null;
+
+    const sessionId = fs.readFileSync(filePath, "utf8").trim();
+    if (!isValidSessionId(sessionId)) {
+      console.debug(`Invalid session ID format in ${filePath}, cleaning up`);
+      cleanupLastActiveSession(workspaceDir);
+      return null;
+    }
+
+    const sessionPath = path.join(workspaceDir, "sessions", `${sessionId}.json`);
+    if (!fs.existsSync(sessionPath)) {
+      console.debug(`Session file not found: ${sessionPath}, cleaning up`);
+      cleanupLastActiveSession(workspaceDir);
+      return null;
+    }
+
+    return sessionId;
+  } catch (err) {
+    console.debug(`Failed to load last active session: ${err}`);
+    return null;
+  }
+}
+
+function saveLastActiveSession(workspaceDir: string, sessionId: string): void {
+  try {
+    const filePath = path.join(workspaceDir, ".last-session-id");
+    fs.mkdirSync(path.dirname(filePath), { recursive: true });
+    fs.writeFileSync(filePath, sessionId, "utf8");
+  } catch (err) {
+    console.warn(`Failed to save last active session: ${err}`);
+  }
+}
+
+function cleanupLastActiveSession(workspaceDir: string): void {
+  try {
+    const filePath = path.join(workspaceDir, ".last-session-id");
+    if (fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+    }
+  } catch (err) {
+    console.debug(`Failed to cleanup last active session file: ${err}`);
+  }
+}
 
 function send(ws: WebSocket, msg: ServerMessage): void {
   ws.send(JSON.stringify(msg));
@@ -54,7 +104,7 @@ export async function startDaemon(): Promise<void> {
   registerAllTools(registry, { workspaceDir });
 
   wss.on("connection", (ws) => {
-    let sessionId = newSessionId();
+    let sessionId: string | null = null;
     let currentTurn: { id: string; controller: AbortController } | null = null;
 
     send(ws, { type: "hello", daemonVersion: DAEMON_VERSION });
@@ -86,24 +136,28 @@ export async function startDaemon(): Promise<void> {
       }
 
       if (msg.type === "start_turn") {
-        if (msg.sessionId) sessionId = msg.sessionId;
+        // Determine sessionId - either from client or load/create from workspace
+        const resolvedSessionId = msg.sessionId ?? loadLastActiveSession(workspaceDir) ?? newSessionId();
+        // Update the session tracker and persist to workspace
+        sessionId = resolvedSessionId;
+        saveLastActiveSession(workspaceDir, resolvedSessionId);
 
         currentTurn?.controller.abort();
         const controller = new AbortController();
         const turnId = newTurnId();
         currentTurn = { id: turnId, controller };
 
-        send(ws, { type: "turn_started", sessionId, turnId });
+        send(ws, { type: "turn_started", sessionId: resolvedSessionId, turnId });
 
         let seq = 0;
         try {
           await withToolContext(
-            { sessionId, workspaceDir, repoRoot },
+            { sessionId: resolvedSessionId, workspaceDir, repoRoot },
             async () => {
               for await (const chunk of runAgentTurn({
                 userInput: msg.input,
                 registry,
-                sessionId,
+                sessionId: resolvedSessionId,
                 signal: controller.signal
               })) {
                 seq += 1;

@@ -1,4 +1,4 @@
-import { newId } from "../shared/ids.js";
+import { newId, isValidSessionId } from "../shared/ids.js";
 
 export type ClientMessage =
   | { type: "hello"; client: "ink" | "web"; version?: string }
@@ -38,3 +38,6 @@ export function newSessionId(): string {
 export function newTurnId(): string {
   return newId("turn");
 }
+
+export { isValidSessionId };
+

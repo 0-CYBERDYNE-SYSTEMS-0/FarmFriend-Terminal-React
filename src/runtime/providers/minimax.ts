@@ -24,7 +24,31 @@ function convertMessages(messages: OpenAIMessage[]): { anthropicMessages: any[];
     }
 
     const role = m.role === "assistant" ? "assistant" : "user";
-    out.push({ role, content: [{ type: "text", text: textContentOf(m) }] });
+
+    // Handle content blocks (text + images)
+    if (Array.isArray(m.content)) {
+      const contentBlocks = m.content.map(block => {
+        if (block.type === "text" && block.text) {
+          return { type: "text", text: block.text };
+        }
+        if (block.type === "image_url" && block.image_url?.url) {
+          const url = block.image_url.url;
+          // Handle base64 data URLs
+          const base64Match = url.match(/^data:([^;]+);base64,(.+)$/);
+          if (base64Match) {
+            return { type: "image", source: { type: "base64", media_type: base64Match[1], data: base64Match[2] } };
+          }
+          // Handle regular URLs - return as URL source
+          if (url.startsWith("http://") || url.startsWith("https://")) {
+            return { type: "image", source: { type: "url", url } };
+          }
+        }
+        return null;
+      }).filter(Boolean);
+      out.push({ role, content: contentBlocks });
+    } else {
+      out.push({ role, content: [{ type: "text", text: String(m.content) }] });
+    }
   }
 
   const system = systemParts.join("\n\n").trim();
@@ -121,7 +145,6 @@ export function minimaxProvider(params: {
       }
 
       const content = textParts.join("\n").trim();
-      if (content) yield { type: "content", delta: content };
       yield { type: "final", content, toolCalls, rawModel: String(data.model || model) };
     }
   };

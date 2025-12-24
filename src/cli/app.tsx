@@ -18,6 +18,7 @@ import type { Command } from "../runtime/commands/types.js";
 import type { AgentConfig, AgentTemplate } from "../runtime/agents/types.js";
 import { validateWorkspace, generateReport } from "../runtime/workspace/doctor.js";
 import { planMigration, executeMigration } from "../runtime/workspace/migration.js";
+import { isValidSessionId as isValidSessionIdFormat } from "../shared/ids.js";
 
 type ServerMessage =
   | { type: "hello"; daemonVersion: string }
@@ -41,12 +42,19 @@ type Todo = {
   priority: "high" | "medium" | "low";
 };
 
-function parseWireChunk(chunk: string, displayMode: string = "clean"): Line | null {
+function parseWireChunk(chunk: string, displayMode: string = "clean"): Line | null | { type: "provider_info"; provider: string; model: string } {
   // Hide verbose metadata in clean mode
   if (displayMode === "clean") {
     if (chunk === "task_completed") return null;
     if (chunk === "Starting turn...") return null;
-    if (chunk.startsWith("Provider:") && chunk.includes("Model:")) return null;
+    if (chunk.startsWith("Provider:") && chunk.includes("Model:")) {
+      // Extract provider and model instead of filtering
+      const match = chunk.match(/^Provider:\s*(\S+)\s*\|\s*Model:\s*(.+)$/);
+      if (match) {
+        return { type: "provider_info", provider: match[1], model: match[2] };
+      }
+      return null;
+    }
     if (chunk.startsWith("completion_validation:")) return null;
   }
 
@@ -99,6 +107,14 @@ function parseWireChunk(chunk: string, displayMode: string = "clean"): Line | nu
   }
 
   return { kind: "system", text: chunk };
+}
+
+function isProviderInfo(value: unknown): value is { type: "provider_info"; provider: string; model: string } {
+  return typeof value === "object" && value !== null && "type" in value && (value as Record<string, unknown>).type === "provider_info";
+}
+
+function isLine(value: unknown): value is Line {
+  return typeof value === "object" && value !== null && "kind" in value;
 }
 
 const FARMFRIEND_ASCII_ART = [
@@ -654,6 +670,8 @@ type MainViewProps = {
   stdoutWidth: number;
   connected: boolean;
   daemonVersion: string | null;
+  currentProvider: string | null;
+  currentModel: string | null;
   mode: Mode;
   wizardIndex: number;
   mountRows: ReadonlyArray<{ key: string; label: string; enabled: boolean }>;
@@ -696,6 +714,8 @@ const MainView = memo(function MainView(props: MainViewProps) {
     stdoutWidth,
     connected,
     daemonVersion,
+    currentProvider,
+    currentModel,
     mode,
     wizardIndex,
     mountRows,
@@ -1191,7 +1211,10 @@ const MainView = memo(function MainView(props: MainViewProps) {
     <>
       <Banner displayMode={displayMode} width={stdoutWidth} />
       <Text color="gray">
-        {connected ? "connected" : "connecting..."}
+        {connected ? (currentProvider && currentModel
+          ? `${currentProvider}/${currentModel}`
+          : "connected")
+          : "connecting..."}
         {daemonVersion ? ` (daemon ${daemonVersion})` : ""}
       </Text>
       {wizardPanel}
@@ -1211,6 +1234,8 @@ function App(props: { port: number }) {
   const stdoutWidth = stdout?.columns ?? 80;
   const [connected, setConnected] = useState(false);
   const [daemonVersion, setDaemonVersion] = useState<string | null>(null);
+  const [currentProvider, setCurrentProvider] = useState<string | null>(null);
+  const [currentModel, setCurrentModel] = useState<string | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [turnId, setTurnId] = useState<string | null>(null);
   const [processing, setProcessing] = useState(false);
@@ -1302,6 +1327,21 @@ function App(props: { port: number }) {
     const workspaceFromEnv = process.env.FF_WORKSPACE_DIR;
     return resolveWorkspaceDir((runtimeCfg as any).workspace_dir ?? workspaceFromEnv ?? undefined);
   }, []);
+
+  // Load last active session on mount
+  useEffect(() => {
+    try {
+      const lastSessionPath = path.join(workspaceDir, ".last-session-id");
+      if (fs.existsSync(lastSessionPath)) {
+        const id = fs.readFileSync(lastSessionPath, "utf8").trim();
+        if (isValidSessionIdFormat(id)) {
+          setSessionId(id);
+        }
+      }
+    } catch {
+      // Ignore errors - will get sessionId from daemon
+    }
+  }, [workspaceDir]);
 
   const transcriptHeight = useMemo(() => {
     const rows = stdout?.rows ?? 40;
@@ -1720,6 +1760,7 @@ ${fullContext}`;
           setSessionId(msg.sessionId);
           setTurnId(msg.turnId);
           setProcessing(true);
+
           // Hide verbose turn markers in clean mode
           if (displayMode !== "clean") {
             pushLines({ kind: "system", text: `--- turn ${msg.turnId} ---` }, { immediate: true });
@@ -1732,11 +1773,20 @@ ${fullContext}`;
           if (!processing) setProcessing(true);
           const parsed = parseWireChunk(msg.chunk, displayMode);
           if (!parsed) return;
-          if (parsed.kind === "assistant" || parsed.kind === "thinking") {
-            const merged = appendToLastLine(parsed.kind, parsed.text);
+          // Handle provider/model info
+          if (isProviderInfo(parsed)) {
+            setCurrentProvider(parsed.provider);
+            setCurrentModel(parsed.model);
+            return;
+          }
+          // Handle Line type with explicit type guard
+          if (!isLine(parsed)) return;
+          const line = parsed;
+          if (line.kind === "assistant" || line.kind === "thinking") {
+            const merged = appendToLastLine(line.kind, line.text);
             if (merged) return;
           }
-          pushLines(parsed);
+          pushLines(line);
           return;
         }
 
@@ -3075,6 +3125,8 @@ Use skill_draft first to create the draft, then skill_apply to create the final 
         stdoutWidth={stdoutWidth}
         connected={connected}
         daemonVersion={daemonVersion}
+        currentProvider={currentProvider}
+        currentModel={currentModel}
         mode={mode}
         wizardIndex={wizardIndex}
         mountRows={mountRows}
