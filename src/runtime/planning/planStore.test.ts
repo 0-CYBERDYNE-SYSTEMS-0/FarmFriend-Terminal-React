@@ -8,6 +8,7 @@ import {
   getActivePlan,
   completePlan,
   planStorePath,
+  updatePlanStepStatus,
 } from "./planStore.js";
 import type { ExecutionPlan, PlanStore } from "./types.js";
 
@@ -430,6 +431,70 @@ describe("planStore", () => {
       });
       expect(final.plans[0].status).toBe("completed");
       expect(final.activePlanId).toBeUndefined();
+    });
+  });
+
+  describe("updatePlanStepStatus", () => {
+    it("should update step status to in_progress and set startedAt", () => {
+      const plan = createTestPlan("plan_1", "Test objective");
+      const updated = updatePlanStepStatus(plan, "step_1", "in_progress");
+
+      expect(updated.steps[0].status).toBe("in_progress");
+      expect(updated.steps[0].startedAt).toBeDefined();
+      expect(updated.updatedAt).toBeDefined();
+    });
+
+    it("should update step status to completed and set completedAt", () => {
+      const plan = createTestPlan("plan_1", "Test objective");
+      const updated = updatePlanStepStatus(plan, "step_1", "completed");
+
+      expect(updated.steps[0].status).toBe("completed");
+      expect(updated.steps[0].completedAt).toBeDefined();
+      expect(updated.completedSteps).toBe(1);
+    });
+
+    it("should update step status to blocked with error message", () => {
+      const plan = createTestPlan("plan_1", "Test objective");
+      const errorMsg = "Step failed after 3 attempts";
+      const updated = updatePlanStepStatus(plan, "step_1", "blocked", errorMsg);
+
+      expect(updated.steps[0].status).toBe("blocked");
+      expect(updated.steps[0].lastError).toBe(errorMsg);
+    });
+
+    it("should mark plan as completed when all steps are completed", () => {
+      const plan = createTestPlan("plan_1", "Test objective");
+      const updated = updatePlanStepStatus(plan, "step_1", "completed");
+
+      expect(updated.status).toBe("completed");
+      expect(updated.completedSteps).toBe(plan.totalSteps);
+    });
+
+    it("should track attempts and handle circuit breaker threshold", () => {
+      const plan = createTestPlan("plan_1", "Test objective");
+      plan.steps[0].attempts = 2;
+
+      const updated = updatePlanStepStatus(plan, "step_1", "blocked", "Failed after 2 attempts, next attempt will trigger circuit breaker");
+
+      expect(updated.steps[0].attempts).toBe(2);
+      expect(updated.steps[0].status).toBe("blocked");
+      expect(updated.steps[0].lastError).toContain("circuit breaker");
+    });
+
+    it("should not mark plan as completed if steps are still pending", () => {
+      const plan = createTestPlan("plan_1", "Test objective");
+      plan.totalSteps = 2;
+      plan.steps.push({
+        id: "step_2",
+        description: "Second step",
+        status: "pending",
+        attempts: 0,
+      });
+
+      const updated = updatePlanStepStatus(plan, "step_1", "completed");
+
+      expect(updated.status).toBe("active");
+      expect(updated.completedSteps).toBe(1);
     });
   });
 });
