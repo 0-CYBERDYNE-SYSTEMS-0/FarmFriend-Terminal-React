@@ -35,12 +35,23 @@ export async function subagentTool(argsRaw: unknown, signal: AbortSignal): Promi
   let content = "";
   let hadError = false;
   let error: string | undefined;
+  let toolCount = 0;
+  let tokens = 0;
+  let lastAction = "";
+
+  // Emit start event
+  parent?.emitSubagentEvent?.({
+    event: "start",
+    agentId: subagentId,
+    task: description
+  });
 
   await withToolContext({ sessionId, workspaceDir, repoRoot }, async () => {
     try {
       for await (const ch of runAgentTurn({ userInput: input, registry, sessionId, repoRoot, modelOverride, signal })) {
         if (ch.kind === "content") {
           content += ch.delta;
+          tokens += ch.delta.length / 4; // Rough token estimate
           chunks.push({ kind: "content", value: ch.delta });
         } else if (ch.kind === "thinking") {
           chunks.push({ kind: "thinking", value: ch.delta });
@@ -49,6 +60,26 @@ export async function subagentTool(argsRaw: unknown, signal: AbortSignal): Promi
           error = ch.message;
           chunks.push({ kind: "error", value: ch.message });
         } else if (ch.kind === "status") {
+          // Extract tool action from status messages
+          const statusMsg = ch.message;
+          if (statusMsg.includes("▶") || statusMsg.includes("■")) {
+            toolCount++;
+            // Try to extract action and file from status
+            const match = statusMsg.match(/(?:▶|■)\s*([A-Za-z_]+)(?:\.\.\.)?\s*(?:.*?([a-zA-Z0-9_/.\\-]+\.[a-zA-Z]{2,}))?/);
+            if (match) {
+              lastAction = match[1];
+              const file = match[2];
+              // Emit progress event
+              parent?.emitSubagentEvent?.({
+                event: "progress",
+                agentId: subagentId,
+                action: lastAction,
+                file,
+                toolCount,
+                tokens: Math.floor(tokens)
+              });
+            }
+          }
           chunks.push({ kind: "status", value: ch.message });
         }
       }
@@ -56,6 +87,14 @@ export async function subagentTool(argsRaw: unknown, signal: AbortSignal): Promi
       hadError = true;
       error = e instanceof Error ? e.message : String(e);
     }
+  });
+
+  // Emit complete event
+  parent?.emitSubagentEvent?.({
+    event: "complete",
+    agentId: subagentId,
+    status: hadError ? "error" : "done",
+    error
   });
 
   return JSON.stringify(

@@ -9,7 +9,7 @@ import { resolveWorkspaceDir } from "../runtime/config/paths.js";
 import { runAgentTurn } from "../runtime/agentLoop.js";
 import { toWire } from "../runtime/streamProtocol.js";
 import { findRepoRoot } from "../runtime/config/repoRoot.js";
-import { withToolContext } from "../runtime/tools/context.js";
+import { withToolContext, type SubagentEvent } from "../runtime/tools/context.js";
 import { resolveConfig } from "../runtime/config/loadConfig.js";
 import { loadDefaultDotenv } from "../runtime/config/dotenv.js";
 import { quickHealthCheck } from "../runtime/workspace/healthCheck.js";
@@ -152,7 +152,37 @@ export async function startDaemon(): Promise<void> {
         let seq = 0;
         try {
           await withToolContext(
-            { sessionId: resolvedSessionId, workspaceDir, repoRoot },
+            {
+              sessionId: resolvedSessionId,
+              workspaceDir,
+              repoRoot,
+              emitSubagentEvent: (event: SubagentEvent) => {
+                // Convert subagent event to WebSocket message and send immediately
+                if (event.event === "start") {
+                  send(ws, {
+                    type: "subagent_start",
+                    agentId: event.agentId,
+                    task: event.task || ""
+                  });
+                } else if (event.event === "progress") {
+                  send(ws, {
+                    type: "subagent_progress",
+                    agentId: event.agentId,
+                    action: event.action || "",
+                    file: event.file,
+                    toolCount: event.toolCount || 0,
+                    tokens: event.tokens || 0
+                  });
+                } else if (event.event === "complete") {
+                  send(ws, {
+                    type: "subagent_complete",
+                    agentId: event.agentId,
+                    status: event.status || "done",
+                    error: event.error
+                  });
+                }
+              }
+            },
             async () => {
               for await (const chunk of runAgentTurn({
                 userInput: msg.input,
@@ -162,10 +192,25 @@ export async function startDaemon(): Promise<void> {
               })) {
                 seq += 1;
                 send(ws, { type: "chunk", turnId, seq, chunk: toWire(chunk) });
+
+                // Check for todo updates after each chunk (real-time updates)
+                try {
+                  const todosPath = path.join(workspaceDir, "todos", "sessions", `${resolvedSessionId}.json`);
+                  if (fs.existsSync(todosPath)) {
+                    const todosData = JSON.parse(fs.readFileSync(todosPath, "utf8"));
+                    if (todosData?.todos && Array.isArray(todosData.todos)) {
+                      send(ws, { type: "todo_update", todos: todosData.todos });
+                    }
+                  }
+                } catch (err) {
+                  // Silently ignore todo read errors - not critical
+                }
+
                 if (chunk.kind === "task_completed") break;
               }
             }
           );
+
           send(ws, { type: "turn_finished", turnId, ok: true });
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);

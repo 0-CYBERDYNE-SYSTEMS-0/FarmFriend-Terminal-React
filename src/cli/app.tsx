@@ -26,7 +26,11 @@ type ServerMessage =
   | { type: "turn_started"; sessionId: string; turnId: string }
   | { type: "chunk"; turnId: string; seq: number; chunk: string }
   | { type: "turn_finished"; turnId: string; ok: boolean; error?: string }
-  | { type: "tools"; tools: string[] };
+  | { type: "tools"; tools: string[] }
+  | { type: "todo_update"; todos: Todo[] }
+  | { type: "subagent_start"; agentId: string; task: string }
+  | { type: "subagent_progress"; agentId: string; action: string; file?: string; toolCount: number; tokens: number }
+  | { type: "subagent_complete"; agentId: string; status: "done" | "error"; error?: string };
 
 const DEFAULT_PORT = Number(process.env.FF_TERMINAL_PORT || 28888);
 
@@ -237,7 +241,6 @@ const ChatPrompt = memo(function ChatPrompt(props: {
   operationMode: OperationMode;
   processing: boolean;
   showThinking: boolean;
-  showTodoPanel: boolean;
   showToolDetails: boolean;
   thinkingCount: number;
 }) {
@@ -255,7 +258,6 @@ const ChatPrompt = memo(function ChatPrompt(props: {
   const thinkingText = props.showThinking
     ? "visible"
     : `hidden (${props.thinkingCount})`;
-  const todosText = props.showTodoPanel ? "shown" : "hidden";
   const toolsText = props.showToolDetails ? "expanded" : "collapsed";
 
   return (
@@ -264,10 +266,136 @@ const ChatPrompt = memo(function ChatPrompt(props: {
       <Box gap={1}>
         <Spinner active={props.processing} />
         <Text color="gray">
-          Enter to send • Ctrl+C to cancel • Shift+Tab: mode={props.operationMode} • Ctrl+T: thinking {thinkingText} • Ctrl+D: todos {todosText} • Ctrl+E: tools {toolsText} • /help
+          Enter to send • Ctrl+C to cancel • Shift+Tab: mode={props.operationMode} • Ctrl+T: thinking {thinkingText} • Ctrl+E: tools {toolsText} • Ctrl+O: agents • /help
         </Text>
       </Box>
     </>
+  );
+});
+
+/**
+ * InlineTodoStatus - Displays tasks inline with compact symbols
+ * Appears directly after transcript in chat mode
+ * No borders, no panels - just clean inline status
+ * Features:
+ * - Max 7 tasks visible (prioritized: in_progress > pending > recent completed)
+ * - Completed tasks automatically fade out after 30 seconds
+ */
+const InlineTodoStatus = memo(function InlineTodoStatus(props: {
+  todos: Todo[];
+}) {
+  const { todos } = props;
+
+  if (todos.length === 0) return null;
+
+  const MAX_VISIBLE = 7;
+  const COMPLETED_FADE_MS = 30000;
+  const now = Date.now();
+
+  // Filter out completed tasks older than 30s
+  const activeTodos = todos.filter(t => {
+    if (t.status === "completed") {
+      const completedAt = (t as any).completedAt || 0;
+      return (now - completedAt) < COMPLETED_FADE_MS;
+    }
+    return true;
+  });
+
+  // Prioritize display: in_progress > pending > recent completed
+  const inProgress = activeTodos.filter(t => t.status === "in_progress");
+  const pending = activeTodos.filter(t => t.status === "pending");
+  const completed = activeTodos.filter(t => t.status === "completed");
+
+  // Take up to MAX_VISIBLE tasks
+  const displayTodos = [
+    ...inProgress,
+    ...pending,
+    ...completed
+  ].slice(0, MAX_VISIBLE);
+
+  if (displayTodos.length === 0) return null;
+
+  const totalCount = activeTodos.length;
+  const completedCount = completed.length;
+
+  return (
+    <Box flexDirection="column" marginY={1}>
+      <Text color="yellow">⚡ Task Status ({completedCount}/{totalCount} complete)</Text>
+
+      {displayTodos.map(t => {
+        const symbol = t.status === "completed" ? "✓" : t.status === "in_progress" ? "▶" : "○";
+        const color = t.status === "completed" ? "green" : t.status === "in_progress" ? "yellow" : "gray";
+        return (
+          <Text key={t.id} color={color}>  {symbol} {t.content}</Text>
+        );
+      })}
+
+      {totalCount > MAX_VISIBLE ? (
+        <Text color="gray" dimColor>  ... and {totalCount - MAX_VISIBLE} more</Text>
+      ) : null}
+    </Box>
+  );
+});
+
+/**
+ * SubagentSwarm - Displays running subagents with real-time progress
+ * Shows agent IDs, tasks, tool counts, token usage, and current actions
+ * Expandable/collapsible with Ctrl+O
+ */
+type SubagentState = {
+  id: string;
+  task: string;
+  status: "running" | "done" | "error";
+  currentAction?: string;
+  currentFile?: string;
+  toolCount: number;
+  tokens: number;
+};
+
+const SubagentSwarm = memo(function SubagentSwarm(props: {
+  agents: SubagentState[];
+  expanded: boolean;
+}) {
+  const { agents, expanded } = props;
+
+  if (agents.length === 0) return null;
+
+  const runningCount = agents.filter(a => a.status === "running").length;
+  const doneCount = agents.filter(a => a.status === "done").length;
+
+  return (
+    <Box flexDirection="column" marginY={1}>
+      <Text color="cyan">
+        ⚡ Running {runningCount} Task agents...
+        {doneCount > 0 && <Text color="green"> ({doneCount} complete)</Text>}
+        <Text dimColor> (ctrl+o to {expanded ? "collapse" : "expand"})</Text>
+      </Text>
+
+      {expanded && agents.map((agent, idx) => {
+        const prefix = idx === agents.length - 1 ? "└─" : "├─";
+        const statusColor = agent.status === "done" ? "green" : agent.status === "error" ? "red" : "yellow";
+        const statusSymbol = agent.status === "done" ? "✓" : agent.status === "error" ? "✗" : "⚙";
+
+        return (
+          <Box key={agent.id} flexDirection="column" marginLeft={1}>
+            <Text>
+              <Text color="gray">{prefix}</Text>
+              <Text color={statusColor}> {statusSymbol} Agent {agent.id}</Text>
+              <Text>: {agent.task}</Text>
+              <Text color="gray"> · {agent.toolCount} tools · {(agent.tokens / 1000).toFixed(1)}k tokens</Text>
+            </Text>
+
+            {agent.currentAction && agent.status === "running" && (
+              <Box marginLeft={3}>
+                <Text color="gray">└ </Text>
+                <Text color="cyan">{agent.currentAction}</Text>
+                {agent.currentFile && <Text color="gray">: {agent.currentFile}</Text>}
+              </Box>
+            )}
+          </Box>
+        );
+      })}
+    </Box>
   );
 });
 
@@ -446,147 +574,7 @@ const isValidSessionId = (sessionId: string): boolean => {
   return /^[a-zA-Z0-9_-]+$/.test(sessionId);
 };
 
-const TodoPanel = memo(function TodoPanel(props: {
-  sessionId: string | null;
-  workspaceDir: string;
-  visible: boolean;
-}) {
-  const [todos, setTodos] = useState<Todo[]>([]);
-  const [error, setError] = useState<string | null>(null);
-  const [lastModified, setLastModified] = useState<number>(0);
-
-  useEffect(() => {
-    if (!props.visible || !props.sessionId) return;
-    if (!isValidSessionId(props.sessionId)) {
-      setError("Invalid session ID format");
-      return;
-    }
-
-    const todoPath = path.join(
-      props.workspaceDir,
-      "todos",
-      "sessions",
-      `${props.sessionId}.json`
-    );
-
-    try {
-      if (!fs.existsSync(todoPath)) {
-        setTodos([]);
-        setError(null);
-        return;
-      }
-
-      const content = fs.readFileSync(todoPath, "utf8");
-      const data = JSON.parse(content);
-      setTodos(Array.isArray(data.todos) ? data.todos : []);
-      setError(null);
-
-      const stat = fs.statSync(todoPath);
-      setLastModified(stat.mtimeMs);
-    } catch (err) {
-      setError(`Failed to load todos: ${(err as Error).message}`);
-      setTodos([]);
-    }
-  }, [props.visible, props.sessionId, props.workspaceDir, lastModified]);
-
-  useEffect(() => {
-    if (!props.visible || !props.sessionId) return;
-    if (!isValidSessionId(props.sessionId)) return;
-
-    const interval = setInterval(() => {
-      const todoPath = path.join(
-        props.workspaceDir,
-        "todos",
-        "sessions",
-        `${props.sessionId}.json`
-      );
-
-      try {
-        if (fs.existsSync(todoPath)) {
-          const stat = fs.statSync(todoPath);
-          if (stat.mtimeMs !== lastModified) {
-            setLastModified(stat.mtimeMs);
-          }
-        }
-      } catch {
-        // Ignore refresh errors
-      }
-    }, 2000);
-
-    return () => clearInterval(interval);
-  }, [props.visible, props.sessionId, props.workspaceDir, lastModified]);
-
-  if (!props.visible) return null;
-
-  if (error) {
-    return (
-      <Box flexDirection="column" borderStyle="single" borderColor="red">
-        <Text color="red">Todo Panel - Error</Text>
-        <Text dimColor>{error}</Text>
-      </Box>
-    );
-  }
-
-  if (todos.length === 0) {
-    return (
-      <Box flexDirection="column" borderStyle="single" borderColor="gray">
-        <Text color="yellow">Todo Panel</Text>
-        <Text color="gray">No todos for this session. Use manage_task tool to create.</Text>
-      </Box>
-    );
-  }
-
-  const pending = todos.filter(t => t.status === "pending");
-  const inProgress = todos.filter(t => t.status === "in_progress");
-  const completed = todos.filter(t => t.status === "completed");
-
-  return (
-    <Box flexDirection="column" borderStyle="single" borderColor="cyan">
-      <Text color="cyan" bold>
-        Todo Panel ({todos.length} total)
-      </Text>
-
-      {inProgress.length > 0 && (
-        <Box flexDirection="column" marginTop={1}>
-          <Text color="yellow">▶ In Progress ({inProgress.length})</Text>
-          {inProgress.slice(0, 3).map(t => (
-            <Text key={t.id} dimColor={false}>
-              • {t.content.slice(0, 60)}
-              {t.content.length > 60 ? "..." : ""}
-            </Text>
-          ))}
-        </Box>
-      )}
-
-      {pending.length > 0 && (
-        <Box flexDirection="column" marginTop={1}>
-          <Text color="gray">○ Pending ({pending.length})</Text>
-          {pending.slice(0, 3).map(t => (
-            <Text key={t.id} color="gray">
-              • {t.content.slice(0, 60)}
-              {t.content.length > 60 ? "..." : ""}
-            </Text>
-          ))}
-          {pending.length > 3 && (
-            <Text color="gray">  ... and {pending.length - 3} more</Text>
-          )}
-        </Box>
-      )}
-
-      {completed.length > 0 && (
-        <Box flexDirection="column" marginTop={1}>
-          <Text color="green">✓ Completed ({completed.length})</Text>
-        </Box>
-      )}
-
-      <Box marginTop={1}>
-        <Text color="gray">
-          Press Ctrl+D to hide • Auto-refreshes every 2s
-        </Text>
-      </Box>
-    </Box>
-  );
-});
+// TodoPanel removed - replaced with inline task status
 
 const PlanPanel = memo(function PlanPanel(props: {
   sessionId: string | null;
@@ -719,51 +707,7 @@ const PlanPanel = memo(function PlanPanel(props: {
   );
 });
 
-const TodoSummary = memo(function TodoSummary(props: {
-  sessionId: string | null;
-  workspaceDir: string;
-  visible: boolean;
-}) {
-  const [todos, setTodos] = useState<Todo[]>([]);
-
-  useEffect(() => {
-    if (!props.sessionId) return;
-    const todoPath = path.join(
-      props.workspaceDir,
-      "todos",
-      "sessions",
-      `${props.sessionId}.json`
-    );
-
-    const refresh = () => {
-      try {
-        if (!fs.existsSync(todoPath)) {
-          setTodos([]);
-          return;
-        }
-        const content = fs.readFileSync(todoPath, "utf8");
-        const data = JSON.parse(content);
-        setTodos(Array.isArray(data.todos) ? data.todos : []);
-      } catch {
-        setTodos([]);
-      }
-    };
-
-    refresh();
-    const interval = setInterval(refresh, 4000);
-    return () => clearInterval(interval);
-  }, [props.sessionId, props.workspaceDir]);
-
-  if (!props.visible || !props.sessionId || todos.length === 0) return null;
-
-  const pending = todos.filter(t => t.status === "pending").length;
-  const completed = todos.filter(t => t.status === "completed").length;
-  return (
-    <Text color="gray">
-      Todos · {todos.length} total ({pending} pending · {completed} done) · Ctrl+D to open
-    </Text>
-  );
-});
+// TodoSummary removed - replaced with inline task status
 
 type Mode = "chat" | "models" | "mounts" | "init_project" | "wizard" | "commands" | "agents" | "skills";
 type ModelKey = "model" | "subagentModel" | "toolModel" | "webModel" | "imageModel" | "videoModel";
@@ -1368,6 +1312,9 @@ function App(props: { port: number }) {
   const [daemonVersion, setDaemonVersion] = useState<string | null>(null);
   const [currentProvider, setCurrentProvider] = useState<string | null>(null);
   const [currentModel, setCurrentModel] = useState<string | null>(null);
+  const [currentTodos, setCurrentTodos] = useState<Todo[]>([]);
+  const [runningSubagents, setRunningSubagents] = useState<Map<string, SubagentState>>(new Map());
+  const [subagentsExpanded, setSubagentsExpanded] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [turnId, setTurnId] = useState<string | null>(null);
   const [processing, setProcessing] = useState(false);
@@ -1428,7 +1375,6 @@ function App(props: { port: number }) {
   const [commandEditValue, setCommandEditValue] = useState("");
 
   const [showThinking, setShowThinking] = useState(false);
-  const [showTodoPanel, setShowTodoPanel] = useState(false);
   const [showPlanPanel, setShowPlanPanel] = useState(false);
   const [showToolDetails, setShowToolDetails] = useState(false);
   const [scrollOffset, setScrollOffset] = useState(0);
@@ -1939,6 +1885,68 @@ ${fullContext}`;
             { kind: "system", text: `Tools (${tools.length}):` },
             ...tools.map((t) => ({ kind: "tool" as const, text: `- ${t}` }))
           ]);
+          return;
+        }
+
+        if (msg.type === "todo_update") {
+          setCurrentTodos(msg.todos);
+          return;
+        }
+
+        if (msg.type === "subagent_start") {
+          setRunningSubagents(prev => {
+            const updated = new Map(prev);
+            updated.set(msg.agentId, {
+              id: msg.agentId,
+              task: msg.task,
+              status: "running",
+              toolCount: 0,
+              tokens: 0
+            });
+            return updated;
+          });
+          return;
+        }
+
+        if (msg.type === "subagent_progress") {
+          setRunningSubagents(prev => {
+            const updated = new Map(prev);
+            const agent = updated.get(msg.agentId);
+            if (agent) {
+              updated.set(msg.agentId, {
+                ...agent,
+                currentAction: msg.action,
+                currentFile: msg.file,
+                toolCount: msg.toolCount,
+                tokens: msg.tokens
+              });
+            }
+            return updated;
+          });
+          return;
+        }
+
+        if (msg.type === "subagent_complete") {
+          setRunningSubagents(prev => {
+            const updated = new Map(prev);
+            const agent = updated.get(msg.agentId);
+            if (agent) {
+              updated.set(msg.agentId, {
+                ...agent,
+                status: msg.status,
+                currentAction: msg.status === "done" ? "Done" : msg.error || "Error"
+              });
+            }
+            return updated;
+          });
+          // Keep completed agents visible for 5 seconds, then remove
+          setTimeout(() => {
+            setRunningSubagents(prev => {
+              const updated = new Map(prev);
+              updated.delete(msg.agentId);
+              return updated;
+            });
+          }, 5000);
           return;
         }
       });
@@ -2834,7 +2842,6 @@ Use skill_draft first to create the draft, then skill_apply to create the final 
             { kind: "system", text: "Shortcuts:" },
             { kind: "system", text: "  Shift+Tab        Cycle operation mode" },
             { kind: "system", text: "  Ctrl+T           Toggle thinking visibility" },
-            { kind: "system", text: "  Ctrl+D           Toggle todo panel" },
             { kind: "system", text: "  Ctrl+P           Toggle plan panel" },
             { kind: "system", text: "  Ctrl+E           Toggle tool details" },
             { kind: "system", text: "  PageUp/PageDown  Scroll transcript" },
@@ -2903,17 +2910,7 @@ Use skill_draft first to create the draft, then skill_apply to create the final 
       return;
     }
 
-    if (key.ctrl && ch === "d") {
-      setShowTodoPanel(prev => {
-        const next = !prev;
-        pushLines({
-          kind: "system",
-          text: `Todo panel ${next ? "shown" : "hidden"}`
-        });
-        return next;
-      });
-      return;
-    }
+    // Ctrl+D handler removed - inline todos now
 
     if (key.ctrl && ch === "p") {
       setShowPlanPanel(prev => {
@@ -2934,6 +2931,21 @@ Use skill_draft first to create the draft, then skill_apply to create the final 
           kind: "system",
           text: `Tool details ${next ? "expanded" : "collapsed"}`
         });
+        return next;
+      });
+      return;
+    }
+
+    if (key.ctrl && ch === "o") {
+      setSubagentsExpanded(prev => {
+        const next = !prev;
+        const count = runningSubagents.size;
+        if (count > 0) {
+          pushLines({
+            kind: "system",
+            text: `Subagent swarm ${next ? "expanded" : "collapsed"} (${count} agents)`
+          });
+        }
         return next;
       });
       return;
@@ -3308,20 +3320,10 @@ Use skill_draft first to create the draft, then skill_apply to create the final 
         commandSkippedFields={commandSkippedFields}
         commandEditValue={commandEditValue}
       />
-      <TodoPanel
-        sessionId={sessionId}
-        workspaceDir={workspaceDir}
-        visible={showTodoPanel}
-      />
       <PlanPanel
         sessionId={sessionId}
         workspaceDir={workspaceDir}
         visible={showPlanPanel}
-      />
-      <TodoSummary
-        sessionId={sessionId}
-        workspaceDir={workspaceDir}
-        visible={mode === "chat" && !showTodoPanel}
       />
       <Transcript
         lines={lines}
@@ -3330,13 +3332,21 @@ Use skill_draft first to create the draft, then skill_apply to create the final 
         scrollOffset={scrollOffset}
         visibleCount={transcriptHeight}
       />
+      {mode === "chat" && currentTodos.length > 0 ? (
+        <InlineTodoStatus todos={currentTodos} />
+      ) : null}
+      {mode === "chat" && runningSubagents.size > 0 ? (
+        <SubagentSwarm
+          agents={Array.from(runningSubagents.values())}
+          expanded={subagentsExpanded}
+        />
+      ) : null}
       {mode === "chat" ? (
         <ChatPrompt
           inputStore={inputStore.current}
           operationMode={operationMode}
           processing={processing}
           showThinking={showThinking}
-          showTodoPanel={showTodoPanel}
           showToolDetails={showToolDetails}
           thinkingCount={lines.filter(l => l.kind === "thinking").length}
         />
