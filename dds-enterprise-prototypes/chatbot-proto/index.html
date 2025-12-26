@@ -1,0 +1,467 @@
+
+        });
+        
+        // Export functionality
+        function exportChatHistory() {
+            const data = {
+                exportDate: new Date().toISOString(),
+                settings: chatSettings,
+                conversations: chatHistory,
+                analytics: {
+                    totalMessages: chatHistory.length,
+                    userMessages: chatHistory.filter(m =gt; m.role === 'user').length,
+                    botMessages: chatHistory.filter(m =gt; m.role === 'assistant').length,
+                    avgResponseTime: calculateAvgResponseTime()
+                }
+            };
+            
+            const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `dds-chat-export-${new Date().toISOString().split('T')[0]}.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            showToast('Chat history exported successfully', 'success');
+        }
+        
+        function calculateAvgResponseTime() {
+            let totalTime = 0;
+            let count = 0;
+            for (let i = 1; i &lt; chatHistory.length; i++) {
+                if (chatHistory[i-1].role === 'user' && chatHistory[i].role === 'assistant') {
+                    totalTime += (new Date(chatHistory[i].timestamp) - new Date(chatHistory[i-1].timestamp));
+                    count++;
+                }
+            }
+            return count &gt; 0 ? Math.round(totalTime / count) : 0;
+        }
+        
+        // System Integration Monitoring
+        const systemStatus = {
+            crm: { status: 'connected', provider: 'Salesforce', lastSync: new Date() },
+            erp: { status: 'connected', provider: 'SAP', lastSync: new Date() },
+            knowledgeBase: { status: 'connected', provider: 'Confluence', lastSync: new Date() },
+            ticketing: { status: 'disconnected', provider: 'Zendesk', lastSync: null }
+        };
+        
+        function renderSystemStatus() {
+            const container = document.getElementById('systemStatusContainer');
+            if (!container) return;
+            
+            container.innerHTML = '';
+            
+            const systems = ['crm', 'erp', 'knowledgeBase', 'ticketing'];
+            const systemNames = { crm: 'CRM', erp: 'ERP', knowledgeBase: 'Knowledge Base', ticketing: 'Ticketing' };
+            const providers = { crm: 'Salesforce', erp: 'SAP', knowledgeBase: 'Confluence', ticketing: 'Zendesk' };
+            
+            systems.forEach(system =gt; {
+                const status = systemStatus[system];
+                const card = document.createElement('div');
+                card.className = `system-status-card ${status.status}`;
+                
+                card.innerHTML = `
+                    &lt;div class="system-status-header"&gt;
+                        &lt;span class="system-name"&gt;${systemNames[system]}&lt;/span&gt;
+                        &lt;span class="system-status"&gt;
+                            &lt;span class="status-indicator ${status.status}"&gt;&lt;/span&gt;
+                            ${status.status === 'connected' ? 'Connected' : 'Disconnected'}
+                        &lt;/span&gt;
+                    &lt;/div&gt;
+                    &lt;div class="system-status-details"&gt;
+                        &lt;span class="system-provider"&gt;${providers[system]}&lt;/span&gt;
+                        &lt;span class="system-last-sync"&gt;
+                            ${status.lastSync ? `Last sync: ${formatTimeAgo(status.lastSync)}` : 'Never synced'}
+                        &lt;/span&gt;
+                    &lt;/div&gt;
+                `;
+                
+                container.appendChild(card);
+            });
+        }
+        
+        function formatTimeAgo(date) {
+            const seconds = Math.floor((new Date() - new Date(date)) / 1000);
+            if (seconds &lt; 60) return 'Just now';
+            if (seconds &lt; 3600) return `${Math.floor(seconds / 60)}m ago`;
+            if (seconds &lt; 86400) return `${Math.floor(seconds / 3600)}h ago`;
+            return `${Math.floor(seconds / 86400)}d ago`;
+        }
+        
+        // Analytics Dashboard
+        const analyticsData = {
+            totalConversations: chatHistory.filter(m =gt; m.role === 'user').length,
+            avgResponseTime: 1500,
+            totalTokens: 0,
+            sentimentDistribution: { positive: 0, neutral: 0, negative: 0 },
+            topIntents: {},
+            conversationTrends: [],
+            peakHours: [9, 14, 16],
+            channelDistribution: { web: 75, mobile: 25 }
+        };
+        
+        function updateAnalytics() {
+            // Update sentiment distribution
+            const sentiments = chatHistory.map(m =gt; m.sentiment?.type || 'neutral');
+            analyticsData.sentimentDistribution.positive = sentiments.filter(s =gt; s === 'positive').length;
+            analyticsData.sentimentDistribution.neutral = sentiments.filter(s =gt; s === 'neutral').length;
+            analyticsData.sentimentDistribution.negative = sentiments.filter(s =gt; s === 'negative').length;
+            
+            // Update top intents
+            const intents = chatHistory.filter(m =gt; m.intents).flatMap(m =gt; m.intents);
+            analyticsData.topIntents = intents.reduce((acc, intent) =gt; {
+                acc[intent] = (acc[intent] || 0) + 1;
+                return acc;
+            }, {});
+            
+            // Update total conversations
+            analyticsData.totalConversations = chatHistory.filter(m =gt; m.role === 'user').length;
+            
+            // Update average response time
+            analyticsData.avgResponseTime = calculateAvgResponseTime();
+            
+            renderAnalyticsDashboard();
+        }
+        
+        function renderAnalyticsDashboard() {
+            // Update stats cards
+            document.getElementById('statTotalConversations').textContent = analyticsData.totalConversations;
+            document.getElementById('statAvgResponseTime').textContent = `${(analyticsData.avgResponseTime / 1000).toFixed(2)}s`;
+            document.getElementById('statTotalMessages').textContent = chatHistory.length;
+            
+            // Update sentiment bar
+            const sentimentBar = document.getElementById('sentimentDistribution');
+            if (sentimentBar) {
+                const total = Object.values(analyticsData.sentimentDistribution).reduce((a, b) =gt; a + b, 0) || 1;
+                const positivePct = (analyticsData.sentimentDistribution.positive / total * 100).toFixed(1);
+                const neutralPct = (analyticsData.sentimentDistribution.neutral / total * 100).toFixed(1);
+                const negativePct = (analyticsData.sentimentDistribution.negative / total * 100).toFixed(1);
+                
+                sentimentBar.innerHTML = `
+                    &lt;div class="sentiment-bar-segment positive" style="width: ${positivePct}%"&gt;&lt;/div&gt;
+                    &lt;div class="sentiment-bar-segment neutral" style="width: ${neutralPct}%"&gt;&lt;/div&gt;
+                    &lt;div class="sentiment-bar-segment negative" style="width: ${negativePct}%"&gt;&lt;/div&gt;
+                `;
+            }
+            
+            // Update top intents list
+            const intentsList = document.getElementById('topIntentsList');
+            if (intentsList) {
+                const sortedIntents = Object.entries(analyticsData.topIntents)
+                    .sort((a, b) =gt; b[1] - a[1])
+                    .slice(0, 5);
+                
+                intentsList.innerHTML = sortedIntents.map(([intent, count]) =gt; `
+                    &lt;div class="intent-item"&gt;
+                        &lt;span class="intent-name"&gt;${intent}&lt;/span&gt;
+                        &lt;span class="intent-count"&gt;${count}&lt;/span&gt;
+                    &lt;/div&gt;
+                `).join('');
+            }
+            
+            renderSystemStatus();
+        }
+        
+        // Charts using Chart.js
+        let sentimentChart, intentChart, trendChart;
+        
+        function initCharts() {
+            const chartOptions = {
+                responsive: true,
+                maintainAspectRatio: true,
+                plugins: {
+                    legend: {
+                        display: true,
+                        position: 'bottom',
+                        labels: { color: '#8b949e', padding: 15, usePointStyle: true }
+                    }
+                },
+                scales: {
+                    x: { 
+                        grid: { color: '#21262d' },
+                        ticks: { color: '#8b949e' }
+                    },
+                    y: { 
+                        grid: { color: '#21262d' },
+                        ticks: { color: '#8b949e' }
+                    }
+                }
+            };
+            
+            // Sentiment Chart
+            const sentimentCtx = document.getElementById('sentimentChart')?.getContext('2d');
+            if (sentimentCtx) {
+                sentimentChart = new Chart(sentimentCtx, {
+                    type: 'doughnut',
+                    data: {
+                        labels: ['Positive', 'Neutral', 'Negative'],
+                        datasets: [{
+                            data: [
+                                analyticsData.sentimentDistribution.positive,
+                                analyticsData.sentimentDistribution.neutral,
+                                analyticsData.sentimentDistribution.negative
+                            ],
+                            backgroundColor: ['#3fb950', '#8b949e', '#f85149'],
+                            borderWidth: 0
+                        }]
+                    },
+                    options: {
+                        ...chartOptions,
+                        plugins: {
+                            legend: { display: true, position: 'right' }
+                        }
+                    }
+                });
+            }
+            
+            // Trend Chart
+            const trendCtx = document.getElementById('trendChart')?.getContext('2d');
+            if (trendCtx) {
+                trendChart = new Chart(trendCtx, {
+                    type: 'line',
+                    data: {
+                        labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+                        datasets: [{
+                            label: 'Conversations',
+                            data: [12, 19, 15, 17, 14, 8, 10],
+                            borderColor: '#58a6ff',
+                            backgroundColor: 'rgba(88, 166, 255, 0.1)',
+                            tension: 0.4,
+                            fill: true
+                        }]
+                    },
+                    options: chartOptions
+                });
+            }
+            
+            // Intent Chart
+            const intentCtx = document.getElementById('intentChart')?.getContext('2d');
+            if (intentCtx) {
+                const topIntents = Object.entries(analyticsData.topIntents)
+                    .sort((a, b) =gt; b[1] - a[1])
+                    .slice(0, 6);
+                
+                intentChart = new Chart(intentCtx, {
+                    type: 'bar',
+                    data: {
+                        labels: topIntents.map(([intent]) =gt; intent) || ['greeting', 'help', 'query', 'support', 'feedback', 'other'],
+                        datasets: [{
+                            label: 'Count',
+                            data: topIntents.map(([, count]) =gt; count) || [15, 12, 10, 8, 5, 3],
+                            backgroundColor: ['#58a6ff', '#3fb950', '#f0883e', '#d29922', '#f85149', '#a371f7']
+                        }]
+                    },
+                    options: chartOptions
+                });
+            }
+        }
+        
+        function updateCharts() {
+            if (sentimentChart) {
+                sentimentChart.data.datasets[0].data = [
+                    analyticsData.sentimentDistribution.positive,
+                    analyticsData.sentimentDistribution.neutral,
+                    analyticsData.sentimentDistribution.negative
+                ];
+                sentimentChart.update();
+            }
+            
+            if (intentChart) {
+                const topIntents = Object.entries(analyticsData.topIntents)
+                    .sort((a, b) =gt; b[1] - a[1])
+                    .slice(0, 6);
+                
+                intentChart.data.labels = topIntents.map(([intent]) =gt; intent);
+                intentChart.data.datasets[0].data = topIntents.map(([, count]) =gt; count);
+                intentChart.update();
+            }
+        }
+        
+        // User Profile Management
+        const userProfile = {
+            id: 'user_' + Date.now(),
+            name: 'Demo User',
+            role: 'user',
+            preferences: {
+                language: 'en',
+                theme: 'dark',
+                notifications: true,
+                voiceEnabled: true
+            },
+            conversationStats: {
+                totalConversations: 0,
+                lastActive: new Date()
+            }
+        };
+        
+        function updateUserProfile() {
+            userProfile.conversationStats.totalConversations = chatHistory.filter(m =gt; m.role === 'user').length;
+            userProfile.conversationStats.lastActive = new Date();
+            
+            const userNameEl = document.getElementById('userName');
+            if (userNameEl) {
+                userNameEl.textContent = userProfile.name;
+            }
+        }
+        
+        // Tab Navigation for Analytics Panel
+        function switchAnalyticsTab(tabName) {
+            const tabs = document.querySelectorAll('.analytics-tab');
+            tabs.forEach(tab =gt; tab.classList.remove('active'));
+            
+            const contents = document.querySelectorAll('.analytics-content');
+            contents.forEach(content =gt; content.classList.remove('active'));
+            
+            document.querySelector(`[data-tab="${tabName}"]`)?.classList.add('active');
+            document.getElementById(`tab-${tabName}`)?.classList.add('active');
+        }
+        
+        // Settings Management
+        function updateChatSetting(key, value) {
+            chatSettings[key] = value;
+            showToast(`Setting updated: ${key}`, 'info');
+        }
+        
+        function renderSettings() {
+            document.getElementById('settingTemperature').value = chatSettings.temperature;
+            document.getElementById('settingMaxTokens').value = chatSettings.maxTokens;
+            document.getElementById('settingSystemPrompt').value = chatSettings.systemPrompt;
+            document.getElementById('settingPersonality').value = chatSettings.personality;
+            document.getElementById('settingResponseStyle').value = chatSettings.responseStyle;
+        }
+        
+        function saveSettings() {
+            chatSettings.temperature = parseFloat(document.getElementById('settingTemperature').value);
+            chatSettings.maxTokens = parseInt(document.getElementById('settingMaxTokens').value);
+            chatSettings.systemPrompt = document.getElementById('settingSystemPrompt').value;
+            chatSettings.personality = document.getElementById('settingPersonality').value;
+            chatSettings.responseStyle = document.getElementById('settingResponseStyle').value;
+            
+            showToast('Settings saved successfully', 'success');
+            closeModal('settingsModal');
+        }
+        
+        // Keyboard Shortcuts
+        document.addEventListener('keydown', (e) =gt; {
+            // Ctrl/Cmd + Enter to send message
+            if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+                e.preventDefault();
+                sendMessage();
+            }
+            
+            // Escape to close modals
+            if (e.key === 'Escape') {
+                closeAllModals();
+            }
+            
+            // '/' to focus input (when not in input)
+            if (e.key === '/' && document.activeElement !== userInput) {
+                e.preventDefault();
+                userInput.focus();
+            }
+        });
+        
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () =gt; {
+            loadChatHistory();
+            initCharts();
+            renderAnalyticsDashboard();
+            updateUserProfile();
+            renderSettings();
+            
+            // Welcome message
+            addMessage('assistant', getWelcomeMessage(), {
+                intents: [{ intent: 'greeting', confidence: 100 }],
+                sentiment: { type: 'neutral', confidence: 95 },
+                quickReplies: ['Tell me about DDS', 'What can you do?', 'Help me with a task']
+            });
+            
+            showToast('DDS Enterprise Chatbot ready', 'success');
+        });
+        
+        function getWelcomeMessage() {
+            const messages = {
+                en: `Welcome to DDS Enterprise Chatbot! I'm your AI assistant powered by OpenRouter. I can help you with various tasks, answer questions, and provide support. How can I assist you today?`,
+                es: `¡Bienvenido al Chatbot Empresarial DDS! Soy tu asistente de IA impulsado por OpenRouter. Puedo ayudarte con varias tareas, responder preguntas y brindar soporte. ¿Cómo puedo asistirte hoy?`,
+                fr: `Bienvenue dans le Chatbot d'Entreprise DDS! Je suis votre assistant IA alimenté par OpenRouter. Je peux vous aider avec diverses tâches, répondre à des questions et fournir un support. Comment puis-je vous aider aujourd'hui?`,
+                de: `Willkommen beim DDS Enterprise Chatbot! Ich bin Ihr KI-Assistent, unterstützt von OpenRouter. Ich kann Ihnen bei verschiedenen Aufgaben helfen, Fragen beantworten und Support bieten. Wie kann ich Ihnen heute helfen?`,
+                zh: `欢迎使用 DDS 企业聊天机器人！我是由 OpenRouter 驱动的 AI 助手。我可以帮助您完成各种任务，回答问题并提供支持。今天我能为您做些什么？`,
+                ja: `DDS エンタープライズチャットボットへようこそ！私は OpenRouter で動作する AI アシスタントです。様々なタスクのお手伝い、質問への回答、サポートを提供できます。今日はどのようにお手伝いできますか？`
+            };
+            return messages[chatSettings.language] || messages.en;
+        }
+        
+        // Save chat history to localStorage
+        function saveChatHistory() {
+            try {
+                localStorage.setItem('ddsChatHistory', JSON.stringify(chatHistory));
+                localStorage.setItem('ddsChatSettings', JSON.stringify(chatSettings));
+            } catch (e) {
+                console.warn('Failed to save chat history:', e);
+            }
+        }
+        
+        function loadChatHistory() {
+            try {
+                const saved = localStorage.getItem('ddsChatHistory');
+                if (saved) {
+                    chatHistory = JSON.parse(saved);
+                    chatHistory.forEach(msg =gt; {
+                        renderMessage(msg);
+                    });
+                }
+                
+                const savedSettings = localStorage.getItem('ddsChatSettings');
+                if (savedSettings) {
+                    Object.assign(chatSettings, JSON.parse(savedSettings));
+                    document.getElementById('languageSelector').value = chatSettings.language;
+                }
+            } catch (e) {
+                console.warn('Failed to load chat history:', e);
+            }
+        }
+        
+        function clearChatHistory() {
+            chatHistory = [];
+            localStorage.removeItem('ddsChatHistory');
+            chatContainer.innerHTML = '';
+            showToast('Chat history cleared', 'info');
+            addMessage('assistant', getWelcomeMessage());
+        }
+        
+        // Demo mode fallback (when API key is not provided)
+        function generateDemoResponse(userMessage) {
+            const responses = {
+                greeting: [
+                    "Hello! How can I help you today?",
+                    "Hi there! What can I assist you with?",
+                    "Welcome! I'm here to help with any questions you have."
+                ],
+                help: [
+                    "I can help you with: finding information, answering questions, providing support, and much more. Just ask!",
+                    "I'm your AI assistant. Try asking me about DDS services, technical support, or general questions."
+                ],
+                default: [
+                    "I understand you're asking about that topic. Let me provide some helpful information.",
+                    "That's an interesting question! Here's what I can tell you.",
+                    "I'd be happy to help you with that. Let me share some relevant details."
+                ]
+            };
+            
+            const lowerMsg = userMessage.toLowerCase();
+            let category = 'default';
+            
+            if (lowerMsg.includes('hello') || lowerMsg.includes('hi') || lowerMsg.includes('hey')) {
+                category = 'greeting';
+            } else if (lowerMsg.includes('help') || lowerMsg.includes('what can you')) {
+                category = 'help';
+            }
+            
+            const categoryResponses = responses[category];
+            return categoryResponses[Math.floor(Math.random() * categoryResponses.length)];
+        }
+    &lt;/script&gt;
+&lt;/body&gt;
+&lt;/html&gt;

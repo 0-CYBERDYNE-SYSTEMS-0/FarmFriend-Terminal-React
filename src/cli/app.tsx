@@ -45,6 +45,7 @@ type Todo = {
   content: string;
   status: "pending" | "in_progress" | "completed";
   priority: "high" | "medium" | "low";
+  completedAt?: number;
 };
 
 function parseWireChunk(chunk: string, displayMode: string = "clean"): Line | null | { type: "provider_info"; provider: string; model: string } {
@@ -279,7 +280,9 @@ const ChatPrompt = memo(function ChatPrompt(props: {
  * No borders, no panels - just clean inline status
  * Features:
  * - Max 7 tasks visible (prioritized: in_progress > pending > recent completed)
+ * - Within each status, sorts by priority (high > medium > low)
  * - Completed tasks automatically fade out after 30 seconds
+ * - Priority indicators shown as icons (! for high, nothing for medium/low)
  */
 const InlineTodoStatus = memo(function InlineTodoStatus(props: {
   todos: Todo[];
@@ -292,6 +295,9 @@ const InlineTodoStatus = memo(function InlineTodoStatus(props: {
   const COMPLETED_FADE_MS = 30000;
   const now = Date.now();
 
+  // Priority order for sorting (high = 0, medium = 1, low = 2)
+  const priorityOrder = { high: 0, medium: 1, low: 2 };
+
   // Filter out completed tasks older than 30s
   const activeTodos = todos.filter(t => {
     if (t.status === "completed") {
@@ -302,9 +308,16 @@ const InlineTodoStatus = memo(function InlineTodoStatus(props: {
   });
 
   // Prioritize display: in_progress > pending > recent completed
-  const inProgress = activeTodos.filter(t => t.status === "in_progress");
-  const pending = activeTodos.filter(t => t.status === "pending");
-  const completed = activeTodos.filter(t => t.status === "completed");
+  // Within each status, sort by priority (high > medium > low)
+  const inProgress = activeTodos
+    .filter(t => t.status === "in_progress")
+    .sort((a, b) => priorityOrder[a.priority] - priorityOrder[b.priority]);
+  const pending = activeTodos
+    .filter(t => t.status === "pending")
+    .sort((a, b) => priorityOrder[a.priority] - priorityOrder[b.priority]);
+  const completed = activeTodos
+    .filter(t => t.status === "completed")
+    .sort((a, b) => priorityOrder[a.priority] - priorityOrder[b.priority]);
 
   // Take up to MAX_VISIBLE tasks
   const displayTodos = [
@@ -317,21 +330,51 @@ const InlineTodoStatus = memo(function InlineTodoStatus(props: {
 
   const totalCount = activeTodos.length;
   const completedCount = completed.length;
+  const pendingCount = pending.length;
+  const inProgressCount = inProgress.length;
+
+  // Status colors
+  const statusColors = {
+    completed: "green",
+    in_progress: "yellow",
+    pending: "gray"
+  };
+
+  // Priority colors (override status color for visibility)
+  const priorityColors = {
+    high: "red",
+    medium: undefined, // Use status color
+    low: "dimGray"
+  };
+
+  // Priority icon for high priority tasks
+  const priorityIcon = (priority: "high" | "medium" | "low") =>
+    priority === "high" ? "!" : "";
 
   return (
     <Box flexDirection="column" marginY={1}>
-      <Text color="yellow">⚡ Task Status ({completedCount}/{totalCount} complete)</Text>
+      <Text color="yellow">⚡ Tasks ({inProgressCount} active, {pendingCount} pending, {completedCount} done)</Text>
 
       {displayTodos.map(t => {
         const symbol = t.status === "completed" ? "✓" : t.status === "in_progress" ? "▶" : "○";
-        const color = t.status === "completed" ? "green" : t.status === "in_progress" ? "yellow" : "gray";
+        const statusColor = statusColors[t.status];
+        const priColor = priorityColors[t.priority];
+        const color = priColor || statusColor;
+        const priIcon = priorityIcon(t.priority);
         return (
-          <Text key={t.id} color={color}>  {symbol} {t.content}</Text>
+          <Text key={t.id} color={color}>
+            {"  "}{symbol} {priIcon} {t.content}
+            {t.priority === "high" ? " [HIGH]" : ""}
+          </Text>
         );
       })}
 
       {totalCount > MAX_VISIBLE ? (
-        <Text color="gray" dimColor>  ... and {totalCount - MAX_VISIBLE} more</Text>
+        <Text color="gray" dimColor>
+          {"  "}... and {inProgress.length - Math.min(inProgress.length, MAX_VISIBLE)} high,{" "}
+          {pending.length - Math.min(pending.length, Math.max(0, MAX_VISIBLE - inProgress.length))} pending,{" "}
+          {completed.length - Math.min(completed.length, Math.max(0, MAX_VISIBLE - inProgress.length - pending.length))} done hidden
+        </Text>
       ) : null}
     </Box>
   );

@@ -60,7 +60,7 @@
   "sandbox_enabled": false,
   "sandbox_settings_path": "srt-settings.json",
   "parallel_mode": true,
-  "system_message_variant": "c",
+  "system_message_variant": "d",
   "browser_cdp_url": null,
   "browser_use_chrome_profile": false,
   "browser_window_size": {

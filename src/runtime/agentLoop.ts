@@ -20,6 +20,7 @@ import { resolveWorkspaceDir } from "./config/paths.js";
 import { extractPlansFromContent, updatePlanStepStatus as updatePlanStepStatusInPlan, formatPlanForPrompt, isPlanComplete, trackStepAttempt } from "./planning/planExtractor.js";
 import { loadPlanStore, savePlanStore, getActivePlan, addPlan } from "./planning/planStore.js";
 import { createPlanValidationStopHook } from "./hooks/builtin/planValidationStopHook.js";
+import { createTodoStopHook } from "./hooks/builtin/todoStopHook.js";
 import type { ExecutionPlan, PlanStore } from "./planning/types.js";
 
 function smartTruncate(text: string, maxLen: number): string {
@@ -434,6 +435,16 @@ export async function* runAgentTurn(params: {
         workspaceDir
       })
     );
+  } else {
+    // Register todo-based stop hook when plan validation is disabled
+    // Prevents stopping when agent has incomplete tasks
+    // This is the KEY to long-horizon autonomy (matches OpenHands Planner Agent pattern)
+    hookRegistry.register(
+      createTodoStopHook({
+        enabled: true,
+        workspaceDir
+      })
+    );
   }
 
   if (String(process.env.FF_SKILLS_ENFORCE_ALLOWED_TOOLS || "") === "1") {
@@ -457,13 +468,13 @@ export async function* runAgentTurn(params: {
         (i > 1 && !toolCalls.length)
       );
 
-      const toolChoice = shouldForceTools && tools?.length ? "any" : "auto";
+      const forceToolChoice = shouldForceTools && tools?.length ? "any" : undefined;
 
       for await (const ev of provider.streamChat({
         model,
         messages,
         tools,
-        tool_choice: toolChoice,
+        tool_choice: forceToolChoice,
         temperature: Number((cfg as any).temperature ?? 0.7),
         maxTokens: Number((cfg as any).max_tokens ?? 12000),
         signal,

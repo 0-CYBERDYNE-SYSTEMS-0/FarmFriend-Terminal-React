@@ -260,8 +260,11 @@ function zaiAnthropicProvider(params: { apiKey: string; baseUrl: string; endpoin
   };
 }
 
+export { zaiAnthropicProvider };
+
 export function zaiProvider(params: { apiKey: string; baseUrl: string }): Provider {
-  const baseUrl = "https://api.z.ai/api/coding/paas/v4";
+  // Use the baseUrl from profile config instead of hardcoded value
+  const baseUrl = params.baseUrl || "https://api.z.ai/api/coding/paas/v4";
   const provider = openAICompatProvider({
     name: "zai",
     baseUrl,
@@ -277,7 +280,11 @@ export function zaiProvider(params: { apiKey: string; baseUrl: string }): Provid
   return {
     name: "zai",
     async *streamChat(args: Parameters<Provider["streamChat"]>[0]) {
-      yield* provider.streamChat(args);
+      // Z.ai OpenAI-compatible endpoint expects "required" not "any"
+      const fixedArgs = args.tool_choice === "any" 
+        ? { ...args, tool_choice: "required" as const }
+        : args;
+      yield* provider.streamChat(fixedArgs);
     }
   };
 }

@@ -8,6 +8,7 @@ type Todo = {
   content: string;
   status: "pending" | "in_progress" | "completed";
   priority: "high" | "medium" | "low";
+  completedAt?: number;
 };
 
 type Args = { todos?: Todo[] };
@@ -36,9 +37,36 @@ export async function todoWriteTool(argsRaw: unknown): Promise<string> {
   const dir = path.join(ctx.workspaceDir, "todos", "sessions");
   fs.mkdirSync(dir, { recursive: true });
   const p = path.join(dir, `${ctx.sessionId}.json`);
-  fs.writeFileSync(p, JSON.stringify({ version: 1, session_id: ctx.sessionId, todos }, null, 2) + "\n", "utf8");
 
-  const c = counts(todos);
+  // Load existing todos to preserve completedAt timestamps
+  let existingTodos: Todo[] = [];
+  const existingPath = path.join(dir, `${ctx.sessionId}.json`);
+  if (fs.existsSync(existingPath)) {
+    try {
+      const existingData = JSON.parse(fs.readFileSync(existingPath, "utf8"));
+      existingTodos = Array.isArray(existingData.todos) ? existingData.todos : [];
+    } catch {
+      // Ignore parse errors, start fresh
+    }
+  }
+
+  // Merge todos, setting completedAt when status changes to completed
+  const now = Date.now();
+  const mergedTodos = todos.map(newTodo => {
+    const existing = existingTodos.find(t => t.id === newTodo.id);
+    if (existing && existing.status !== "completed" && newTodo.status === "completed") {
+      // Newly completed - set timestamp
+      return { ...newTodo, completedAt: now };
+    } else if (existing?.completedAt) {
+      // Preserve existing timestamp
+      return { ...newTodo, completedAt: existing.completedAt };
+    }
+    return newTodo;
+  });
+
+  fs.writeFileSync(p, JSON.stringify({ version: 1, session_id: ctx.sessionId, todos: mergedTodos }, null, 2) + "\n", "utf8");
+
+  const c = counts(mergedTodos);
   return JSON.stringify(
     {
       ok: true,
