@@ -5,6 +5,7 @@ interface ConsoleEvent {
   type: string;
   content: string;
   timestamp: number;
+  metadata?: any;
 }
 
 interface ConsoleEventLogProps {
@@ -16,7 +17,10 @@ export function ConsoleEventLog({ events, onClear }: ConsoleEventLogProps) {
   const [filter, setFilter] = useState<string>('all');
   const [expandedEvents, setExpandedEvents] = useState<Set<string>>(new Set());
 
-  const getEventStyle = (type: string) => {
+  const getEventStyle = (type: string, metadata?: any) => {
+    // Determine if this is a tool start or end
+    const phase = metadata?.phase;
+    
     const styles: Record<string, { icon: string; bg: string; border: string; text: string; glow: string }> = {
       thinking_xml: {
         icon: '💭',
@@ -26,11 +30,25 @@ export function ConsoleEventLog({ events, onClear }: ConsoleEventLogProps) {
         glow: 'shadow-blue-500/10'
       },
       tool_call: {
-        icon: '🔧',
-        bg: 'from-amber-900/40 to-amber-950/30',
-        border: 'border-amber-500/50',
-        text: 'text-amber-200',
-        glow: 'shadow-amber-500/10'
+        icon: phase === 'start' ? '🚀' : phase === 'end' ? '✓' : '🔧',
+        bg: phase === 'start' 
+          ? 'from-amber-900/40 to-amber-950/30'
+          : phase === 'end' && metadata?.status === 'ok'
+          ? 'from-green-900/40 to-green-950/30'
+          : 'from-red-900/40 to-red-950/30',
+        border: phase === 'start'
+          ? 'border-amber-500/50'
+          : phase === 'end' && metadata?.status === 'ok'
+          ? 'border-green-500/50'
+          : 'border-red-500/50',
+        text: phase === 'start'
+          ? 'text-amber-200'
+          : phase === 'end' && metadata?.status === 'ok'
+          ? 'text-green-200'
+          : 'text-red-200',
+        glow: phase === 'start'
+          ? 'shadow-amber-500/10'
+          : 'shadow-green-500/10'
       },
       response: {
         icon: '💬',
@@ -40,11 +58,19 @@ export function ConsoleEventLog({ events, onClear }: ConsoleEventLogProps) {
         glow: 'shadow-emerald-500/10'
       },
       system: {
-        icon: 'ℹ️',
-        bg: 'from-neutral-800/40 to-neutral-950/30',
-        border: 'border-neutral-500/50',
-        text: 'text-neutral-300',
-        glow: 'shadow-neutral-500/10'
+        icon: metadata?.type === 'progress' ? '⏳' : 'ℹ️',
+        bg: metadata?.type === 'progress'
+          ? 'from-purple-900/40 to-purple-950/30'
+          : 'from-neutral-800/40 to-neutral-950/30',
+        border: metadata?.type === 'progress'
+          ? 'border-purple-500/50'
+          : 'border-neutral-500/50',
+        text: metadata?.type === 'progress'
+          ? 'text-purple-200'
+          : 'text-neutral-300',
+        glow: metadata?.type === 'progress'
+          ? 'shadow-purple-500/10'
+          : 'shadow-neutral-500/10'
       },
       error: {
         icon: '❌',
@@ -111,7 +137,7 @@ export function ConsoleEventLog({ events, onClear }: ConsoleEventLogProps) {
       {/* Event List */}
       <div className="flex-1 overflow-y-auto p-3 space-y-2">
         {filteredEvents.map((event) => {
-          const style = getEventStyle(event.type);
+          const style = getEventStyle(event.type, event.metadata);
           const isExpanded = expandedEvents.has(event.id);
 
           return (
@@ -129,7 +155,7 @@ export function ConsoleEventLog({ events, onClear }: ConsoleEventLogProps) {
               `}
               onClick={() => toggleExpanded(event.id)}
             >
-              {/* Timestamp + Icon */}
+              {/* Timestamp + Icon + Type */}
               <div className="flex items-start gap-2 mb-1">
                 <span className="text-xs font-mono text-gray-500 whitespace-nowrap">
                   {new Date(event.timestamp).toLocaleTimeString('en-US', {
@@ -142,13 +168,25 @@ export function ConsoleEventLog({ events, onClear }: ConsoleEventLogProps) {
                 <span className="text-lg">{style.icon}</span>
                 <span className={`text-xs font-semibold uppercase tracking-wider ${style.text}`}>
                   {event.type}
+                  {event.metadata?.phase && (
+                    <span className="opacity-70 ml-1 normal-case">
+                      {event.metadata.phase}
+                    </span>
+                  )}
                 </span>
+                
+                {/* Duration for tool_end */}
+                {event.metadata?.duration && (
+                  <span className="text-xs text-gray-500 ml-auto">
+                    {event.metadata.duration}
+                  </span>
+                )}
               </div>
 
-              {/* Content */}
+              {/* Main content */}
               <div
                 className={`
-                text-sm text-gray-300 ml-6
+                text-sm text-gray-300
                 ${isExpanded ? '' : 'line-clamp-2'}
                 transition-all duration-200
               `}
@@ -156,8 +194,44 @@ export function ConsoleEventLog({ events, onClear }: ConsoleEventLogProps) {
                 {event.content}
               </div>
 
+              {/* Tool input/output details */}
+              {isExpanded && event.type === 'tool_call' && event.metadata && (
+                <div className="mt-2 space-y-2 text-xs">
+                  {event.metadata.input && (
+                    <div className="bg-black/30 rounded p-2 border-l-2 border-amber-500/50">
+                      <div className="text-amber-300 font-semibold mb-1">Input:</div>
+                      <div className="text-gray-400 font-mono whitespace-pre-wrap break-all">
+                        {typeof event.metadata.input === 'string' 
+                          ? event.metadata.input.slice(0, 500)
+                          : JSON.stringify(event.metadata.input, null, 2).slice(0, 500)
+                        }
+                        {event.metadata.input && (typeof event.metadata.input === 'string' ? event.metadata.input : JSON.stringify(event.metadata.input)).length > 500 && '...'}
+                      </div>
+                    </div>
+                  )}
+                  {event.metadata.output && (
+                    <div className={`bg-black/30 rounded p-2 border-l-2 ${
+                      event.metadata.status === 'ok' 
+                        ? 'border-green-500/50' 
+                        : 'border-red-500/50'
+                    }`}>
+                      <div className={`font-semibold mb-1 ${
+                        event.metadata.status === 'ok' ? 'text-green-300' : 'text-red-300'
+                      }`}>
+                        {event.metadata.status === 'ok' ? '✓ Output:' : '✗ Error:'}
+
+                      </div>
+                      <div className="text-gray-400 font-mono whitespace-pre-wrap break-all">
+                        {event.metadata.output.slice(0, 500)}
+                        {event.metadata.output.length > 500 && '...'}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* Expand indicator */}
-              {event.content.length > 100 && (
+              {(event.content.length > 100 || (event.type === 'tool_call' && event.metadata)) && (
                 <div className="absolute top-3 right-3">
                   <svg
                     className={`w-4 h-4 text-gray-500 transition-transform duration-200 ${

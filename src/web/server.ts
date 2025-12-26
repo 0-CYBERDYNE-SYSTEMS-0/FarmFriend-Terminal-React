@@ -26,16 +26,16 @@ type WebClientMessage =
 
 // Types for web server responses (existing protocol)
 type WebServerMessage =
-  | { type: "system"; content: string; session_id: string; timestamp: number }
-  | { type: "response"; content: string; session_id: string; timestamp: number }
-  | { type: "thinking"; content: string; session_id: string; timestamp: number }
-  | { type: "thinking_xml"; content: string; session_id: string; timestamp: number }
-  | { type: "tool_call"; tool_name: string; content: string; session_id: string; timestamp: number }
-  | { type: "error"; content: string; session_id: string; timestamp: number }
-  | { type: "pong"; session_id: string; timestamp: number }
-  | { type: "command_received"; content: string; session_id: string; timestamp: number }
-  | { type: "history"; content: string; session_id: string; timestamp: number }
-  | { type: "turn_finished"; session_id: string; timestamp: number };
+  | { type: "system"; content: string; session_id: string; timestamp: number; metadata?: any }
+  | { type: "response"; content: string; session_id: string; timestamp: number; metadata?: any }
+  | { type: "thinking"; content: string; session_id: string; timestamp: number; metadata?: any }
+  | { type: "thinking_xml"; content: string; session_id: string; timestamp: number; metadata?: any }
+  | { type: "tool_call"; tool_name: string; content: string; session_id: string; timestamp: number; metadata?: any }
+  | { type: "error"; content: string; session_id: string; timestamp: number; metadata?: any }
+  | { type: "pong"; session_id: string; timestamp: number; metadata?: any }
+  | { type: "command_received"; content: string; session_id: string; timestamp: number; metadata?: any }
+  | { type: "history"; content: string; session_id: string; timestamp: number; metadata?: any }
+  | { type: "turn_finished"; session_id: string; timestamp: number; metadata?: any };
 
 // Daemon protocol types (from src/daemon/protocol.ts)
 type DaemonClientMessage =
@@ -168,7 +168,7 @@ function parseWebClientMessage(raw: string): WebClientMessage | null {
   }
 }
 
-function parseDaemonChunk(chunk: string): { kind: string; content?: string } {
+function parseDaemonChunk(chunk: string): { kind: string; content?: string; metadata?: any } {
   if (chunk === "task_completed") return { kind: "task_completed" };
   if (chunk.startsWith("content:")) {
     const content = chunk.slice(8);
@@ -182,10 +182,53 @@ function parseDaemonChunk(chunk: string): { kind: string; content?: string } {
   if (chunk.startsWith("error:")) return { kind: "error", content: chunk.slice(6) };
   if (chunk.startsWith("status:")) {
     const msg = chunk.slice(7);
+    
+    // Parse tool_start with full context
     if (msg.startsWith("tool_start:")) {
-      const toolName = msg.split("|")[0].replace("tool_start:", "").trim();
-      return { kind: "tool_start", content: toolName };
+      const parts = msg.split("|");
+      const toolName = parts[0].replace("tool_start:", "").trim();
+      const contextMsg = parts.slice(1).join("|").trim();
+      return {
+        kind: "tool_start",
+        content: `Running: ${toolName}`,
+        metadata: {
+          toolName,
+          input: contextMsg,
+          phase: "start"
+        }
+      };
     }
+
+    // Parse tool_end with results
+    if (msg.startsWith("tool_end:")) {
+      const parts = msg.split("|");
+      const toolName = parts[0].replace("tool_end:", "").trim();
+      const duration = parts[1];
+      const status = parts[2];
+      const preview = parts.slice(3).join("|").trim();
+      return {
+        kind: "tool_end",
+        content: `${toolName} ${status} (${duration})`,
+        metadata: {
+          toolName,
+          duration,
+          status,
+          output: preview,
+          phase: "end"
+        }
+      };
+    }
+
+    // Parse quick_update messages
+    if (msg.startsWith("update:")) {
+      const updateMsg = msg.replace("update:", "").trim();
+      return {
+        kind: "update",
+        content: updateMsg,
+        metadata: { type: "progress" }
+      };
+    }
+
     return { kind: "status", content: msg };
   }
   return { kind: "unknown", content: chunk };
@@ -433,10 +476,28 @@ export async function startWebServer(): Promise<void> {
           } else if (parsed.kind === "tool_start") {
             sendWebMessage(webWs, {
               type: "tool_call",
-              tool_name: parsed.content || "",
-              content: `Executing: ${parsed.content}`,
+              tool_name: parsed.metadata?.toolName || parsed.content || "",
+              content: parsed.content || "",
               session_id: sessionId,
-              timestamp: Date.now() / 1000
+              timestamp: Date.now() / 1000,
+              metadata: parsed.metadata
+            });
+          } else if (parsed.kind === "tool_end") {
+            sendWebMessage(webWs, {
+              type: "tool_call",
+              tool_name: parsed.metadata?.toolName || "tool",
+              content: parsed.content || "",
+              session_id: sessionId,
+              timestamp: Date.now() / 1000,
+              metadata: parsed.metadata
+            });
+          } else if (parsed.kind === "update") {
+            sendWebMessage(webWs, {
+              type: "system",
+              content: parsed.content || "",
+              session_id: sessionId,
+              timestamp: Date.now() / 1000,
+              metadata: parsed.metadata
             });
           } else if (parsed.kind === "status") {
             sendWebMessage(webWs, {

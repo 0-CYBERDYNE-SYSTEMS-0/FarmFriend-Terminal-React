@@ -159,7 +159,8 @@ export default function App() {
               id: `${Date.now()}-${msg.type}`,
               type: msg.type,
               content: 'content' in msg ? (msg.content || '') : '',
-              timestamp: Date.now()
+              timestamp: Date.now(),
+              metadata: 'metadata' in msg ? msg.metadata : undefined
             }
           ])
 
