@@ -8,7 +8,12 @@ type Args = { thought?: string };
 export async function thinkTool(argsRaw: unknown): Promise<string> {
   const args = argsRaw as Args;
   const thought = typeof args?.thought === "string" ? args.thought : "";
-  if (!thought.trim()) throw new Error("think: missing args.thought");
+
+  // Be forgiving: If no thought provided, return success as no-op
+  // This prevents infinite loops when models send malformed think calls
+  if (!thought.trim()) {
+    return JSON.stringify({ ok: true, note: "Empty thought - no action taken" });
+  }
 
   const ctx = getToolContext();
   const workspaceDir = resolveWorkspaceDir(ctx?.workspaceDir ?? process.env.FF_WORKSPACE_DIR ?? undefined);

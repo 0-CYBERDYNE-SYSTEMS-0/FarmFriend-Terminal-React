@@ -43,6 +43,6 @@ export type Provider = {
     maxTokens: number;
     signal: AbortSignal;
     sessionId?: string;
-    tool_choice?: "auto" | "any" | "none" | { type: "function"; name: string };
+    tool_choice?: "auto" | "any" | "none" | "required" | { type: "function"; name: string };
   }): AsyncGenerator<ProviderStreamEvent>;
 };

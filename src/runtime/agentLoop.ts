@@ -5,7 +5,7 @@ import { buildSystemPrompt, buildCacheableSystemPrompt } from "./prompts/systemP
 import { createSession, loadSession, saveSession } from "./session/sessionStore.js";
 import { findRepoRoot } from "./config/repoRoot.js";
 import { resolveConfig } from "./config/loadConfig.js";
-import { loadToolSchemas } from "./tools/toolSchemas.js";
+import { loadToolSchemas, validateToolArgs } from "./tools/toolSchemas.js";
 import { createProvider } from "./providers/factory.js";
 import { OpenAIMessage } from "./providers/types.js";
 import fs from "node:fs";
@@ -20,6 +20,7 @@ import { resolveWorkspaceDir } from "./config/paths.js";
 import { extractPlansFromContent, updatePlanStepStatus as updatePlanStepStatusInPlan, formatPlanForPrompt, isPlanComplete, trackStepAttempt } from "./planning/planExtractor.js";
 import { loadPlanStore, savePlanStore, getActivePlan, addPlan } from "./planning/planStore.js";
 import { createPlanValidationStopHook } from "./hooks/builtin/planValidationStopHook.js";
+import { createTodoStopHook } from "./hooks/builtin/todoStopHook.js";
 import type { ExecutionPlan, PlanStore } from "./planning/types.js";
 
 function smartTruncate(text: string, maxLen: number): string {
@@ -345,8 +346,10 @@ export async function* runAgentTurn(params: {
       }) }];
 
   const { provider, model } = createProvider({ repoRoot, modelOverride: params.modelOverride });
+  // Load schemas with strict mode for structured outputs (guarantees valid tool calls)
+  const allSchemas = loadToolSchemas(repoRoot, { strict: true });
   // Only advertise tools we can actually execute (prevents the model from calling unimplemented tools).
-  const tools = loadToolSchemas(repoRoot).filter((t) => registry.has(t.function.name));
+  const tools = allSchemas.filter((t) => registry.has(t.function.name));
   const messages: OpenAIMessage[] = [{ role: "system", content: systemPromptBlocks }];
   for (const m of session.conversation.slice(-40)) {
     if (m.role === "user") {
@@ -419,6 +422,10 @@ export async function* runAgentTurn(params: {
   let consecutiveNoAction = 0;
   const forceToolCalls = (cfg as any).force_tool_calls ?? true;
 
+  // Circuit breaker: Track consecutive failures per tool to prevent infinite loops
+  const consecutiveToolFailures = new Map<string, number>();
+  const CIRCUIT_BREAKER_THRESHOLD = 3; // Stop after 3 consecutive failures of same tool
+
   let planStore: PlanStore | null = null;
   if (planValidationEnabled) {
     planStore = loadPlanStore({ workspaceDir, sessionId });
@@ -431,6 +438,16 @@ export async function* runAgentTurn(params: {
       createPlanValidationStopHook({
         enabled: true,
         maxBlockAttempts: 3,
+        workspaceDir
+      })
+    );
+  } else {
+    // Register todo-based stop hook when plan validation is disabled
+    // Prevents stopping when agent has incomplete tasks
+    // This is the KEY to long-horizon autonomy (matches OpenHands Planner Agent pattern)
+    hookRegistry.register(
+      createTodoStopHook({
+        enabled: true,
         workspaceDir
       })
     );
@@ -457,13 +474,13 @@ export async function* runAgentTurn(params: {
         (i > 1 && !toolCalls.length)
       );
 
-      const toolChoice = shouldForceTools && tools?.length ? "any" : "auto";
+      const forceToolChoice = shouldForceTools && tools?.length ? "any" : undefined;
 
       for await (const ev of provider.streamChat({
         model,
         messages,
         tools,
-        tool_choice: toolChoice,
+        tool_choice: forceToolChoice,
         temperature: Number((cfg as any).temperature ?? 0.7),
         maxTokens: Number((cfg as any).max_tokens ?? 12000),
         signal,
@@ -611,6 +628,31 @@ export async function* runAgentTurn(params: {
     const callById = new Map<string, typeof toolCalls[number]>();
 
     for (const tc of toolCalls) {
+      // Pre-validate arguments against schema (structured output enforcement)
+      const validation = validateToolArgs(tc.name, tc.arguments, allSchemas);
+      if (!validation.valid) {
+        callById.set(tc.id, tc);
+        const failCount = (consecutiveToolFailures.get(tc.name) ?? 0) + 1;
+        consecutiveToolFailures.set(tc.name, failCount);
+
+        blockedResults.push({
+          id: tc.id,
+          name: tc.name,
+          ok: false,
+          output: validation.error
+        });
+        logToolEvent({
+          event: "tool_validation_failed",
+          ts: new Date().toISOString(),
+          session_id: sessionId,
+          tool_call_id: tc.id,
+          tool_name: tc.name,
+          reason: validation.error,
+          consecutive_failures: failCount
+        });
+        continue;
+      }
+
       const pre = await hookRegistry.runPreTool({
         sessionId,
         repoRoot,
@@ -639,10 +681,14 @@ export async function* runAgentTurn(params: {
         const modified = { ...tc, arguments: pre.modifiedArguments };
         callById.set(modified.id, modified);
         callsToRun.push(modified);
+        // Reset failure counter on successful validation
+        consecutiveToolFailures.set(tc.name, 0);
         continue;
       }
       callById.set(tc.id, tc);
       callsToRun.push(tc);
+      // Reset failure counter on successful validation
+      consecutiveToolFailures.set(tc.name, 0);
     }
 
     // Generate contextual messages for clean UI mode
@@ -682,6 +728,70 @@ export async function* runAgentTurn(params: {
     });
     const results = [...blockedResults, ...resultsRan] as Array<{ id: string; name: string; ok: boolean; output: string }>;
     toolCallsExecuted += callsToRun.length;
+
+    // Track execution failures for circuit breaker
+    for (const r of resultsRan) {
+      if (!r.ok) {
+        const failCount = (consecutiveToolFailures.get(r.name) ?? 0) + 1;
+        consecutiveToolFailures.set(r.name, failCount);
+      } else {
+        consecutiveToolFailures.set(r.name, 0);
+      }
+    }
+
+    // Circuit breaker: Check if any tool has failed too many times
+    const trippedTools: string[] = [];
+    for (const [toolName, failCount] of consecutiveToolFailures) {
+      if (failCount >= CIRCUIT_BREAKER_THRESHOLD) {
+        trippedTools.push(toolName);
+      }
+    }
+
+    if (trippedTools.length > 0) {
+      const allFailed = results.every(r => !r.ok);
+      logger.log("warn", "circuit_breaker_tripped", {
+        session_id: sessionId,
+        turn_id: turnId,
+        iteration: i + 1,
+        tripped_tools: trippedTools,
+        all_failed: allFailed
+      });
+
+      // Inject message to model about the failing tools
+      messages.push({
+        role: "system",
+        content: `CIRCUIT BREAKER: The following tool(s) have failed ${CIRCUIT_BREAKER_THRESHOLD}+ times consecutively: ${trippedTools.join(", ")}.\n\n` +
+          `STOP using these tools. Either:\n` +
+          `1. Complete the task without them\n` +
+          `2. Use different tools\n` +
+          `3. If the task is already complete, stop and respond to the user\n\n` +
+          `Do NOT keep retrying the same failing tools.`
+      });
+
+      // If ALL results failed, force stop evaluation
+      if (allFailed) {
+        yield { kind: "status", message: `Circuit breaker: ${trippedTools.join(", ")} failed ${CIRCUIT_BREAKER_THRESHOLD}x` };
+        const stop = await hookRegistry.runAgentStop({
+          sessionId,
+          repoRoot,
+          workspaceDir,
+          userInput: contentForHistory,
+          assistantContent: finalAssistantContent,
+          iteration: i,
+          maxIterations,
+          toolExecutionsCount: toolCallsExecuted
+        });
+        logger.log("info", "circuit_breaker_stop_check", {
+          session_id: sessionId,
+          turn_id: turnId,
+          iteration: i + 1,
+          action: stop.action
+        });
+        if (stop.action === "allow") {
+          break; // Force stop - all tools failed and stop hook allows
+        }
+      }
+    }
 
     if (planValidationEnabled && activePlan && planStore) {
       const currentStep = activePlan.steps.find((s) => s.status === "in_progress");

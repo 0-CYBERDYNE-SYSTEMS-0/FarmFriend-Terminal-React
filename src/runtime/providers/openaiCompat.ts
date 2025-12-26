@@ -171,14 +171,16 @@ export function openAICompatProvider(params: {
         console.error(`[ff-terminal][provider:${params.name}]`, ...args);
       };
 
-      const payloadBase = {
+      const payloadBase: Record<string, any> = {
         model: mapModel(model),
-        messages: normalizeMessages(messages),
-        tools: tools?.length ? tools : undefined,
-        tool_choice,
-        temperature,
-        max_tokens: maxTokens
+        messages: normalizeMessages(messages)
       };
+
+      // Only include optional parameters if they have defined values
+      if (tools?.length) payloadBase.tools = tools;
+      if (tool_choice !== undefined) payloadBase.tool_choice = tool_choice;
+      if (temperature !== undefined && temperature !== null) payloadBase.temperature = temperature;
+      if (maxTokens !== undefined && maxTokens !== null) payloadBase.max_tokens = maxTokens;
 
       let localRetryUsed = false;
       const canRetryEmptyStream = () => !localRetryUsed;

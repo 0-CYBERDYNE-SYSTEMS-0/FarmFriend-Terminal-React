@@ -450,7 +450,7 @@
     "type": "function",
     "function": {
       "name": "macos_control",
-      "description": "Control macOS applications and system functions using native automation. Can open apps, send keystrokes, click buttons, run AppleScript templates, and automate complex workflows with AppleScript skill integration.",
+      "description": "GUI automation for macOS - send keystrokes, click UI elements, run AppleScript for complex app interactions. DO NOT use for opening files - use run_command with 'open filename' instead. Only use this tool when you need to interact with application GUIs (clicking buttons, typing into fields, navigating menus).",
       "parameters": {
         "type": "object",
         "properties": {
@@ -478,21 +478,32 @@
     "type": "function",
     "function": {
       "name": "manage_task",
-      "description": "Manage tasks with simple operations",
+      "description": "Manage task list with action-based interface (list, create, update, complete)",
       "parameters": {
         "type": "object",
         "properties": {
           "action": {
             "type": "string",
-            "description": "Action: create, update, complete, list"
-          },
-          "task_description": {
-            "type": "string",
-            "description": "Task description for create/update actions"
+            "enum": ["list", "create", "update", "complete"],
+            "description": "Action to perform on tasks"
           },
           "task_id": {
             "type": "string",
             "description": "Task ID for update/complete actions"
+          },
+          "content": {
+            "type": "string",
+            "description": "Task content/description for create/update actions"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["pending", "in_progress", "completed"],
+            "description": "Task status for create/update actions"
+          },
+          "priority": {
+            "type": "string",
+            "enum": ["high", "medium", "low"],
+            "description": "Task priority for create/update actions"
           }
         },
         "required": [
@@ -669,7 +680,7 @@
     "type": "function",
     "function": {
       "name": "run_command",
-      "description": "Execute shell commands and code",
+      "description": "Execute shell commands. Use 'open filename' on macOS to open files in default app (e.g., 'open report.md' opens in text editor). Preferred for file operations, git, npm, curl, and all CLI tools.",
       "parameters": {
         "type": "object",
         "properties": {

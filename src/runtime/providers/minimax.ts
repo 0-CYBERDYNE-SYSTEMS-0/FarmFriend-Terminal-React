@@ -129,7 +129,9 @@ export function minimaxProvider(params: {
       };
       if (system) payload.system = system;
       if (tools?.length) payload.tools = convertTools(tools);
-      if (tool_choice) payload.tool_choice = tool_choice;
+      // MiniMax Anthropic API requires object format for tool_choice
+      if (tool_choice === "auto") payload.tool_choice = { type: "auto" };
+      else if (tool_choice === "any") payload.tool_choice = { type: "any" };
 
       const res = await fetch(url, {
         method: "POST",
