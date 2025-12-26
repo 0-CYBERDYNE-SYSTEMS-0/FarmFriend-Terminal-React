@@ -8,6 +8,7 @@ type WebSocketMessage =
   | { type: 'system'; content: string; session_id: string; timestamp: number }
   | { type: 'response'; content: string; session_id: string; timestamp: number }
   | { type: 'thinking'; content: string; session_id: string; timestamp: number }
+  | { type: 'thinking_xml'; content: string; session_id: string; timestamp: number }
   | { type: 'tool_call'; tool_name: string; content: string; session_id: string; timestamp: number }
   | { type: 'error'; content: string; session_id: string; timestamp: number }
   | { type: 'pong'; session_id: string; timestamp: number }
@@ -16,7 +17,7 @@ type WebSocketMessage =
 
 type ChatMessage = {
   id: string
-  role: 'user' | 'assistant' | 'system' | 'error'
+  role: 'user' | 'assistant' | 'system' | 'error' | 'thinking'
   content: string
   timestamp: number
   toolName?: string
@@ -153,7 +154,17 @@ export default function App() {
               break
 
             case 'thinking':
-              // Skip thinking for cleaner UI
+              // Skip legacy thinking for cleaner UI
+              break
+
+            case 'thinking_xml':
+              // Display XML-tagged thinking content with special styling
+              setMessages(prev => [...prev, {
+                id: `${Date.now()}-thinking`,
+                role: 'thinking',
+                content: msg.content,
+                timestamp: msg.timestamp * 1000
+              }])
               break
 
             case 'tool_call':
@@ -346,6 +357,8 @@ export default function App() {
                   ? 'bg-red-900/50 text-red-200 border border-red-800'
                   : msg.role === 'system'
                   ? 'text-neutral-400 text-sm bg-transparent'
+                  : msg.role === 'thinking'
+                  ? 'bg-blue-900/30 text-blue-100 border-l-2 border-blue-500 italic'
                   : 'bg-neutral-800 text-neutral-100 w-full'
               }`}>
                 <MessageContent content={msg.content} role={msg.role} />

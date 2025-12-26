@@ -29,6 +29,7 @@ type WebServerMessage =
   | { type: "system"; content: string; session_id: string; timestamp: number }
   | { type: "response"; content: string; session_id: string; timestamp: number }
   | { type: "thinking"; content: string; session_id: string; timestamp: number }
+  | { type: "thinking_xml"; content: string; session_id: string; timestamp: number }
   | { type: "tool_call"; tool_name: string; content: string; session_id: string; timestamp: number }
   | { type: "error"; content: string; session_id: string; timestamp: number }
   | { type: "pong"; session_id: string; timestamp: number }
@@ -169,7 +170,14 @@ function parseWebClientMessage(raw: string): WebClientMessage | null {
 
 function parseDaemonChunk(chunk: string): { kind: string; content?: string } {
   if (chunk === "task_completed") return { kind: "task_completed" };
-  if (chunk.startsWith("content:")) return { kind: "content", content: chunk.slice(8) };
+  if (chunk.startsWith("content:")) {
+    const content = chunk.slice(8);
+    // Check for <thinking> XML tags in content
+    if (content.includes("<thinking>")) {
+      return { kind: "thinking_xml", content: extractXmlTag(content, "thinking") };
+    }
+    return { kind: "content", content };
+  }
   if (chunk.startsWith("thinking:")) return { kind: "thinking", content: chunk.slice(9) };
   if (chunk.startsWith("error:")) return { kind: "error", content: chunk.slice(6) };
   if (chunk.startsWith("status:")) {
@@ -181,6 +189,25 @@ function parseDaemonChunk(chunk: string): { kind: string; content?: string } {
     return { kind: "status", content: msg };
   }
   return { kind: "unknown", content: chunk };
+}
+
+// Extract content between XML tags, handling multi-line and nested content
+function extractXmlTag(content: string, tagName: string): string {
+  const openTag = `<${tagName}>`;
+  const closeTag = `</${tagName}>`;
+  const openIndex = content.indexOf(openTag);
+  
+  if (openIndex === -1) return content;
+  
+  const start = openIndex + openTag.length;
+  const closeIndex = content.indexOf(closeTag, start);
+  
+  if (closeIndex === -1) {
+    // Unclosed tag, return everything after open tag
+    return content.slice(start);
+  }
+  
+  return content.slice(start, closeIndex);
 }
 
 function sendWebMessage(ws: WebSocket, msg: WebServerMessage): void {
@@ -385,6 +412,13 @@ export async function startWebServer(): Promise<void> {
           } else if (parsed.kind === "thinking") {
             sendWebMessage(webWs, {
               type: "thinking",
+              content: parsed.content || "",
+              session_id: sessionId,
+              timestamp: Date.now() / 1000
+            });
+          } else if (parsed.kind === "thinking_xml") {
+            sendWebMessage(webWs, {
+              type: "thinking_xml",
               content: parsed.content || "",
               session_id: sessionId,
               timestamp: Date.now() / 1000

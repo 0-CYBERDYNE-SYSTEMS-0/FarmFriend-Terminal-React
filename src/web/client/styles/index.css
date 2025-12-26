@@ -38,3 +38,32 @@ code {
 ::-webkit-scrollbar-thumb:hover {
   background: #444;
 }
+
+/* Thinking message styles - readable but visually distinct */
+.message-thinking {
+  background: linear-gradient(135deg, rgba(30, 58, 95, 0.4) 0%, rgba(15, 31, 51, 0.3) 100%);
+  border-left: 3px solid #3b82f6;
+  color: #cbd5e1;
+  font-style: italic;
+  padding: 12px 16px;
+  border-radius: 8px;
+  margin: 8px 0;
+}
+
+.message-thinking p {
+  margin: 0;
+  line-height: 1.6;
+}
+
+/* Enhance readability within thinking blocks */
+.message-thinking strong {
+  color: #e2e8f0;
+  font-weight: 600;
+}
+
+.message-thinking code {
+  background: rgba(0, 0, 0, 0.3);
+  padding: 2px 6px;
+  border-radius: 4px;
+  color: #93c5fd;
+}
