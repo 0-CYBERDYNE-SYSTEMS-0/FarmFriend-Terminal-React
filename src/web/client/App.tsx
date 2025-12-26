@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { Markdown } from './components/Markdown'
 import { ArtifactPreview } from './components/ArtifactPreview'
 import { FileUpload } from './components/FileUpload'
+import { ConsoleEventLog } from './components/ConsoleEventLog'
 
 // Types for WebSocket messages
 type WebSocketMessage =
@@ -29,6 +30,13 @@ type FileAttachment = {
   type: string
   size: number
   data: string
+}
+
+type ConsoleEvent = {
+  id: string
+  type: string
+  content: string
+  timestamp: number
 }
 
 const DEFAULT_SESSION = 'default-session'
@@ -83,6 +91,15 @@ function MessageContent({ content, role }: { content: string; role: string }) {
     return <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">{content}</p>
   }
 
+  // Handle thinking messages with special styling
+  if (role === 'thinking') {
+    return (
+      <div className="message-thinking">
+        <p className="mb-0 whitespace-pre-wrap">{content}</p>
+      </div>
+    );
+  }
+
   const contentType = detectContentType(content)
 
   if (contentType === 'artifact') {
@@ -104,6 +121,8 @@ export default function App() {
   const [assistantContent, setAssistantContent] = useState('')
   const [attachments, setAttachments] = useState<FileAttachment[]>([])
   const [messageAddedForTurn, setMessageAddedForTurn] = useState(false)
+  const [showConsole, setShowConsole] = useState(false)
+  const [consoleEvents, setConsoleEvents] = useState<ConsoleEvent[]>([])
 
   const wsRef = useRef<WebSocket | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -132,6 +151,17 @@ export default function App() {
 
         ws.onmessage = (event) => {
           const msg = JSON.parse(event.data) as WebSocketMessage
+
+          // Always capture to console event log
+          setConsoleEvents((prev) => [
+            ...prev,
+            {
+              id: `${Date.now()}-${msg.type}`,
+              type: msg.type,
+              content: 'content' in msg ? (msg.content || '') : '',
+              timestamp: Date.now()
+            }
+          ])
 
           switch (msg.type) {
             case 'system':
@@ -330,17 +360,44 @@ export default function App() {
           <h1 className="text-lg font-semibold text-neutral-100">FF-Terminal</h1>
           <span className="text-sm text-neutral-500">AI Development Assistant</span>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3">
           <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`} />
           <span className="text-xs text-neutral-500">
             {isConnected ? 'Connected' : 'Connecting...'}
           </span>
+          <button
+            onClick={() => setShowConsole(!showConsole)}
+            className={`
+              px-3 py-1.5 rounded-lg text-sm font-medium
+              transition-all duration-200
+              ${showConsole
+                ? 'bg-gradient-to-r from-purple-600 to-blue-600 text-white shadow-lg shadow-purple-500/25'
+                : 'bg-neutral-800 text-gray-400 hover:bg-neutral-700'
+              }
+            `}
+          >
+            {showConsole ? (
+              <span className="flex items-center gap-2">
+                <span>⚡</span>
+                <span>Console</span>
+              </span>
+            ) : (
+              <span className="flex items-center gap-2">
+                <span>💬</span>
+                <span>Chat</span>
+              </span>
+            )}
+          </button>
         </div>
       </header>
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto px-4 py-6">
-        <div className="max-w-3xl mx-auto space-y-4">
+        {showConsole ? (
+          <div className="flex h-full gap-4">
+            {/* Chat view */}
+            <div className="flex-1">
+              <div className="max-w-3xl mx-auto space-y-4">
           {messages.length === 0 && (
             <div className="text-center text-neutral-500 py-20">
               <p className="text-lg mb-2">Welcome to FF-Terminal</p>
@@ -379,7 +436,62 @@ export default function App() {
           )}
 
           <div ref={messagesEndRef} />
-        </div>
+              </div>
+            </div>
+
+            {/* Console panel */}
+            <div className="w-96 min-w-0">
+              <ConsoleEventLog
+                events={consoleEvents}
+                onClear={() => setConsoleEvents([])}
+              />
+            </div>
+          </div>
+        ) : (
+          // Single column chat view
+          <div className="max-w-3xl mx-auto space-y-4">
+            {messages.length === 0 && (
+              <div className="text-center text-neutral-500 py-20">
+                <p className="text-lg mb-2">Welcome to FF-Terminal</p>
+                <p className="text-sm">Ask me anything about your code</p>
+              </div>
+            )}
+
+            {messages.map((msg) => (
+              <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                <div
+                  className={`max-w-[80%] rounded-lg px-4 py-2 ${
+                    msg.role === 'user'
+                      ? 'bg-primary-600 text-white'
+                      : msg.role === 'error'
+                      ? 'bg-red-900/50 text-red-200 border border-red-800'
+                      : msg.role === 'system'
+                      ? 'text-neutral-400 text-sm bg-transparent'
+                      : msg.role === 'thinking'
+                      ? 'bg-blue-900/30 text-blue-100 border-l-2 border-blue-500 italic'
+                      : 'bg-neutral-800 text-neutral-100 w-full'
+                  }`}
+                >
+                  <MessageContent content={msg.content} role={msg.role} />
+                </div>
+              </div>
+            ))}
+
+            {/* Streaming content - show as plain text, not markdown */}
+            {assistantContent && (
+              <div className="flex justify-start">
+                <div className="max-w-[80%] rounded-lg px-4 py-2 bg-neutral-800 text-neutral-100">
+                  <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">
+                    {assistantContent}
+                    <span className="inline-block w-2 h-4 bg-primary-500 ml-1 animate-pulse" />
+                  </p>
+                </div>
+              </div>
+            )}
+
+            <div ref={messagesEndRef} />
+          </div>
+        )}
       </div>
 
       {/* Input */}
