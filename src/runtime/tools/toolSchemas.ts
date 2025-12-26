@@ -9,10 +9,115 @@ export type OpenAIToolSchema = {
     name: string;
     description?: string;
     parameters?: unknown;
+    strict?: boolean;
   };
 };
 
-export function loadToolSchemas(repoRoot = findRepoRoot()): OpenAIToolSchema[] {
+/**
+ * Enforce strict mode on a tool schema for structured outputs.
+ * This ensures the model returns valid JSON matching the schema.
+ */
+function enforceStrictSchema(schema: OpenAIToolSchema): OpenAIToolSchema {
+  const params = schema.function.parameters as Record<string, unknown> | undefined;
+  if (!params || typeof params !== "object") {
+    return {
+      ...schema,
+      function: {
+        ...schema.function,
+        strict: true,
+        parameters: { type: "object", properties: {}, additionalProperties: false }
+      }
+    };
+  }
+
+  // Deep clone and add additionalProperties: false recursively
+  const enforceAdditionalProperties = (obj: Record<string, unknown>): Record<string, unknown> => {
+    const result: Record<string, unknown> = { ...obj };
+
+    if (result.type === "object" && !("additionalProperties" in result)) {
+      result.additionalProperties = false;
+    }
+
+    // Handle nested objects in properties
+    if (result.properties && typeof result.properties === "object") {
+      const props = result.properties as Record<string, unknown>;
+      const newProps: Record<string, unknown> = {};
+      for (const [key, value] of Object.entries(props)) {
+        if (value && typeof value === "object") {
+          newProps[key] = enforceAdditionalProperties(value as Record<string, unknown>);
+        } else {
+          newProps[key] = value;
+        }
+      }
+      result.properties = newProps;
+    }
+
+    // Handle items in arrays
+    if (result.items && typeof result.items === "object") {
+      result.items = enforceAdditionalProperties(result.items as Record<string, unknown>);
+    }
+
+    return result;
+  };
+
+  return {
+    ...schema,
+    function: {
+      ...schema.function,
+      strict: true,
+      parameters: enforceAdditionalProperties(params)
+    }
+  };
+}
+
+/**
+ * Validate tool call arguments against schema.
+ * Returns { valid: true } or { valid: false, error: string }
+ */
+export function validateToolArgs(
+  toolName: string,
+  args: unknown,
+  schemas: OpenAIToolSchema[]
+): { valid: true } | { valid: false; error: string } {
+  const schema = schemas.find(s => s.function.name === toolName);
+  if (!schema) {
+    return { valid: false, error: `Unknown tool: ${toolName}` };
+  }
+
+  const params = schema.function.parameters as Record<string, unknown> | undefined;
+  if (!params) {
+    return { valid: true }; // No parameters required
+  }
+
+  // Check required fields
+  const required = (params.required as string[]) || [];
+  const properties = (params.properties as Record<string, unknown>) || {};
+
+  if (args === null || args === undefined || typeof args !== "object") {
+    if (required.length > 0) {
+      return { valid: false, error: `${toolName}: missing required arguments: ${required.join(", ")}` };
+    }
+    return { valid: true };
+  }
+
+  const argObj = args as Record<string, unknown>;
+
+  for (const req of required) {
+    const value = argObj[req];
+    if (value === undefined || value === null) {
+      return { valid: false, error: `${toolName}: missing required argument '${req}'` };
+    }
+    // Check for empty strings on required string fields
+    const propSchema = properties[req] as Record<string, unknown> | undefined;
+    if (propSchema?.type === "string" && value === "") {
+      return { valid: false, error: `${toolName}: required argument '${req}' cannot be empty` };
+    }
+  }
+
+  return { valid: true };
+}
+
+export function loadToolSchemas(repoRoot = findRepoRoot(), options?: { strict?: boolean }): OpenAIToolSchema[] {
   const p = path.join(portPacketDir(repoRoot), "tool_schemas.openai.json");
   const base = JSON.parse(fs.readFileSync(p, "utf8")) as OpenAIToolSchema[];
 
@@ -39,5 +144,12 @@ export function loadToolSchemas(repoRoot = findRepoRoot()): OpenAIToolSchema[] {
         }
       ];
 
-  return [...base, ...extra];
+  const schemas = [...base, ...extra];
+
+  // Apply strict mode if requested (for providers that support structured outputs)
+  if (options?.strict) {
+    return schemas.map(enforceStrictSchema);
+  }
+
+  return schemas;
 }

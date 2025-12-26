@@ -450,7 +450,7 @@
     "type": "function",
     "function": {
       "name": "macos_control",
-      "description": "Control macOS applications and system functions using native automation. Can open apps, send keystrokes, click buttons, run AppleScript templates, and automate complex workflows with AppleScript skill integration.",
+      "description": "GUI automation for macOS - send keystrokes, click UI elements, run AppleScript for complex app interactions. DO NOT use for opening files - use run_command with 'open filename' instead. Only use this tool when you need to interact with application GUIs (clicking buttons, typing into fields, navigating menus).",
       "parameters": {
         "type": "object",
         "properties": {
@@ -680,7 +680,7 @@
     "type": "function",
     "function": {
       "name": "run_command",
-      "description": "Execute shell commands and code",
+      "description": "Execute shell commands. Use 'open filename' on macOS to open files in default app (e.g., 'open report.md' opens in text editor). Preferred for file operations, git, npm, curl, and all CLI tools.",
       "parameters": {
         "type": "object",
         "properties": {

@@ -24,16 +24,44 @@ export async function todoWriteTool(argsRaw: unknown): Promise<string> {
   const ctx = getToolContext();
   if (!ctx) throw new Error("TodoWrite: missing tool context");
   const args = argsRaw as Args;
-  const todos = Array.isArray(args?.todos) ? (args.todos as Todo[]) : null;
-  if (!todos) throw new Error("TodoWrite: missing todos");
+  const rawTodos = Array.isArray(args?.todos) ? args.todos : null;
 
-  for (const t of todos) {
-    if (!t || typeof t !== "object") throw new Error("TodoWrite: invalid todo");
-    if (typeof t.id !== "string" || !t.id.trim()) throw new Error("TodoWrite: todo.id required");
-    if (typeof t.content !== "string") throw new Error("TodoWrite: todo.content required");
-    if (typeof t.activeForm !== "string") throw new Error("TodoWrite: todo.activeForm required");
-    if (!["pending", "in_progress", "completed"].includes(t.status)) throw new Error("TodoWrite: invalid status");
-    if (!["high", "medium", "low"].includes(t.priority)) throw new Error("TodoWrite: invalid priority");
+  // Be forgiving: if no todos provided, return success as no-op
+  if (!rawTodos || rawTodos.length === 0) {
+    return JSON.stringify({ ok: true, note: "No todos provided - no action taken" });
+  }
+
+  // Normalize and fill in defaults for each todo
+  const todos: Todo[] = [];
+  for (let i = 0; i < rawTodos.length; i++) {
+    const t = rawTodos[i] as Partial<Todo> | null | undefined;
+    if (!t || typeof t !== "object") continue; // Skip invalid entries
+
+    // Generate ID if missing
+    const id = (typeof t.id === "string" && t.id.trim()) ? t.id : `todo_${i + 1}`;
+
+    // Use content or activeForm as fallback for each other
+    const content = typeof t.content === "string" ? t.content : (typeof t.activeForm === "string" ? t.activeForm : `Task ${i + 1}`);
+    const activeForm = typeof t.activeForm === "string" ? t.activeForm : content;
+
+    // Normalize status
+    const rawStatus = String(t.status || "pending").toLowerCase();
+    const status = ["pending", "in_progress", "completed"].includes(rawStatus)
+      ? (rawStatus as Todo["status"])
+      : "pending";
+
+    // Normalize priority
+    const rawPriority = String(t.priority || "medium").toLowerCase();
+    const priority = ["high", "medium", "low"].includes(rawPriority)
+      ? (rawPriority as Todo["priority"])
+      : "medium";
+
+    todos.push({ id, content, activeForm, status, priority });
+  }
+
+  // If all entries were invalid, return success
+  if (todos.length === 0) {
+    return JSON.stringify({ ok: true, note: "No valid todos found - no action taken" });
   }
 
   const dir = path.join(ctx.workspaceDir, "todos", "sessions");

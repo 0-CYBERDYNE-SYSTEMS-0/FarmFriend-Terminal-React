@@ -280,9 +280,9 @@ const ChatPrompt = memo(function ChatPrompt(props: {
  * Appears directly after transcript in chat mode
  * No borders, no panels - just clean inline status
  * Features:
- * - Max 7 tasks visible (prioritized: in_progress > pending > completed)
+ * - Max 15 tasks visible (prioritized: in_progress > pending > completed)
  * - Within each status, sorts by priority (high > medium > low)
- * - Completed tasks remain visible (no auto-fade)
+ * - Completed tasks auto-hide after 30 seconds
  * - Priority indicators shown as icons (! for high, nothing for medium/low)
  * - Shows activeForm (present continuous) for in_progress tasks
  */
@@ -293,7 +293,9 @@ const InlineTodoStatus = memo(function InlineTodoStatus(props: {
 
   if (todos.length === 0) return null;
 
-  const MAX_VISIBLE = 7;
+  const MAX_VISIBLE = 15;
+  const COMPLETED_HIDE_DELAY_MS = 30000; // 30 seconds
+  const now = Date.now();
 
   // Priority order for sorting (high = 0, medium = 1, low = 2)
   const priorityOrder = { high: 0, medium: 1, low: 2 };
@@ -306,9 +308,17 @@ const InlineTodoStatus = memo(function InlineTodoStatus(props: {
   const pending = todos
     .filter(t => t.status === "pending")
     .sort((a, b) => priorityOrder[a.priority] - priorityOrder[b.priority]);
-  const completed = todos
-    .filter(t => t.status === "completed")
+
+  // Filter completed: hide if older than 30s
+  const allCompleted = todos.filter(t => t.status === "completed");
+  const completed = allCompleted
+    .filter(t => {
+      if (!t.completedAt) return true; // Show if no timestamp (shouldn't happen but be safe)
+      return (now - t.completedAt) < COMPLETED_HIDE_DELAY_MS;
+    })
     .sort((a, b) => priorityOrder[a.priority] - priorityOrder[b.priority]);
+
+  const hiddenCompletedCount = allCompleted.length - completed.length;
 
   // Take up to MAX_VISIBLE tasks
   const displayTodos = [
@@ -342,9 +352,19 @@ const InlineTodoStatus = memo(function InlineTodoStatus(props: {
   const priorityIcon = (priority: "high" | "medium" | "low") =>
     priority === "high" ? "!" : "";
 
+  // Build summary line based on what's visible
+  let summaryText = `⚡ Tasks (${inProgressCount} active, ${pendingCount} pending`;
+  if (completedCount > 0) {
+    summaryText += `, ${completedCount} done`;
+  }
+  if (hiddenCompletedCount > 0) {
+    summaryText += ` · ${hiddenCompletedCount} auto-hidden`;
+  }
+  summaryText += ")";
+
   return (
     <Box flexDirection="column" marginY={1}>
-      <Text color="yellow">⚡ Tasks ({inProgressCount} active, {pendingCount} pending, {completedCount} done)</Text>
+      <Text color="yellow">{summaryText}</Text>
 
       {displayTodos.map(t => {
         const symbol = t.status === "completed" ? "✓" : t.status === "in_progress" ? "▶" : "○";
@@ -362,11 +382,9 @@ const InlineTodoStatus = memo(function InlineTodoStatus(props: {
         );
       })}
 
-      {totalCount > MAX_VISIBLE ? (
+      {displayTodos.length > MAX_VISIBLE ? (
         <Text color="gray" dimColor>
-          {"  "}... and {inProgress.length - Math.min(inProgress.length, MAX_VISIBLE)} high,{" "}
-          {pending.length - Math.min(pending.length, Math.max(0, MAX_VISIBLE - inProgress.length))} pending,{" "}
-          {completed.length - Math.min(completed.length, Math.max(0, MAX_VISIBLE - inProgress.length - pending.length))} done hidden
+          {"  "}... {displayTodos.length - MAX_VISIBLE} more tasks not shown
         </Text>
       ) : null}
     </Box>
