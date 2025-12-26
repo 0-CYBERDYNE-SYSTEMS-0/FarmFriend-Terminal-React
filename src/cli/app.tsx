@@ -20,6 +20,7 @@ import type { AgentConfig, AgentTemplate } from "../runtime/agents/types.js";
 import { validateWorkspace, generateReport } from "../runtime/workspace/doctor.js";
 import { planMigration, executeMigration } from "../runtime/workspace/migration.js";
 import { isValidSessionId as isValidSessionIdFormat } from "../shared/ids.js";
+import { getTheme, getCurrentTheme, color, type ThemeName } from "./colorTheme.js";
 
 type ServerMessage =
   | { type: "hello"; daemonVersion: string }
@@ -147,21 +148,23 @@ const FARMFRIEND_ASCII_ART = [
   "   ╚═╝   ╚══════╝╚═╝  ╚═╝╚═╝     ╚═╝╚═╝╚═╝  ╚═══╝╚═╝  ╚═╝╚══════╝"
 ] as const;
 
-const Banner = memo(function Banner(props: { displayMode: string; width: number }) {
+const Banner = memo(function Banner(props: { displayMode: string; width: number; themeName: ThemeName }) {
+  const theme = getTheme(props.themeName);
+
   if (props.displayMode === "verbose") {
     if (props.width < 60) {
       return (
         <Box flexDirection="column">
-          <Text color="greenBright" bold>
+          <Text color={theme.bannerSecondary} bold>
             FARM
           </Text>
-          <Text color="greenBright" bold>
+          <Text color={theme.bannerSecondary} bold>
             FRIEND
           </Text>
-          <Text color="cyanBright" bold>
+          <Text color={theme.bannerPrimary} bold>
             TERMINAL v3.0
           </Text>
-          <Text color="gray">Ultra-Autonomous AI Terminal Interface</Text>
+          <Text color={theme.system}>Ultra-Autonomous AI Terminal Interface</Text>
         </Box>
       );
     }
@@ -170,17 +173,17 @@ const Banner = memo(function Banner(props: { displayMode: string; width: number 
       <Box flexDirection="column">
         {FARMFRIEND_ASCII_ART.map((line, i) => {
           if (!line) return <Text key={i}> </Text>;
-          // Approximate the Python aurora gradient (leafy green → sky teal) with ANSI colors.
+          // Approximate the Python aurora gradient (leafy green → sky teal) with theme colors.
           const t = i / Math.max(1, FARMFRIEND_ASCII_ART.length - 1);
-          const color = t < 0.5 ? "greenBright" : "cyanBright";
+          const lineColor = t < 0.5 ? theme.bannerSecondary : theme.bannerPrimary;
           return (
-            <Text key={i} color={color} bold>
+            <Text key={i} color={lineColor} bold>
               {line}
             </Text>
           );
         })}
         <Text> </Text>
-        <Text color="gray">🌾 Ultra-Autonomous AI Terminal Interface</Text>
+        <Text color={theme.system}>🌾 Ultra-Autonomous AI Terminal Interface</Text>
       </Box>
     );
   }
@@ -190,10 +193,10 @@ const Banner = memo(function Banner(props: { displayMode: string; width: number 
     if (props.width < 46) {
       return (
         <Box flexDirection="column">
-          <Text color="cyanBright" bold>
+          <Text color={theme.bannerPrimary} bold>
             FF-Terminal v3.0
           </Text>
-          <Text color="gray">Ultra-Autonomous AI Terminal</Text>
+          <Text color={theme.system}>Ultra-Autonomous AI Terminal</Text>
         </Box>
       );
     }
@@ -208,7 +211,7 @@ const Banner = memo(function Banner(props: { displayMode: string; width: number 
     return (
       <Box flexDirection="column">
         {box.map((line, i) => (
-          <Text key={i} color="cyanBright" bold>
+          <Text key={i} color={theme.bannerPrimary} bold>
             {line}
           </Text>
         ))}
@@ -219,8 +222,9 @@ const Banner = memo(function Banner(props: { displayMode: string; width: number 
   return null;
 });
 
-const Spinner = memo(function Spinner(props: { active: boolean; context?: string }) {
+const Spinner = memo(function Spinner(props: { active: boolean; context?: string; themeName: ThemeName }) {
   const [i, setI] = useState(0);
+  const theme = getTheme(props.themeName);
   // ASCII spinner to maximize compatibility across terminal fonts.
   const frames = useMemo(() => ["|", "/", "-", "\\"], []);
 
@@ -232,7 +236,7 @@ const Spinner = memo(function Spinner(props: { active: boolean; context?: string
 
   if (!props.active) return null;
   return (
-    <Text color="yellow">
+    <Text color={theme.spinner}>
       [{frames[i]}] {props.context || "Processing..."}
     </Text>
   );
@@ -245,7 +249,10 @@ const ChatPrompt = memo(function ChatPrompt(props: {
   showThinking: boolean;
   showToolDetails: boolean;
   thinkingCount: number;
+  themeName: ThemeName;
 }) {
+  const theme = getTheme(props.themeName);
+
   const value = useSyncExternalStore(
     (cb) => {
       props.inputStore.subscribers.add(cb);
@@ -266,8 +273,8 @@ const ChatPrompt = memo(function ChatPrompt(props: {
     <>
       <Text>› {value}</Text>
       <Box gap={1}>
-        <Spinner active={props.processing} />
-        <Text color="gray">
+        <Spinner active={props.processing} themeName={props.themeName} />
+        <Text color={theme.system}>
           Enter to send • Ctrl+C to cancel • Shift+Tab: mode={props.operationMode} • Ctrl+T: thinking {thinkingText} • Ctrl+E: tools {toolsText} • Ctrl+O: agents • /help
         </Text>
       </Box>
@@ -288,8 +295,10 @@ const ChatPrompt = memo(function ChatPrompt(props: {
  */
 const InlineTodoStatus = memo(function InlineTodoStatus(props: {
   todos: Todo[];
+  themeName: ThemeName;
 }) {
   const { todos } = props;
+  const theme = getTheme(props.themeName);
 
   if (todos.length === 0) return null;
 
@@ -336,16 +345,16 @@ const InlineTodoStatus = memo(function InlineTodoStatus(props: {
 
   // Status colors
   const statusColors = {
-    completed: "green",
-    in_progress: "yellow",
-    pending: "gray"
+    completed: theme.todoCompleted,
+    in_progress: theme.todoInProgress,
+    pending: theme.todoPending
   };
 
   // Priority colors (override status color for visibility)
   const priorityColors = {
-    high: "red",
+    high: theme.todoHighPriority,
     medium: undefined, // Use status color
-    low: "dimGray"
+    low: theme.todoLowPriority
   };
 
   // Priority icon for high priority tasks
@@ -364,18 +373,18 @@ const InlineTodoStatus = memo(function InlineTodoStatus(props: {
 
   return (
     <Box flexDirection="column" marginY={1}>
-      <Text color="yellow">{summaryText}</Text>
+      <Text color={theme.todoSummary}>{summaryText}</Text>
 
       {displayTodos.map(t => {
         const symbol = t.status === "completed" ? "✓" : t.status === "in_progress" ? "▶" : "○";
         const statusColor = statusColors[t.status];
         const priColor = priorityColors[t.priority];
-        const color = priColor || statusColor;
+        const lineColor = priColor || statusColor;
         const priIcon = priorityIcon(t.priority);
         // Show activeForm when in_progress, content otherwise
         const displayText = t.status === "in_progress" ? t.activeForm : t.content;
         return (
-          <Text key={t.id} color={color}>
+          <Text key={t.id} color={lineColor}>
             {"  "}{symbol} {priIcon} {displayText}
             {t.priority === "high" ? " [HIGH]" : ""}
           </Text>
@@ -383,7 +392,7 @@ const InlineTodoStatus = memo(function InlineTodoStatus(props: {
       })}
 
       {displayTodos.length > MAX_VISIBLE ? (
-        <Text color="gray" dimColor>
+        <Text color={theme.todoPending} dimColor>
           {"  "}... {displayTodos.length - MAX_VISIBLE} more tasks not shown
         </Text>
       ) : null}
@@ -409,8 +418,10 @@ type SubagentState = {
 const SubagentSwarm = memo(function SubagentSwarm(props: {
   agents: SubagentState[];
   expanded: boolean;
+  themeName: ThemeName;
 }) {
   const { agents, expanded } = props;
+  const theme = getTheme(props.themeName);
 
   if (agents.length === 0) return null;
 
@@ -419,31 +430,31 @@ const SubagentSwarm = memo(function SubagentSwarm(props: {
 
   return (
     <Box flexDirection="column" marginY={1}>
-      <Text color="cyan">
+      <Text color={theme.subagentSummary}>
         ⚡ Running {runningCount} Task agents...
-        {doneCount > 0 && <Text color="green"> ({doneCount} complete)</Text>}
+        {doneCount > 0 && <Text color={theme.subagentDone}> ({doneCount} complete)</Text>}
         <Text dimColor> (ctrl+o to {expanded ? "collapse" : "expand"})</Text>
       </Text>
 
       {expanded && agents.map((agent, idx) => {
         const prefix = idx === agents.length - 1 ? "└─" : "├─";
-        const statusColor = agent.status === "done" ? "green" : agent.status === "error" ? "red" : "yellow";
+        const statusColor = agent.status === "done" ? theme.subagentDone : agent.status === "error" ? theme.subagentError : theme.subagentRunning;
         const statusSymbol = agent.status === "done" ? "✓" : agent.status === "error" ? "✗" : "⚙";
 
         return (
           <Box key={agent.id} flexDirection="column" marginLeft={1}>
             <Text>
-              <Text color="gray">{prefix}</Text>
+              <Text color={theme.subagentMeta}>{prefix}</Text>
               <Text color={statusColor}> {statusSymbol} Agent {agent.id}</Text>
               <Text>: {agent.task}</Text>
-              <Text color="gray"> · {agent.toolCount} tools · {(agent.tokens / 1000).toFixed(1)}k tokens</Text>
+              <Text color={theme.subagentMeta}> · {agent.toolCount} tools · {(agent.tokens / 1000).toFixed(1)}k tokens</Text>
             </Text>
 
             {agent.currentAction && agent.status === "running" && (
               <Box marginLeft={3}>
-                <Text color="gray">└ </Text>
-                <Text color="cyan">{agent.currentAction}</Text>
-                {agent.currentFile && <Text color="gray">: {agent.currentFile}</Text>}
+                <Text color={theme.subagentMeta}>└ </Text>
+                <Text color={theme.subagentAction}>{agent.currentAction}</Text>
+                {agent.currentFile && <Text color={theme.subagentMeta}>: {agent.currentFile}</Text>}
               </Box>
             )}
           </Box>
@@ -529,7 +540,10 @@ const Transcript = memo(function Transcript(props: {
   showToolDetails: boolean;
   scrollOffset: number;
   visibleCount: number;
+  themeName: ThemeName;
 }) {
+  const theme = getTheme(props.themeName);
+
   // OPTIMIZE 1: Memoize filtering
   const filteredLines = useMemo(() => {
     return props.showThinking
@@ -610,16 +624,16 @@ const Transcript = memo(function Transcript(props: {
             key={l.id}
             color={
               l.kind === "user"
-                ? "cyanBright"
+                ? theme.user
                 : l.kind === "assistant"
-                  ? "whiteBright"
+                  ? theme.assistant
                   : l.kind === "thinking"
-                    ? "magenta"
+                    ? theme.thinking
                     : l.kind === "tool"
-                      ? "yellow"
+                      ? theme.tool
                       : l.kind === "error"
-                        ? "red"
-                        : "gray"
+                        ? theme.error
+                        : theme.system
             }
             bold={l.kind === "user" || l.kind === "assistant"}
             dimColor={false}
@@ -629,7 +643,7 @@ const Transcript = memo(function Transcript(props: {
         );
       })}
       {scrollIndicator && (
-        <Text color="gray" dimColor>
+        <Text color={theme.system} dimColor>
           {scrollIndicator}
         </Text>
       )}
@@ -648,7 +662,9 @@ const PlanPanel = memo(function PlanPanel(props: {
   sessionId: string | null;
   workspaceDir: string;
   visible: boolean;
+  themeName: ThemeName;
 }) {
+  const theme = getTheme(props.themeName);
   const [plan, setPlan] = useState<ExecutionPlan | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [lastModified, setLastModified] = useState<number>(0);
@@ -720,7 +736,7 @@ const PlanPanel = memo(function PlanPanel(props: {
   if (error) {
     return (
       <Box flexDirection="column" borderStyle="single" borderColor="red">
-        <Text color="red">Plan Panel - Error</Text>
+        <Text color={theme.notificationError}>Plan Panel - Error</Text>
         <Text dimColor>{error}</Text>
       </Box>
     );
@@ -729,8 +745,8 @@ const PlanPanel = memo(function PlanPanel(props: {
   if (!plan) {
     return (
       <Box flexDirection="column" borderStyle="single" borderColor="gray">
-        <Text color="yellow">Plan Panel</Text>
-        <Text color="gray">No active plan for this session.</Text>
+        <Text color={theme.notificationWarning}>Plan Panel</Text>
+        <Text color={theme.planProgress}>No active plan for this session.</Text>
       </Box>
     );
   }
@@ -745,8 +761,8 @@ const PlanPanel = memo(function PlanPanel(props: {
   };
 
   return (
-    <Box flexDirection="column" borderStyle="single" borderColor="cyan">
-      <Text color="cyan" bold>
+    <Box flexDirection="column" borderStyle="single" borderColor={theme.planObjective}>
+      <Text color={theme.planObjective} bold>
         Plan: {plan.objective}
       </Text>
       <Text dimColor>
@@ -759,7 +775,7 @@ const PlanPanel = memo(function PlanPanel(props: {
           </Text>
           {step.status === "blocked" && step.lastError && (
             <Box marginLeft={2}>
-              <Text color="red">
+              <Text color={theme.planBlocked}>
                 ↳ BLOCKED: {step.lastError.slice(0, 60)}
               </Text>
             </Box>
@@ -767,7 +783,7 @@ const PlanPanel = memo(function PlanPanel(props: {
         </Box>
       ))}
       <Box marginTop={1}>
-        <Text color="gray">
+        <Text color={theme.planProgress}>
           Press Ctrl+P to hide • Auto-refreshes every 4s
         </Text>
       </Box>
@@ -850,9 +866,11 @@ type MainViewProps = {
   commandFormData: Record<string, any>;
   commandSkippedFields: Set<string>;
   commandEditValue: string;
+  themeName: ThemeName;
 };
 
 const MainView = memo(function MainView(props: MainViewProps) {
+  const theme = getTheme(props.themeName);
   const {
     displayMode,
     stdoutWidth,
@@ -899,14 +917,14 @@ const MainView = memo(function MainView(props: MainViewProps) {
   const wizardPanel = mode === "wizard" ? (
     <Box flexDirection="column">
       <Text>
-        Wizards for profile: <Text color="yellow">{profileName}</Text>
+        Wizards for profile: <Text color={theme.notificationWarning}>{profileName}</Text>
       </Text>
       <Text dimColor>Esc: back • ↑/↓: select • Enter: open</Text>
       <Box flexDirection="column" marginTop={1}>
         {WIZARD_ROWS.map((row, idx) => {
           const selected = idx === wizardIndex;
           return (
-            <Text key={row.id} color={selected ? "cyan" : "white"} dimColor={!selected}>
+            <Text key={row.id} color={selected ? theme.selected : theme.unselected} dimColor={!selected}>
               {selected ? "› " : "  "}
               {row.label}
             </Text>
@@ -926,7 +944,7 @@ const MainView = memo(function MainView(props: MainViewProps) {
           const selected = idx === mountsIndex;
           const mark = row.enabled ? "[x]" : "[ ]";
           return (
-            <Text key={row.key} color={selected ? "cyan" : "white"} dimColor={!selected}>
+            <Text key={row.key} color={selected ? theme.selected : theme.unselected} dimColor={!selected}>
               {selected ? "› " : "  "}
               {mark} {row.label}
             </Text>
@@ -955,9 +973,9 @@ const MainView = memo(function MainView(props: MainViewProps) {
               const absoluteIndex = start + idx;
               const selected = absoluteIndex === projectIndex;
               const status = p.status === "ready" ? "ready" : "needs setup";
-              const statusColor = p.status === "ready" ? "green" : "yellow";
+              const statusColor = p.status === "ready" ? theme.statusReady : theme.statusNeedsSetup;
               return (
-                <Text key={p.dir} color={selected ? "cyan" : "white"} dimColor={!selected}>
+                <Text key={p.dir} color={selected ? theme.selected : theme.unselected} dimColor={!selected}>
                   {selected ? "› " : "  "}
                   {p.name}{" "}
                   <Text color={statusColor} dimColor={false}>
@@ -968,7 +986,7 @@ const MainView = memo(function MainView(props: MainViewProps) {
             });
           })()
         ) : (
-          <Text color="yellow">No projects found under ff-terminal-workspace/projects/</Text>
+          <Text color={theme.notificationWarning}>No projects found under ff-terminal-workspace/projects/</Text>
         )}
       </Box>
       <Text dimColor>
@@ -980,7 +998,7 @@ const MainView = memo(function MainView(props: MainViewProps) {
   const modelsPanel = mode === "models" ? (
     <Box flexDirection="column">
       <Text>
-        Models for profile: <Text color="yellow">{profileName}</Text>
+        Models for profile: <Text color={theme.notificationWarning}>{profileName}</Text>
       </Text>
       <Text dimColor>Esc: back • ↑/↓: select • Enter: edit</Text>
       <Box flexDirection="column" marginTop={1}>
@@ -989,7 +1007,7 @@ const MainView = memo(function MainView(props: MainViewProps) {
           const value = (currentProfile ? (currentProfile as any)[row.key] : "") as string;
           const display = value ? value : row.key === "subagentModel" ? "(inherit main)" : "(blank)";
           return (
-            <Text key={row.key} color={selected ? "cyan" : "white"} dimColor={!selected}>
+            <Text key={row.key} color={selected ? theme.selected : theme.unselected} dimColor={!selected}>
               {selected ? "› " : "  "}
               {row.label}: {display}
             </Text>
@@ -999,7 +1017,7 @@ const MainView = memo(function MainView(props: MainViewProps) {
       {modelEditingKey ? (
         <Box flexDirection="column" marginTop={1}>
           <Text>
-            Editing <Text color="cyan">{modelEditingKey}</Text> — {MODEL_ROWS.find((r) => r.key === modelEditingKey)?.help || ""}
+            Editing <Text color={theme.selected}>{modelEditingKey}</Text> — {MODEL_ROWS.find((r) => r.key === modelEditingKey)?.help || ""}
           </Text>
           <Text>› {modelEditValue}</Text>
           <Text dimColor>Enter to save (empty = clear) • Esc to cancel</Text>
@@ -1353,8 +1371,8 @@ const MainView = memo(function MainView(props: MainViewProps) {
 
   return (
     <>
-      <Banner displayMode={displayMode} width={stdoutWidth} />
-      <Text color="gray">
+      <Banner displayMode={displayMode} width={stdoutWidth} themeName={props.themeName} />
+      <Text color={theme.system}>
         {connected ? (currentProvider && currentModel
           ? `${currentProvider}/${currentModel}`
           : "connected")
@@ -1658,6 +1676,8 @@ function App(props: { port: number }) {
   }, [processing, stdout]);
 
   const displayMode = useMemo(() => String(process.env.FF_DISPLAY_MODE || "clean").trim().toLowerCase(), []);
+
+  const themeName = useMemo(() => getCurrentTheme(), []);
 
   const profileName = useMemo(() => {
     const preferred = String(process.env.FF_PROFILE || "").trim();
@@ -3255,7 +3275,11 @@ Use skill_draft first to create the draft, then skill_apply to create the final 
           }
 
           if (command === "theme" || command === "colors") {
+            const theme = getTheme();
             pushLines([
+              { kind: "system", text: `Current theme: ${themeName.toUpperCase()}` },
+              { kind: "system", text: "Set theme with FF_THEME environment (default|highContrast|muted)" },
+              { kind: "system", text: "" },
               { kind: "system", text: "Theme preview (semantic roles → Ink color tokens):" },
               { kind: "system", text: "system/meta (gray): connected (daemon 0.0.0)" },
               { kind: "user", text: "user (cyanBright+bold): hello from user input" },
@@ -3387,11 +3411,13 @@ Use skill_draft first to create the draft, then skill_apply to create the final 
         commandFormData={commandFormData}
         commandSkippedFields={commandSkippedFields}
         commandEditValue={commandEditValue}
+        themeName={themeName}
       />
       <PlanPanel
         sessionId={sessionId}
         workspaceDir={workspaceDir}
         visible={showPlanPanel}
+        themeName={themeName}
       />
       <Transcript
         lines={lines}
@@ -3399,14 +3425,16 @@ Use skill_draft first to create the draft, then skill_apply to create the final 
         showToolDetails={showToolDetails}
         scrollOffset={scrollOffset}
         visibleCount={transcriptHeight}
+        themeName={themeName}
       />
       {mode === "chat" && currentTodos.length > 0 ? (
-        <InlineTodoStatus todos={currentTodos} />
+        <InlineTodoStatus todos={currentTodos} themeName={themeName} />
       ) : null}
       {mode === "chat" && runningSubagents.size > 0 ? (
         <SubagentSwarm
           agents={Array.from(runningSubagents.values())}
           expanded={subagentsExpanded}
+          themeName={themeName}
         />
       ) : null}
       {mode === "chat" ? (
@@ -3417,6 +3445,7 @@ Use skill_draft first to create the draft, then skill_apply to create the final 
           showThinking={showThinking}
           showToolDetails={showToolDetails}
           thinkingCount={lines.filter(l => l.kind === "thinking").length}
+          themeName={themeName}
         />
       ) : null}
     </Box>

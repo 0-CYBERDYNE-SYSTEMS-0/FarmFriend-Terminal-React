@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { Markdown } from './components/Markdown'
 import { ArtifactPreview } from './components/ArtifactPreview'
 import { FileUpload } from './components/FileUpload'
+import { ThemeProvider, useTheme } from './contexts/ThemeContext'
 
 // Types for WebSocket messages
 type WebSocketMessage =
@@ -78,8 +79,10 @@ function detectContentType(content: string): 'artifact' | 'markdown' | 'text' {
 
 // Message renderer component
 function MessageContent({ content, role }: { content: string; role: string }) {
+  const { theme } = useTheme();
+
   if (role === 'user') {
-    return <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">{content}</p>
+    return <p className={`whitespace-pre-wrap break-words text-sm leading-relaxed ${theme.user}`}>{content}</p>
   }
 
   const contentType = detectContentType(content)
@@ -92,10 +95,17 @@ function MessageContent({ content, role }: { content: string; role: string }) {
     return <Markdown content={content} />
   }
 
-  return <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">{content}</p>
+  // Assistant and system messages with themed colors
+  const colorClass = role === 'assistant' ? theme.assistant :
+                     role === 'error' ? theme.error :
+                     role === 'system' ? theme.system :
+                     theme.assistant;
+
+  return <p className={`whitespace-pre-wrap break-words text-sm leading-relaxed ${colorClass}`}>{content}</p>
 }
 
-export default function App() {
+function AppContent() {
+  const { theme } = useTheme();
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [input, setInput] = useState('')
   const [isConnected, setIsConnected] = useState(false)
@@ -107,6 +117,10 @@ export default function App() {
   const wsRef = useRef<WebSocket | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const reconnectTimeoutRef = useRef<NodeJS.Timeout>()
+
+  // Streaming optimization: buffer content and update smoothly
+  const streamBufferRef = useRef<string>('')
+  const streamRafRef = useRef<number | null>(null)
 
   // Auto-scroll to bottom
   const scrollToBottom = useCallback(() => {
@@ -148,8 +162,18 @@ export default function App() {
               break
 
             case 'response':
-              // Accumulate streaming content
-              setAssistantContent(prev => prev + msg.content)
+              // Accumulate streaming content with smooth batching
+              streamBufferRef.current += msg.content
+
+              // Cancel any pending RAF and schedule a new one for smooth updates
+              if (streamRafRef.current !== null) {
+                cancelAnimationFrame(streamRafRef.current)
+              }
+
+              streamRafRef.current = requestAnimationFrame(() => {
+                setAssistantContent(streamBufferRef.current)
+                streamRafRef.current = null
+              })
               break
 
             case 'thinking':
@@ -183,16 +207,19 @@ export default function App() {
 
             case 'turn_finished':
               // Finalize any pending content using functional update to avoid stale closure
+              const finalContent = streamBufferRef.current
               setAssistantContent(prevContent => {
-                if (prevContent && !messageAddedForTurn) {
+                const content = finalContent || prevContent
+                if (content && !messageAddedForTurn) {
                   setMessages(messages => [...messages, {
                     id: `${Date.now()}-assistant`,
                     role: 'assistant',
-                    content: prevContent,
+                    content: content,
                     timestamp: msg.timestamp * 1000
                   }])
                   setMessageAddedForTurn(true)
                 }
+                streamBufferRef.current = '' // Clear buffer
                 return ''  // Always clear assistantContent
               })
               setIsProcessing(false)
@@ -257,8 +284,10 @@ export default function App() {
     if (!trimmed && attachments.length === 0) return
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return
 
-    // Reset flag for new turn
+    // Reset flag for new turn and clear stream buffer
     setMessageAddedForTurn(false)
+    streamBufferRef.current = ''
+    setAssistantContent('')
 
     // Build message with attachments
     let messageContent = trimmed
@@ -341,12 +370,12 @@ export default function App() {
             <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
               <div className={`max-w-[80%] rounded-lg px-4 py-2 ${
                 msg.role === 'user'
-                  ? 'bg-primary-600 text-white'
+                  ? 'bg-primary-600'
                   : msg.role === 'error'
-                  ? 'bg-red-900/50 text-red-200 border border-red-800'
+                  ? 'bg-red-900/50 border border-red-800'
                   : msg.role === 'system'
-                  ? 'text-neutral-400 text-sm bg-transparent'
-                  : 'bg-neutral-800 text-neutral-100 w-full'
+                  ? 'text-sm bg-transparent'
+                  : 'bg-neutral-800 w-full'
               }`}>
                 <MessageContent content={msg.content} role={msg.role} />
               </div>
@@ -356,10 +385,10 @@ export default function App() {
           {/* Streaming content - show as plain text, not markdown */}
           {assistantContent && (
             <div className="flex justify-start">
-              <div className="max-w-[80%] rounded-lg px-4 py-2 bg-neutral-800 text-neutral-100">
-                <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">
+              <div className="max-w-[80%] rounded-lg px-4 py-2 bg-neutral-800">
+                <p className={`whitespace-pre-wrap break-words text-sm leading-relaxed ${theme.assistant}`}>
                   {assistantContent}
-                  <span className="inline-block w-2 h-4 bg-primary-500 ml-1 animate-pulse" />
+                  <span className={`inline-block w-2 h-4 ml-1 animate-pulse ${theme.spinner}`} />
                 </p>
               </div>
             </div>
@@ -441,5 +470,14 @@ export default function App() {
         </div>
       </div>
     </div>
+  )
+}
+
+// Wrap with ThemeProvider
+export default function App() {
+  return (
+    <ThemeProvider>
+      <AppContent />
+    </ThemeProvider>
   )
 }
