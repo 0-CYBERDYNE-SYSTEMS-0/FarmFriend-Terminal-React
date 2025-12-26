@@ -5,10 +5,33 @@ import { getToolContext } from '../context.js';
 type Task = {
   id: string;
   content: string;
+  activeForm: string;
   status: "pending" | "in_progress" | "completed";
   priority?: "high" | "medium" | "low";
   completedAt?: number;
 };
+
+/**
+ * Auto-generate activeForm from content if not provided
+ * Converts imperative content to present continuous (e.g., "Run tests" -> "Running tests")
+ */
+function generateActiveForm(content: string): string {
+  const trimmed = content.trim();
+  // Simple heuristic: add "-ing" suffix or convert common patterns
+  if (trimmed.startsWith("Run ")) return trimmed.replace(/^Run /, "Running ");
+  if (trimmed.startsWith("Build ")) return trimmed.replace(/^Build /, "Building ");
+  if (trimmed.startsWith("Fix ")) return trimmed.replace(/^Fix /, "Fixing ");
+  if (trimmed.startsWith("Add ")) return trimmed.replace(/^Add /, "Adding ");
+  if (trimmed.startsWith("Update ")) return trimmed.replace(/^Update /, "Updating ");
+  if (trimmed.startsWith("Remove ")) return trimmed.replace(/^Remove /, "Removing ");
+  if (trimmed.startsWith("Create ")) return trimmed.replace(/^Create /, "Creating ");
+  if (trimmed.startsWith("Delete ")) return trimmed.replace(/^Delete /, "Deleting ");
+  if (trimmed.startsWith("Implement ")) return trimmed.replace(/^Implement /, "Implementing ");
+  if (trimmed.startsWith("Test ")) return trimmed.replace(/^Test /, "Testing ");
+
+  // Fallback: just add "Working on:" prefix
+  return `Working on: ${trimmed}`;
+}
 
 /**
  * manage_task - The missing tool that enables Variant C/D long-horizon autonomy
@@ -54,6 +77,11 @@ export async function manageTask(params: {
   if (fs.existsSync(taskPath)) {
     try {
       data = JSON.parse(fs.readFileSync(taskPath, 'utf8'));
+      // Migrate old todos without activeForm
+      data.todos = data.todos.map(t => ({
+        ...t,
+        activeForm: t.activeForm || generateActiveForm(t.content)
+      }));
     } catch {}
   }
 
@@ -74,6 +102,7 @@ export async function manageTask(params: {
       const newTask: Task = {
         id: `task-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
         content: params.content,
+        activeForm: generateActiveForm(params.content),
         status: "pending",
         priority: params.priority || "medium"
       };
@@ -96,7 +125,11 @@ export async function manageTask(params: {
         }
         data.todos[updateIdx].status = params.status;
       }
-      if (params.content) data.todos[updateIdx].content = params.content;
+      if (params.content) {
+        data.todos[updateIdx].content = params.content;
+        // Regenerate activeForm when content changes
+        data.todos[updateIdx].activeForm = generateActiveForm(params.content);
+      }
       if (params.priority) data.todos[updateIdx].priority = params.priority;
       fs.writeFileSync(taskPath, JSON.stringify(data, null, 2));
       return JSON.stringify({ updated: data.todos[updateIdx] });

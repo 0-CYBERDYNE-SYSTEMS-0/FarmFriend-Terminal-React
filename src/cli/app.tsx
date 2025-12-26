@@ -43,6 +43,7 @@ type InputStore = {
 type Todo = {
   id: string;
   content: string;
+  activeForm: string;
   status: "pending" | "in_progress" | "completed";
   priority: "high" | "medium" | "low";
   completedAt?: number;
@@ -99,7 +100,7 @@ function parseWireChunk(chunk: string, displayMode: string = "clean"): Line | nu
       } else if (status === "error") {
         // Failed tool
         text += `${toolName.trim()} failed`;
-        if (preview) text += `: ${preview.slice(0, 50)}`;
+        if (preview) text += `: ${preview.slice(0, 200)}`;
       } else {
         // No preview available, just show completion
         text += `Completed in ${duration}`;
@@ -279,10 +280,11 @@ const ChatPrompt = memo(function ChatPrompt(props: {
  * Appears directly after transcript in chat mode
  * No borders, no panels - just clean inline status
  * Features:
- * - Max 7 tasks visible (prioritized: in_progress > pending > recent completed)
+ * - Max 7 tasks visible (prioritized: in_progress > pending > completed)
  * - Within each status, sorts by priority (high > medium > low)
- * - Completed tasks automatically fade out after 30 seconds
+ * - Completed tasks remain visible (no auto-fade)
  * - Priority indicators shown as icons (! for high, nothing for medium/low)
+ * - Shows activeForm (present continuous) for in_progress tasks
  */
 const InlineTodoStatus = memo(function InlineTodoStatus(props: {
   todos: Todo[];
@@ -292,30 +294,19 @@ const InlineTodoStatus = memo(function InlineTodoStatus(props: {
   if (todos.length === 0) return null;
 
   const MAX_VISIBLE = 7;
-  const COMPLETED_FADE_MS = 30000;
-  const now = Date.now();
 
   // Priority order for sorting (high = 0, medium = 1, low = 2)
   const priorityOrder = { high: 0, medium: 1, low: 2 };
 
-  // Filter out completed tasks older than 30s
-  const activeTodos = todos.filter(t => {
-    if (t.status === "completed") {
-      const completedAt = (t as any).completedAt || 0;
-      return (now - completedAt) < COMPLETED_FADE_MS;
-    }
-    return true;
-  });
-
-  // Prioritize display: in_progress > pending > recent completed
+  // Prioritize display: in_progress > pending > completed
   // Within each status, sort by priority (high > medium > low)
-  const inProgress = activeTodos
+  const inProgress = todos
     .filter(t => t.status === "in_progress")
     .sort((a, b) => priorityOrder[a.priority] - priorityOrder[b.priority]);
-  const pending = activeTodos
+  const pending = todos
     .filter(t => t.status === "pending")
     .sort((a, b) => priorityOrder[a.priority] - priorityOrder[b.priority]);
-  const completed = activeTodos
+  const completed = todos
     .filter(t => t.status === "completed")
     .sort((a, b) => priorityOrder[a.priority] - priorityOrder[b.priority]);
 
@@ -328,7 +319,7 @@ const InlineTodoStatus = memo(function InlineTodoStatus(props: {
 
   if (displayTodos.length === 0) return null;
 
-  const totalCount = activeTodos.length;
+  const totalCount = todos.length;
   const completedCount = completed.length;
   const pendingCount = pending.length;
   const inProgressCount = inProgress.length;
@@ -361,9 +352,11 @@ const InlineTodoStatus = memo(function InlineTodoStatus(props: {
         const priColor = priorityColors[t.priority];
         const color = priColor || statusColor;
         const priIcon = priorityIcon(t.priority);
+        // Show activeForm when in_progress, content otherwise
+        const displayText = t.status === "in_progress" ? t.activeForm : t.content;
         return (
           <Text key={t.id} color={color}>
-            {"  "}{symbol} {priIcon} {t.content}
+            {"  "}{symbol} {priIcon} {displayText}
             {t.priority === "high" ? " [HIGH]" : ""}
           </Text>
         );
@@ -458,6 +451,8 @@ function extractToolName(text: string): string | null {
 }
 
 // Cache for tool group summaries to avoid redundant string processing
+// LRU cache with max size of 1000 entries to prevent memory leaks
+const MAX_CACHE_SIZE = 1000;
 const toolSummaryCache = new Map<string, string>();
 
 function summarizeToolGroup(lines: LineEntry[]): string {
@@ -465,7 +460,11 @@ function summarizeToolGroup(lines: LineEntry[]): string {
   const cacheKey = lines.map(l => l.id).join(',');
 
   if (toolSummaryCache.has(cacheKey)) {
-    return toolSummaryCache.get(cacheKey)!;
+    // Move to end (most recently used) for LRU
+    const value = toolSummaryCache.get(cacheKey)!;
+    toolSummaryCache.delete(cacheKey);
+    toolSummaryCache.set(cacheKey, value);
+    return value;
   }
 
   const names = new Set<string>();
@@ -492,6 +491,14 @@ function summarizeToolGroup(lines: LineEntry[]): string {
     result = `Tools · ${unique.length} ran${failedText} (${shown}${more}) · Ctrl+E to expand`;
   } else {
     result = `Tools · ${lines.length} events · Ctrl+E to expand`;
+  }
+
+  // LRU eviction: if cache is full, delete oldest entry (first in Map)
+  if (toolSummaryCache.size >= MAX_CACHE_SIZE) {
+    const firstKey = toolSummaryCache.keys().next().value;
+    if (firstKey !== undefined) {
+      toolSummaryCache.delete(firstKey);
+    }
   }
 
   toolSummaryCache.set(cacheKey, result);
@@ -778,7 +785,7 @@ const WIZARD_ROWS: WizardRow[] = [
 
 type OperationMode = "auto" | "confirm" | "read_only" | "planning";
 const OP_MODES: OperationMode[] = ["auto", "confirm", "read_only", "planning"];
-const MAX_TRANSCRIPT_LINES = 400;
+const MAX_TRANSCRIPT_LINES = Number(process.env.FF_MAX_TRANSCRIPT_LINES) || 400;
 const LINE_COMMIT_DELAY_STREAMING = 50;  // Faster during active streaming
 const LINE_COMMIT_DELAY_IDLE = 120;      // Original delay for idle state
 

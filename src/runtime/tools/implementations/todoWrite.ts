@@ -6,6 +6,7 @@ import { getToolContext } from "../context.js";
 type Todo = {
   id: string;
   content: string;
+  activeForm: string;
   status: "pending" | "in_progress" | "completed";
   priority: "high" | "medium" | "low";
   completedAt?: number;
@@ -30,6 +31,7 @@ export async function todoWriteTool(argsRaw: unknown): Promise<string> {
     if (!t || typeof t !== "object") throw new Error("TodoWrite: invalid todo");
     if (typeof t.id !== "string" || !t.id.trim()) throw new Error("TodoWrite: todo.id required");
     if (typeof t.content !== "string") throw new Error("TodoWrite: todo.content required");
+    if (typeof t.activeForm !== "string") throw new Error("TodoWrite: todo.activeForm required");
     if (!["pending", "in_progress", "completed"].includes(t.status)) throw new Error("TodoWrite: invalid status");
     if (!["high", "medium", "low"].includes(t.priority)) throw new Error("TodoWrite: invalid priority");
   }
