@@ -70,8 +70,14 @@ cd FarmFriend-Terminal-React
 # Install dependencies
 npm install
 
-# Build the project
+# Build the project (includes web frontend)
 npm run build
+
+# Note: The build process automatically builds the web frontend.
+# If you encounter issues with the web UI, manually rebuild it:
+cd src/web/client
+npm install && npm run build
+cd ../..
 
 # Start the daemon (background service)
 npm run start:daemon
@@ -202,6 +208,7 @@ npm run dev -- run --prompt "Analyze this codebase and suggest improvements"
 npm run dev -- run --scheduled-task daily-report --headless
 
 # Web interface (alternative UI)
+# Note: Run npm run build first to build the web frontend
 npm run dev:web
 ```
 
@@ -251,11 +258,13 @@ npm run dev:web
 | `npm run dev` | Start development mode |
 | `npm run dev:cli` | Launch terminal interface |
 | `npm run dev:daemon` | Start AI daemon |
-| `npm run dev:web` | Start web interface |
+| `npm run dev:web` | Start web interface (requires web frontend built) |
 | `npm run dev:run` | Headless execution |
-| `npm run build` | Build for production |
+| `npm run build` | Build for production (includes web frontend) |
+| `npm run build:web` | Build only the web frontend |
 | `npm start:cli` | Production CLI |
 | `npm start:daemon` | Production daemon |
+| `npm start:web` | Production web server |
 
 ### **Development Workflow**
 
@@ -264,6 +273,53 @@ npm run dev:web
 3. **Make changes** to source code
 4. **Test immediately** with hot reloading
 5. **Build and deploy** when ready
+
+### **Web Frontend Development**
+
+The web UI is a separate Vite project located in `src/web/client/`:
+
+```bash
+# Build the web frontend (included in main build)
+npm run build:web
+
+# Or develop the web frontend with hot reload
+cd src/web/client
+npm install
+npm run dev  # Starts Vite dev server on port 5173
+```
+
+**Important:** If the web UI shows a blank page, it usually means the frontend hasn't been built:
+```bash
+cd src/web/client
+npm install && npm run build
+cd ../..
+```
+
+### **Troubleshooting Web UI Issues**
+
+If you encounter a blank white page when using `--web` flag:
+
+1. **Check if web frontend is built:**
+   ```bash
+   ls -la src/web/client/dist/
+   ```
+   If this directory is empty or missing, the web UI will not load.
+
+2. **Rebuild the web frontend:**
+   ```bash
+   npm run build:web
+   ```
+
+3. **Verify the build:**
+   ```bash
+   ls -la src/web/client/dist/index.html
+   ls -la src/web/client/dist/assets/
+   ```
+
+4. **Restart the web server:**
+   ```bash
+   npm run dev:web
+   ```
 
 ### **Project Structure**
 
