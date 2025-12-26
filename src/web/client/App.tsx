@@ -408,17 +408,23 @@ export default function App() {
 
           {messages.map(msg => (
             <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-              <div className={`max-w-[80%] rounded-lg px-4 py-2 ${
+              <div className={`max-w-[80%] rounded-lg ${
                 msg.role === 'user'
-                  ? 'bg-primary-600 text-white'
+                  ? 'bg-primary-600 text-white px-4 py-2'
                   : msg.role === 'error'
-                  ? 'bg-red-900/50 text-red-200 border border-red-800'
+                  ? 'bg-red-900/50 text-red-200 border border-red-800 px-4 py-2'
                   : msg.role === 'system'
-                  ? 'text-neutral-400 text-sm bg-transparent'
+                  ? 'text-neutral-400 text-sm bg-transparent px-0 py-1'
                   : msg.role === 'thinking'
-                  ? 'bg-blue-900/30 text-blue-100 border-l-2 border-blue-500 italic'
-                  : 'bg-neutral-800 text-neutral-100 w-full'
+                  ? 'bg-transparent px-0 py-0 w-full'
+                  : 'bg-neutral-800 text-neutral-100 px-4 py-2'
               }`}>
+                {msg.role === 'thinking' && (
+                  <div className="text-xs font-semibold text-blue-400 uppercase tracking-wide mb-2 flex items-center gap-2">
+                    <span>💭</span>
+                    <span>Thinking</span>
+                  </div>
+                )}
                 <MessageContent content={msg.content} role={msg.role} />
               </div>
             </div>
@@ -461,18 +467,24 @@ export default function App() {
             {messages.map((msg) => (
               <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                 <div
-                  className={`max-w-[80%] rounded-lg px-4 py-2 ${
+                  className={`max-w-[80%] rounded-lg ${
                     msg.role === 'user'
-                      ? 'bg-primary-600 text-white'
+                      ? 'bg-primary-600 text-white px-4 py-2'
                       : msg.role === 'error'
-                      ? 'bg-red-900/50 text-red-200 border border-red-800'
+                      ? 'bg-red-900/50 text-red-200 border border-red-800 px-4 py-2'
                       : msg.role === 'system'
-                      ? 'text-neutral-400 text-sm bg-transparent'
+                      ? 'text-neutral-400 text-sm bg-transparent px-0 py-1'
                       : msg.role === 'thinking'
-                      ? 'bg-blue-900/30 text-blue-100 border-l-2 border-blue-500 italic'
-                      : 'bg-neutral-800 text-neutral-100 w-full'
+                      ? 'bg-transparent px-0 py-0 w-full'
+                      : 'bg-neutral-800 text-neutral-100 px-4 py-2'
                   }`}
                 >
+                  {msg.role === 'thinking' && (
+                    <div className="text-xs font-semibold text-blue-400 uppercase tracking-wide mb-2 flex items-center gap-2">
+                      <span>💭</span>
+                      <span>Thinking</span>
+                    </div>
+                  )}
                   <MessageContent content={msg.content} role={msg.role} />
                 </div>
               </div>
