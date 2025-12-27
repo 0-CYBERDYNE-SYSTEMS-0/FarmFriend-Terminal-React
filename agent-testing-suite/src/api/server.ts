@@ -2,6 +2,11 @@ import express from "express";
 import cors from "cors";
 import { E2ERunner } from "../testing/e2eRunner.js";
 import path from "node:path";
+import fs from "node:fs/promises";
+import { fileURLToPath } from "node:url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 import config from "../config/env.js";
 import { ProviderFactory } from "../testing/evaluation/providers/providerFactory.js";
 
@@ -19,7 +24,7 @@ const runner = new E2ERunner(config.workspaceDir);
 // Middleware
 app.use(cors());
 app.use(express.json());
-app.use(express.static(path.join(__dirname, "../testing-ui/dist")));
+app.use(express.static(path.join(path.dirname(path.dirname(__dirname)), "testing-ui/dist")));
 
 // API Routes
 
@@ -205,9 +210,9 @@ app.post("/api/runs", async (req, res) => {
 app.get("/api/suites", async (_req, res) => {
   try {
     const suitesDir = path.join(config.workspaceDir, "tests", "suites", "library");
-    const { promises } = await import("node:fs/promises");
+    
 
-    const files = await promises.readdir(suitesDir);
+    const files = await fs.readdir(suitesDir);
     const suites = files.filter(f => f.endsWith(".yaml")).map(f => ({
       id: f.replace(".yaml", ""),
       name: f.replace(".yaml", "")
@@ -234,9 +239,9 @@ app.get("/api/suites/:suiteId", async (req, res) => {
       `${suiteId}.yaml`
     );
 
-    const { promises } = await import("node:fs/promises");
+    
     const yaml = await import("yaml");
-    const content = await promises.readFile(suitePath, "utf-8");
+    const content = await fs.readFile(suitePath, "utf-8");
     const suite = yaml.parse(content);
 
     res.json({ suite });
@@ -339,7 +344,7 @@ app.post("/api/compare", async (req, res) => {
 
 // Serve React app for all other routes
 app.get("*", (_req, res) => {
-  res.sendFile(path.join(__dirname, "../testing-ui/dist/index.html"));
+  res.sendFile(path.join(path.dirname(path.dirname(__dirname)), "testing-ui/dist/index.html"));
 });
 
 // Start server

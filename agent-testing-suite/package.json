@@ -28,7 +28,6 @@
     "cors": "^2.8.5",
     "d3": "^7.9.0",
     "jspdf": "^2.5.2",
-    "worker_threads": "npm:^1.0.0",
     "dotenv": "^16.4.5"
   },
   "devDependencies": {
