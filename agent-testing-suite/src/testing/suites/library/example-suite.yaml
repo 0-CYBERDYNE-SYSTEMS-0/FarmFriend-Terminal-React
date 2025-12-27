@@ -1,0 +1,48 @@
+name: example-coding-tasks
+description: Example test suite for basic coding tasks to verify agent testing framework
+category: tool-usage
+version: 1.0.0
+scenarios:
+  - name: read-and-summarize
+    description: Agent should read a file and provide a summary
+    prompts:
+      - "Read the CLAUDE.md file and summarize the development commands section"
+    evaluation:
+      rubric: basic-completion
+      assertions:
+        - type: output
+          condition: contains
+          expected: "pnpm dev"
+      human_review: false
+    timeout_minutes: 5
+    expected_duration_minutes: 2
+
+  - name: file-creation
+    description: Agent should create a new file with specific content
+    prompts:
+      - "Create a file called test-output.txt in the current directory with content 'Hello from testing suite'"
+    evaluation:
+      rubric: basic-completion
+      assertions:
+        - type: filesystem
+          condition: file_exists
+          expected: "test-output.txt"
+      human_review: false
+    timeout_minutes: 5
+    expected_duration_minutes: 2
+
+  - name: multi-turn-conversation
+    description: Agent should maintain context across multiple turns
+    prompts:
+      - "List the files in the src directory"
+      - "Based on the files you found, what is the main entry point?"
+      - "Summarize the architecture in 3 bullet points"
+    evaluation:
+      rubric: basic-completion
+      assertions:
+        - type: output
+          condition: contains
+          expected: "bin/ff-terminal.ts"
+      human_review: true
+    timeout_minutes: 10
+    expected_duration_minutes: 5

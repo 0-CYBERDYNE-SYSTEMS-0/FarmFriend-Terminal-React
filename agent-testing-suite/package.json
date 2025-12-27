@@ -1,0 +1,37 @@
+{
+  "name": "agent-testing-suite",
+  "version": "0.1.0",
+  "description": "World-class AI agent testing suite for ff-terminal",
+  "type": "module",
+  "bin": {
+    "ff-test": "dist/bin/ff-test.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsx src/bin/ff-test.ts",
+    "test": "vitest",
+    "test:ui": "vitest --ui",
+    "test:coverage": "vitest --coverage",
+    "lint": "eslint src --ext .ts",
+    "format": "prettier --write \"src/**/*.ts\"",
+    "prepare": "npm run build"
+  },
+  "dependencies": {
+    "commander": "^12.1.0",
+    "uuid": "^11.0.3",
+    "yaml": "^2.5.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "@types/uuid": "^10.0.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.3",
+    "vitest": "^4.0.16",
+    "@vitest/coverage-v8": "^4.0.16",
+    "prettier": "^3.3.3",
+    "eslint": "^9.15.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
