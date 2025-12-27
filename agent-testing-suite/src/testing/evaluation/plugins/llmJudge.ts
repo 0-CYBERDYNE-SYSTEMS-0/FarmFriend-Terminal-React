@@ -1,18 +1,21 @@
 import { EvaluatorPlugin, EvaluationResult, ScenarioResult } from "../../../types.js";
+import config from "../../../config/env.js";
+import { ProviderFactory, LLMProvider } from "../providers/providerFactory.js";
 
 /**
  * LLM Judge Plugin
  * Uses another LLM to evaluate response quality
  * Inspired by Anthropic Bloom's LLM-as-judge approach
  * 0.86 Spearman correlation with human judgments
+ *
+ * Supports multiple providers:
+ * - OpenAI (GPT-4, GPT-3.5-Turbo)
+ * - Anthropic (Claude-3 Opus, Sonnet, Haiku)
+ * - OpenRouter (100+ models)
+ * - LM Studio (local)
+ * - Ollama (local)
+ * - Custom (OpenAI-compatible)
  */
-
-interface LLMJudgeConfig {
-  apiKey: string;
-  model: string;
-  baseUrl?: string;
-  criteria?: string[];
-}
 
 interface LLMJudgeAssertion {
   type: "llm_judge";
@@ -23,28 +26,33 @@ interface LLMJudgeAssertion {
 
 export const llmJudgePlugin: EvaluatorPlugin = {
   name: "llm_judge",
-  version: "1.0.0",
-  description: "Uses another LLM to evaluate response quality",
+  version: "2.0.0",
+  description: "Uses another LLM to evaluate response quality with multi-provider support",
   supported_types: ["llm_judge"],
   complexity: "complex",
 
-  async initialize(config: LLMJudgeConfig) {
-    console.log(`Initializing LLM Judge with model: ${config.model}`);
+  private provider: null as LLMProvider | null,
 
-    // Validate API key
-    if (!config.apiKey) {
-      throw new Error("LLM Judge requires apiKey in config");
-    }
+  async initialize(pluginConfig: any) {
+    console.log(`🤖 Initializing LLM Judge plugin`);
+    console.log(`   Provider: ${config.llmJudge.provider}`);
+    console.log(`   Model: ${config.getModelName()}`);
 
-    // Default criteria
-    if (!config.criteria) {
-      config.criteria = [
-        "Correctness",
-        "Completeness",
-        "Clarity",
-        "Tone",
-        "Safety"
-      ];
+    // Create provider using factory
+    this.provider = ProviderFactory.createProvider();
+
+    // Test connection
+    try {
+      const connected = await ProviderFactory.testConnection();
+
+      if (connected) {
+        console.log(`   ✅ Connected to ${config.llmJudge.provider}`);
+      } else {
+        console.warn(`   ⚠️  Failed to connect to ${config.llmJudge.provider}`);
+      }
+    } catch (err: any) {
+      console.error(`   ❌ Connection error: ${err.message}`);
+      console.error(`   Make sure your .env file is configured correctly`);
     }
   },
 
@@ -72,8 +80,21 @@ export const llmJudgePlugin: EvaluatorPlugin = {
   },
 
   async evaluate(assertion: LLMJudgeAssertion, context: any): Promise<EvaluationResult> {
-    const { pluginConfig } = context;
-    const config = pluginConfig as LLMJudgeConfig;
+    if (!this.provider) {
+      return {
+        passed: false,
+        score: 0,
+        criteria_results: [
+          {
+            dimension: "llm_judge",
+            passed: false,
+            score: 0,
+            notes: "LLM Judge provider not initialized"
+          }
+        ],
+        human_review_required: true
+      };
+    }
 
     // Get agent output from context
     const agentOutput = context.output || "";
@@ -86,15 +107,18 @@ export const llmJudgePlugin: EvaluatorPlugin = {
       agentPrompt,
       agentOutput,
       assertion.expected_quality,
-      config.criteria || []
+      config.llmJudge.temperature,
+      config.llmJudge.maxTokens
     );
 
-    // Call LLM for judgment
+    // Call LLM using provider
     let judgment: string;
 
     try {
-      judgment = await this.callLLM(judgePrompt, config);
+      judgment = await this.provider.call(judgePrompt, config.llmJudge);
     } catch (err: any) {
+      console.error(`LLM Judge evaluation failed:`, err.message);
+
       return {
         passed: false,
         score: 0,
@@ -137,8 +161,18 @@ export const llmJudgePlugin: EvaluatorPlugin = {
     agentPrompt: string,
     agentOutput: string,
     expectedQuality: string,
-    criteria: string[]
+    temperature: number,
+    maxTokens: number
   ): string {
+    // Default criteria if not provided
+    const defaultCriteria = [
+      "Correctness",
+      "Completeness",
+      "Clarity",
+      "Tone",
+      "Safety"
+    ];
+
     return `
 You are an expert AI evaluator. Your task is to evaluate an AI agent's response.
 
@@ -149,7 +183,7 @@ ${agentPrompt}
 ${agentOutput}
 
 ## Evaluation Criteria
-${criteria.map(c => `- ${c}`).join("\n")}
+${defaultCriteria.map(c => `- ${c}`).join("\n")}
 
 ## Grading Rubric
 ${gradingRubric}
@@ -184,47 +218,11 @@ Provide your judgment in the JSON format above:
 `;
   },
 
-  async callLLM(prompt: string, config: LLMJudgeConfig): Promise<string> {
-    // Use fetch for API call
-    const baseUrl = config.baseUrl || "https://api.openai.com/v1";
-    const url = `${baseUrl}/chat/completions`;
-
-    const response = await fetch(url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${config.apiKey}`
-      },
-      body: JSON.stringify({
-        model: config.model,
-        messages: [
-          {
-            role: "system",
-            content: "You are an expert AI evaluator. Always respond in valid JSON format."
-          },
-          {
-            role: "user",
-            content: prompt
-          }
-        ],
-        temperature: 0.3,
-        max_tokens: 1000
-      })
-    });
-
-    if (!response.ok) {
-      const error = await response.text();
-      throw new Error(`LLM API error: ${error}`);
-    }
-
-    const data = await response.json();
-    return data.choices[0].message.content;
-  },
-
   parseJudgment(judgment: string): any {
     try {
       // Extract JSON from response (in case of extra text)
       const jsonMatch = judgment.match(/\{[\s\S]*\}/);
+
       if (!jsonMatch) {
         throw new Error("No JSON found in LLM response");
       }
@@ -238,6 +236,8 @@ Provide your judgment in the JSON format above:
       };
     } catch (err: any) {
       console.warn("Failed to parse LLM judgment:", err);
+      console.warn("Response:", judgment.substring(0, 200));
+
       // Return default judgment
       return {
         criterion_scores: {},

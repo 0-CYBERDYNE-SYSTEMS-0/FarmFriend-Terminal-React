@@ -2,6 +2,8 @@ import express from "express";
 import cors from "cors";
 import { E2ERunner } from "../testing/e2eRunner.js";
 import path from "node:path";
+import config from "../config/env.js";
+import { ProviderFactory } from "../testing/evaluation/providers/providerFactory.js";
 
 const DEFAULT_WORKSPACE = path.join(
   path.dirname(new URL(import.meta.url).pathname),
@@ -11,8 +13,8 @@ const DEFAULT_WORKSPACE = path.join(
 );
 
 const app = express();
-const PORT = process.env.PORT || 8787;
-const runner = new E2ERunner(DEFAULT_WORKSPACE);
+const PORT = config.port;
+const runner = new E2ERunner(config.workspaceDir);
 
 // Middleware
 app.use(cors());
@@ -26,7 +28,112 @@ app.use(express.static(path.join(__dirname, "../testing-ui/dist")));
  * Health check endpoint
  */
 app.get("/api/health", (_req, res) => {
-  res.json({ status: "ok", timestamp: new Date().toISOString() });
+  res.json({
+    status: "ok",
+    timestamp: new Date().toISOString(),
+    version: "0.1.0"
+  });
+});
+
+/**
+ * GET /api/config
+ * Get current configuration (sanitized - no API keys)
+ */
+app.get("/api/config", (_req, res) => {
+  try {
+    const sanitized = {
+      // API Server
+      port: config.port,
+      apiHost: config.apiHost,
+      nodeEnv: config.nodeEnv,
+
+      // LLM Judge
+      llmJudge: {
+        provider: config.llmJudge.provider,
+        model: config.getModelName(),
+        settings: {
+          temperature: config.llmJudge.temperature,
+          maxTokens: config.llmJudge.maxTokens,
+          timeoutMs: config.llmJudge.timeoutMs
+        }
+      },
+
+      // Workspace
+      workspaceDir: config.workspaceDir,
+
+      // Parallel Execution
+      parallel: config.parallel,
+
+      // Trend Tracking
+      trends: {
+        storageDir: config.trends.storageDir,
+        alertThreshold: config.trends.alertThreshold
+      },
+
+      // Logging
+      logging: {
+        level: config.logging.level,
+        format: config.logging.format
+      }
+    };
+
+    res.json(sanitized);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * GET /api/providers
+ * List all supported providers
+ */
+app.get("/api/providers", (_req, res) => {
+  try {
+    const providers = ProviderFactory.getSupportedProviders();
+    res.json({ providers });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * GET /api/providers/models
+ * List available models for provider
+ */
+app.get("/api/providers/models", async (req, res) => {
+  try {
+    const { provider } = req.query;
+
+    if (!provider) {
+      return res.status(400).json({ error: "provider query param required" });
+    }
+
+    const models = await ProviderFactory.listAvailableModels(provider as string);
+    res.json({ provider, models });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * POST /api/providers/test
+ * Test connection to provider
+ */
+app.post("/api/providers/test", async (req, res) => {
+  try {
+    const { provider, providerConfig } = req.body;
+
+    if (!provider || !providerConfig) {
+      return res.status(400).json({ error: "provider and providerConfig required" });
+    }
+
+    const providerInstance = ProviderFactory.createProviderForType(provider, providerConfig);
+    const connected = await ProviderFactory.testConnection(provider);
+
+    res.json({ connected });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 /**
@@ -77,10 +184,10 @@ app.post("/api/runs", async (req, res) => {
     // In production, would use job queue
     runner.runSuite(suite, options)
       .then((run) => {
-        console.log(`Test run ${run.id} completed`);
+        console.log(`✅ Test run ${run.id} completed`);
       })
       .catch((err) => {
-        console.error(`Test run failed: ${err.message}`);
+        console.error(`❌ Test run failed: ${err.message}`);
       });
 
     // Return immediately with run ID
@@ -97,7 +204,7 @@ app.post("/api/runs", async (req, res) => {
  */
 app.get("/api/suites", async (_req, res) => {
   try {
-    const suitesDir = path.join(DEFAULT_WORKSPACE, "tests", "suites", "library");
+    const suitesDir = path.join(config.workspaceDir, "tests", "suites", "library");
     const { promises } = await import("node:fs/promises");
 
     const files = await promises.readdir(suitesDir);
@@ -120,7 +227,7 @@ app.get("/api/suites/:suiteId", async (req, res) => {
   try {
     const { suiteId } = req.params;
     const suitePath = path.join(
-      DEFAULT_WORKSPACE,
+      config.workspaceDir,
       "tests",
       "suites",
       "library",
@@ -152,7 +259,7 @@ app.post("/api/reports/:runId", async (req, res) => {
       return res.status(404).json({ error: "Run not found" });
     }
 
-    const generator = new HTMLReportGenerator(DEFAULT_WORKSPACE);
+    const generator = new HTMLReportGenerator(config.workspaceDir);
     const html = await generator.generateReport(run);
     const reportPath = await generator.saveReport(runId, html);
 
@@ -237,9 +344,15 @@ app.get("*", (_req, res) => {
 
 // Start server
 app.listen(PORT, () => {
-  console.log(`🚀 Agent Testing Suite API server running on http://localhost:${PORT}`);
-  console.log(`📊 Web UI available at http://localhost:${PORT}`);
-  console.log(`📚 Workspace: ${DEFAULT_WORKSPACE}`);
+  console.log("\n" + "=".repeat(60));
+  console.log("🚀 Agent Testing Suite API server running");
+  console.log("=".repeat(60));
+  console.log(`   Server: http://localhost:${PORT}`);
+  console.log(`   Web UI: http://localhost:${PORT}`);
+  console.log(`   Workspace: ${config.workspaceDir}`);
+  console.log(`   Provider: ${config.llmJudge.provider}`);
+  console.log(`   Model: ${config.getModelName()}`);
+  console.log("=".repeat(60) + "\n");
 });
 
 export default app;
