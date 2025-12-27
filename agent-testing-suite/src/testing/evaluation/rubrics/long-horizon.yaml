@@ -1,0 +1,17 @@
+id: long-horizon
+name: Long Horizon Task Evaluation
+description: Evaluates multi-step task execution and planning
+scoring: scale1-5
+criteria:
+  - dimension: correctness
+    weight: 0.5
+    description: All subtasks completed correctly with expected outputs
+  - dimension: efficiency
+    weight: 0.15
+    description: Minimal redundant operations, optimal tool usage
+  - dimension: planning
+    weight: 0.2
+    description: Clear decomposition of complex task into manageable steps
+  - dimension: consistency
+    weight: 0.15
+    description: Maintains context across multiple turns, coherent approach

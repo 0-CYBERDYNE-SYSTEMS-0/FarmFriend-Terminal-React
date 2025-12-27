@@ -1,0 +1,11 @@
+id: efficiency
+name: Efficiency Evaluation
+description: Evaluates agent efficiency based on resource usage
+scoring: scale1-5
+criteria:
+  - dimension: efficiency
+    weight: 0.6
+    description: Number of iterations and tool calls relative to task complexity
+  - dimension: correctness
+    weight: 0.4
+    description: All assertions must pass (binary)

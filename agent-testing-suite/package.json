@@ -14,12 +14,16 @@
     "test:coverage": "vitest --coverage",
     "lint": "eslint src --ext .ts",
     "format": "prettier --write \"src/**/*.ts\"",
-    "prepare": "npm run build"
+    "prepare": "npm run build",
+    "serve": "node dist/api/server.js",
+    "serve:dev": "tsx src/api/server.ts"
   },
   "dependencies": {
     "commander": "^12.1.0",
     "uuid": "^11.0.3",
-    "yaml": "^2.5.1"
+    "yaml": "^2.5.1",
+    "express": "^4.21.2",
+    "cors": "^2.8.5"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",
@@ -29,7 +33,9 @@
     "vitest": "^4.0.16",
     "@vitest/coverage-v8": "^4.0.16",
     "prettier": "^3.3.3",
-    "eslint": "^9.15.0"
+    "eslint": "^9.15.0",
+    "@types/express": "^5.0.0",
+    "@types/cors": "^2.8.17"
   },
   "engines": {
     "node": ">=20"

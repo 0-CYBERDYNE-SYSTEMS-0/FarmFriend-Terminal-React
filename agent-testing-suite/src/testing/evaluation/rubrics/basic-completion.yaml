@@ -1,0 +1,8 @@
+id: basic-completion
+name: Basic Completion
+description: Pass/fail evaluation for task completion
+scoring: pass_fail
+criteria:
+  - dimension: correctness
+    weight: 1.0
+    description: All assertions must pass for the scenario to be considered complete
