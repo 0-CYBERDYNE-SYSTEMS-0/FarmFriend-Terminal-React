@@ -3,6 +3,13 @@ import path from "node:path";
 import { portPacketDir } from "../prompts/loadTemplates.js";
 import { findRepoRoot } from "../config/repoRoot.js";
 
+// Tools that gracefully handle empty required string arguments.
+// These tools have internal logic to handle empty values as no-ops.
+// This allows imperfect models (like GLM-4.7) to send tool calls without
+// causing validation failures and circuit breaker trips.
+// NOTE: Only include tools that actually handle empty gracefully (not tools that throw)
+const TOOLS_ALLOW_EMPTY_STRINGS = new Set(['think']);
+
 export type OpenAIToolSchema = {
   type: "function";
   function: {
@@ -108,8 +115,9 @@ export function validateToolArgs(
       return { valid: false, error: `${toolName}: missing required argument '${req}'` };
     }
     // Check for empty strings on required string fields
+    // Allow empty strings for tools that gracefully handle them (think, quick_update)
     const propSchema = properties[req] as Record<string, unknown> | undefined;
-    if (propSchema?.type === "string" && value === "") {
+    if (propSchema?.type === "string" && value === "" && !TOOLS_ALLOW_EMPTY_STRINGS.has(toolName)) {
       return { valid: false, error: `${toolName}: required argument '${req}' cannot be empty` };
     }
   }

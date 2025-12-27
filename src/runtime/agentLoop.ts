@@ -424,7 +424,9 @@ export async function* runAgentTurn(params: {
 
   // Circuit breaker: Track consecutive failures per tool to prevent infinite loops
   const consecutiveToolFailures = new Map<string, number>();
-  const CIRCUIT_BREAKER_THRESHOLD = 3; // Stop after 3 consecutive failures of same tool
+  // Increased threshold to 5 to accommodate imperfect models (e.g., GLM-4.7)
+  // that occasionally send malformed tool calls but can recover with retries
+  const CIRCUIT_BREAKER_THRESHOLD = 5; // Stop after 5 consecutive failures of same tool
 
   let planStore: PlanStore | null = null;
   if (planValidationEnabled) {
@@ -754,7 +756,11 @@ export async function* runAgentTurn(params: {
         turn_id: turnId,
         iteration: i + 1,
         tripped_tools: trippedTools,
-        all_failed: allFailed
+        all_failed: allFailed,
+        threshold: CIRCUIT_BREAKER_THRESHOLD,
+        failure_counts: Object.fromEntries(
+          trippedTools.map(t => [t, consecutiveToolFailures.get(t) ?? 0])
+        )
       });
 
       // Inject message to model about the failing tools
