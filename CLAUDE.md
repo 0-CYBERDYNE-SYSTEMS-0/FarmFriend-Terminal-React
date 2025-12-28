@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ### Common Tasks
 - **Start development**: `pnpm dev` or `npm run dev` - Runs the CLI directly with tsx
-- **Build for production**: `pnpm build` or `npm run build` - Compiles TypeScript to dist/
+- **Build for production**: `pnpm build` or `npm run build` - Compiles TypeScript to dist/ (includes web frontend)
 - **Run daemon**: `pnpm dev:daemon` or `npm run dev:daemon` - Starts the WebSocket agent runtime on port 28888
 - **Run CLI**: `pnpm dev:cli` or `npm run dev:cli` - Starts the Ink (React) terminal UI
 - **Start both daemon + UI**: `pnpm dev:start` or `npm run dev:start` - Launches daemon and UI together (primary development workflow)
@@ -14,6 +14,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Run headless**: `pnpm dev:run` or `npm run dev:run` - Single-turn headless execution with a test prompt
 - **Manage profiles**: `pnpm dev -- profile setup|list|default|delete` - Profile and provider configuration
 - **Launch wizard**: `pnpm dev -- start` or `npm run dev -- start` - Interactive profile/model selector
+- **Display modes**: Add `--display-mode verbose` for detailed output or `--display-mode clean` for minimal UI
+- **ACP server**: `pnpm dev -- acp` or `npm run dev -- acp` - Starts Anthropic Computer Protocol server
+- **Tool permissions**: Add `--allow-macos-control` or `--allow-browser-use` flags to enable restricted automation tools
 
 **Note for development**: This is a private package, so use `pnpm run` or `npm run` commands to execute commands. The `ff-terminal` command is only available after `pnpm build` and global installation.
 
@@ -24,13 +27,25 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Run a single turn**: `pnpm dev -- run --prompt "your prompt here"` or `npm run dev -- run --prompt "your prompt here"`
 - **Start scheduler**: `pnpm dev:daemon` then check `~/.config/ff-terminal/` for scheduled tasks
 - **Web server** (alternative UI): `pnpm dev:web` or `npm run dev:web` on port 8787
+- **Agent testing**: `cd agent-testing-suite && ff-test run <suite>` - End-to-end agent evaluation (see Agent Testing Suite section)
 
 ### Build Verification
 After making changes, always run:
 ```bash
 npm run build
 ```
-This catches TypeScript errors before deployment.
+This catches TypeScript errors before deployment and builds the web frontend.
+
+### CLI Installation (for local development)
+After building, install the CLI globally:
+```bash
+./scripts/install-cli.sh
+```
+This installs `ff-terminal` to `~/.local/bin`. Ensure it's on your PATH:
+```bash
+echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zprofile
+source ~/.zprofile
+```
 
 ### Native Dependencies & Build Scripts
 
@@ -149,9 +164,24 @@ The core agent execution engine with multiple responsibilities:
 
 #### **Web (`src/web/server.ts`)**
 Alternative HTTP+WebSocket server on port 8787 for web-based UI.
-- Serves React frontend
+- Serves React frontend built with Vite (located in `src/web/client/`)
 - Similar WebSocket API to daemon
 - Health endpoint for orchestration
+- Supports color theming system with customizable UI colors
+
+**Web Frontend Development**:
+The web UI is a separate Vite + React project. To develop it:
+```bash
+cd src/web/client
+npm install
+npm run dev  # Starts Vite dev server on port 5173
+```
+
+**Common Issue**: If web UI shows blank page, rebuild the frontend:
+```bash
+npm run build:web
+# Or manually: cd src/web/client && npm install && npm run build
+```
 
 #### **Shared (`src/shared/`)**
 - `ids.ts` - ID generation utilities
@@ -364,6 +394,13 @@ FF_LOG_HOOKS_JSONL=true npm run dev
 # Check: ~/.config/ff-terminal/logs/hooks/tools_*.jsonl
 ```
 
+### ACP (Anthropic Computer Protocol) Server
+The project includes an ACP server for integration with Anthropic's computer control protocol:
+```bash
+# Start ACP server with specific profile
+npm run dev -- acp --profile my-profile
+```
+
 ### Extended Thinking
 Some providers support extended thinking (e.g., Anthropic claude-opus-4):
 - Enable via config: `use_extended_thinking: true`
@@ -389,6 +426,7 @@ The runtime enforces safety boundaries:
 4. **Test tool isolation**: Run individual tools with mock context via `withToolContext()`
 5. **Provider debugging**: Add console.log in provider adapter files (src/runtime/providers/)
 6. **Profile issues**: Run `tsx src/bin/ff-terminal.ts profile list` to verify setup
+7. **Agent behavior testing**: Use Agent Testing Suite for end-to-end evaluation with metrics and reports (see Agent Testing Suite section)
 
 ## Performance Considerations
 
@@ -397,8 +435,11 @@ The runtime enforces safety boundaries:
 - **Session caching**: Conversation history loaded once at start
 - **Tool schema caching**: Schemas loaded once from port packet
 - **Workspace size**: Session history grows with conversation length
+- **Parallel agent testing**: Agent Testing Suite supports concurrent scenario execution with worker pools for faster evaluation
 
-## Testing Strategy
+## Unit & Integration Tests
+
+*For end-to-end agent evaluation and benchmarking, see the Agent Testing Suite section below.*
 
 ### Running Tests
 - **All tests**: `pnpm test` or `npm test` - Runs full test suite with Vitest
@@ -412,6 +453,509 @@ The runtime enforces safety boundaries:
 - **Globals enabled**: No need to import `describe`, `it`, `expect`
 - **TypeScript**: Automatically transpiled via tsx
 - **Configuration**: `vitest.config.ts` - Minimal setup, uses ES2022 target
+
+### Current Test Coverage
+The project has **124 passing tests** across 5 test files:
+
+1. **File & Bash Tools** (`tests/fileAndBashTools.test.ts` - 47 tests)
+   - Tests: `read_file`, `write_file`, `edit_file`, `multi_edit_file`, `glob`, `grep`, `run_command`
+   - Patterns: Setup/teardown, positive and negative cases, integration tests
+
+2. **Logging System** (`tests/logging/structuredLogger.test.ts` - 24 tests)
+   - Tests: Structured logging, secret redaction, log level filtering, JSONL serialization
+   - Focus: Security (automatic credential redaction), observability
+
+3. **Profile/Provider System** (`tests/profile-system.test.ts` - 13 tests)
+   - Tests: Profile loading, provider selection, credential retrieval
+   - Focus: Configuration management, environment variable handling
+
+4. **Execution Plans** (`src/runtime/planning/planStore.test.ts` - 29 tests)
+   - Tests: Plan persistence, step tracking, completion detection
+   - Focus: State management, immutability, circuit breaker logic
+
+5. **Plan Validation Hook** (`src/runtime/hooks/builtin/planValidationStopHook.test.ts` - 11 tests)
+   - Tests: Agent stop validation, circuit breaker, error handling
+   - Focus: Business logic for agent execution control
+
+### Critical Testing Gaps
+Approximately 90 runtime modules remain untested:
+- Agent execution loop and multi-turn iteration
+- LLM provider implementations (OpenAI, Anthropic, etc.)
+- Most tool implementations (web tools, media generation, etc.)
+- CLI UI components and daemon initialization
+- Session persistence and conversation management
+- Web server routes and WebSocket handling
+
+## Agent Testing Suite
+
+### Overview
+
+The Agent Testing Suite is a standalone end-to-end testing framework for AI agent evaluation, located in the `agent-testing-suite/` subdirectory. This is a world-class testing system (57 files, 9,165 lines) designed to comprehensively evaluate agent behavior, performance, and reliability.
+
+**Purpose:**
+- **Long-horizon task evaluation** - Test complex multi-step agent workflows that span multiple turns
+- **A/B testing** - Compare different models, prompts, system configurations, and provider settings
+- **Comprehensive benchmarking** - Measure performance with research-backed metrics
+- **Visual reporting** - Generate detailed HTML/PDF reports with charts, graphs, and knowledge visualizations
+- **Trend analysis** - Track agent performance over time with regression detection
+
+**Research Foundation:**
+Integrates patterns and methodologies from leading AI research:
+- **Anthropic Bloom** - Dynamic scenario generation, LLM-as-judge, contamination detection
+- **Sierra Tau-Bench** - Multi-turn realistic testing, reliability metrics
+- **LangChain** - Parallel test execution, reproducible environments
+- **Galileo AI** - Cost efficiency metrics, Pareto analysis
+- **Elastic** - System-level evaluation, observability patterns
+- **Sentient SPIN-Bench** - Long-horizon planning, multi-agent coordination
+- **Berkeley/Princeton** - Out-of-distribution detection, edge case performance
+
+### Quick Start
+
+```bash
+# Navigate to testing suite
+cd agent-testing-suite
+
+# Install dependencies
+npm install
+
+# Build the suite
+npm run build
+
+# Initialize test workspace (creates directory structure)
+ff-test init
+
+# Run a built-in test suite
+ff-test run example-coding-tasks
+
+# List all test runs
+ff-test list
+
+# Generate detailed report
+ff-test report <run-id>
+
+# Compare two runs (A/B testing)
+ff-test compare <run1> <run2>
+
+# Run tests in parallel (4 workers)
+ff-test run example-coding-tasks --parallel 4
+```
+
+### Test Suite Format
+
+Test suites are defined in YAML format:
+
+```yaml
+name: my-test-suite
+description: Tests agent behavior on specific tasks
+category: long-horizon  # Categories: long-horizon, tool-usage, reasoning, safety
+version: 1.0.0
+
+scenarios:
+  - name: file-manipulation-task
+    description: Test agent's ability to create and modify files
+    prompts:
+      - "Create a file called test.txt with 'Hello World'"
+      - "Now add a second line saying 'Testing 123'"
+
+    evaluation:
+      rubric: basic-completion  # Rubrics: basic-completion, efficiency, code-quality, long-horizon, safety
+
+      assertions:
+        # Check output contains expected text
+        - type: output
+          condition: contains
+          expected: "Created test.txt"
+
+        # Check file was created
+        - type: filesystem
+          condition: file_exists
+          expected: "test.txt"
+
+        # Check file contents
+        - type: filesystem
+          condition: file_contains
+          expected: "Hello World\nTesting 123"
+
+        # Ensure task completed in reasonable time
+        - type: duration
+          condition: less_than
+          expected: 300  # seconds
+
+      human_review: false
+
+    timeout_minutes: 10
+    expected_duration_minutes: 2
+```
+
+**Assertion Types:**
+- `output` - Match content in agent's response (contains, equals, regex)
+- `filesystem` - File system checks (file_exists, file_contains, directory_exists)
+- `tool_pattern` - Validate tool usage patterns (tool_called, tool_count, tool_sequence)
+- `duration` - Time-based validation (less_than, greater_than)
+- `exit_code` - Process exit status validation
+
+### Architecture
+
+```
+agent-testing-suite/
+├── src/
+│   ├── bin/
+│   │   └── ff-test.ts              # CLI entry point
+│   ├── api/
+│   │   └── server.ts               # REST API (port 8787)
+│   ├── testing/
+│   │   ├── e2eRunner.ts           # Core end-to-end test execution
+│   │   ├── scenarios/
+│   │   │   └── generator.ts       # Dynamic scenario generation (Bloom pipeline)
+│   │   ├── execution/
+│   │   │   ├── parallelRunner.ts  # Worker pool manager for parallel execution
+│   │   │   └── parallelWorker.ts  # Worker thread implementation
+│   │   ├── evaluation/
+│   │   │   ├── evaluators/        # Automated assertion evaluators
+│   │   │   │   ├── outputMatcher.ts
+│   │   │   │   ├── fileSystemChecker.ts
+│   │   │   │   ├── durationChecker.ts
+│   │   │   │   └── toolPatternValidator.ts
+│   │   │   ├── rubrics/           # Multi-dimensional scoring rubrics
+│   │   │   │   ├── basic-completion.yaml
+│   │   │   │   ├── efficiency.yaml
+│   │   │   │   ├── code-quality.yaml
+│   │   │   │   ├── long-horizon.yaml
+│   │   │   │   └── safety.yaml
+│   │   │   └── plugins/          # Custom evaluator plugins
+│   │   │       ├── llmJudge.ts    # LLM-as-judge evaluator
+│   │   │       └── ruleEngine.ts  # Rule-based evaluator
+│   │   ├── metrics/
+│   │   │   ├── logParser.ts       # JSONL log parsing
+│   │   │   ├── metricsCalculator.ts  # Compute task/tool/system metrics
+│   │   │   ├── comparator.ts      # A/B comparison with statistics
+│   │   │   ├── trendAnalyzer.ts   # Long-term trend tracking
+│   │   │   └── advancedMetrics.ts # Cost, Pareto, OOD, reliability
+│   │   ├── reports/
+│   │   │   ├── htmlReportGenerator.ts  # Interactive HTML reports
+│   │   │   ├── mermaidGenerator.ts     # Diagram generation
+│   │   │   ├── pdfReportGenerator.ts   # PDF export
+│   │   │   └── csvExporter.ts          # CSV export
+│   │   ├── suites/
+│   │   │   ├── library/           # Built-in test suites
+│   │   │   │   ├── example-coding-tasks.yaml
+│   │   │   │   ├── example-file-operations.yaml
+│   │   │   │   └── example-web-search.yaml
+│   │   │   └── testSuite.schema.json
+│   │   └── types.ts              # Shared TypeScript types
+│   └── testing-ui/                # React + Vite web interface
+│       └── src/
+│           ├── api.ts             # API client
+│           ├── components/
+│           │   ├── KnowledgeGraph.tsx  # D3.js force-directed graphs
+│           │   └── TrendCharts.tsx     # Trend visualization
+│           └── pages/
+│               ├── Dashboard.tsx
+│               ├── TestList.tsx
+│               ├── TestRunDetail.tsx
+│               ├── Review.tsx        # Human review workflow
+│               └── Trends.tsx       # Trend analysis dashboard
+```
+
+### Metrics & Evaluation
+
+**Task-Level Metrics:**
+- **Success Rate** - Percentage of scenarios that passed all assertions
+- **Completion Rate** - Percentage of scenarios that finished (didn't timeout or error)
+- **Average Duration** - Mean time per scenario completion
+- **Total Duration** - Overall test suite runtime
+
+**Tool-Level Metrics:**
+- **Call Count** - Number of times each tool was invoked
+- **Success Rate** - Percentage of successful tool executions
+- **Average Duration** - Mean execution time per tool
+- **Error Types** - Categorized failure reasons (timeout, permission, validation)
+
+**System-Level Metrics:**
+- **Circuit Breaker Trips** - Safety trigger activations
+- **Plan Validation Events** - Execution plan extraction and validation
+- **Hook Execution** - Pre/post tool hook invocations
+
+**Cost Metrics** (Advanced):
+- **Token Usage** - Input/output token counts
+- **Cost per Task** - Estimated API costs
+- **Cost Efficiency** - Cost per successful completion
+
+**Reliability Metrics** (Advanced):
+- **MTBF** (Mean Time Between Failures) - Average time between errors
+- **Timeout Rate** - Percentage of scenarios exceeding time limits
+- **Stability Score** - Consistency across multiple runs
+
+**Safety Metrics** (Advanced):
+- **Refusal Rate** - Percentage of tasks appropriately declined
+- **Jailbreak Attempts** - Detected safety bypass attempts
+- **Hallucination Detection** - False information generation
+
+### Evaluation Rubrics
+
+**1. basic-completion** (Pass/Fail)
+- Binary pass/fail based on assertions
+- Fast evaluation, minimal overhead
+
+**2. efficiency** (1-5 Scale)
+- Tool usage optimization
+- Time efficiency
+- Resource utilization
+- Overall efficiency score
+
+**3. code-quality** (4 Dimensions)
+- Correctness - Functional requirements met
+- Readability - Code clarity and style
+- Safety - Error handling and validation
+- Efficiency - Performance optimization
+
+**4. long-horizon** (4 Dimensions)
+- Planning - Step decomposition quality
+- Execution - Implementation correctness
+- Recovery - Error handling and retry logic
+- Completion - Task finish rate
+
+**5. safety** (Multiple Criteria)
+- Guardrail adherence
+- Harmful content prevention
+- Privacy protection
+- Ethical behavior
+
+### Advanced Features
+
+**Parallel Execution:**
+```bash
+# Run 4 scenarios concurrently
+ff-test run my-suite --parallel 4
+
+# Specify custom timeout
+ff-test run my-suite --parallel 8 --timeout 30
+```
+
+**Dynamic Scenario Generation:**
+```typescript
+import { ScenarioGenerator } from "./src/testing/scenarios/generator";
+
+const generator = new ScenarioGenerator({
+  templatesDir: "./templates",
+  variationCount: 10,
+  difficultyLevels: ["easy", "medium", "hard"]
+});
+
+const scenarios = await generator.generate();
+await generator.saveToFile(scenarios, "./generated-suite.yaml");
+```
+
+**Trend Analysis:**
+```typescript
+import { TrendAnalyzer } from "./src/testing/metrics/trendAnalyzer";
+
+const analyzer = new TrendAnalyzer(workspaceDir);
+await analyzer.initialize();
+
+// Detect regressions
+const regression = await analyzer.detectRegression("success_rate");
+if (regression.detected) {
+  console.log(`Regression detected: ${regression.severity}`);
+}
+
+// Get alerts
+const alerts = await analyzer.loadAlerts();
+```
+
+**LLM-as-Judge Evaluation:**
+```yaml
+assertions:
+  - type: llm_judge
+    judge_prompt: "Does the response demonstrate clear reasoning?"
+    grading_rubric: "Score 1-5 based on logical coherence"
+    passing_score: 4
+```
+
+**Knowledge Graph Visualization:**
+- D3.js force-directed graph showing tool relationships
+- Color-coded by success rate (green = high, red = low)
+- Interactive: zoom, pan, drag nodes
+- Shows tool usage patterns and dependencies
+
+**Pareto Analysis:**
+- Accuracy vs cost frontier visualization
+- Identifies optimal configurations
+- Helps balance performance and efficiency
+
+**Out-of-Distribution (OOD) Detection:**
+- Measures distribution drift from training data
+- Identifies edge cases and unusual scenarios
+- Tests generalization capability
+
+### Web UI
+
+The testing suite includes a professional React + Vite web interface:
+
+```bash
+# Start web UI (from agent-testing-suite directory)
+cd src/testing-ui
+npm install
+npm run dev
+
+# Visit http://localhost:3000
+```
+
+**Features:**
+- **Dashboard** - Overview with success rates, run history, quick stats
+- **Test Runs** - List all runs with filtering and search
+- **Run Details** - Detailed metrics, scenario results, tool usage breakdowns
+- **Trends** - Long-term performance visualization with regression alerts
+- **Review** - Human review queue with annotation tools
+- **Knowledge Graph** - Interactive D3.js visualization of tool relationships
+
+### Integration with ff-terminal
+
+The Agent Testing Suite integrates seamlessly with the main ff-terminal codebase:
+
+**Workspace Integration:**
+- Uses same workspace structure: `ff-terminal-workspace/tests/`
+- Reads JSONL logs from ff-terminal sessions for analysis
+- Shares profile and credential configuration
+
+**Test Execution:**
+- Spawns real ff-terminal agent sessions
+- Tests actual agent behavior end-to-end
+- Supports all configured profiles and providers
+
+**Log Analysis:**
+- Parses structured JSONL logs from `ff-terminal-workspace/logs/`
+- Extracts tool calls, turn completions, errors
+- Correlates events across multi-turn sessions
+
+**Metrics Alignment:**
+- Uses same tool names and schemas
+- Tracks same success/failure patterns
+- Compatible with hook system metrics
+
+### Report Generation
+
+**HTML Reports:**
+```bash
+ff-test report <run-id>
+# Generates: ff-terminal-workspace/tests/reports/<run-id>/report.html
+```
+
+Contains:
+- Executive summary with key metrics
+- Detailed scenario results with status badges
+- Tool usage breakdown with statistics
+- Mermaid diagrams (flowcharts, sequence diagrams, knowledge graphs)
+- Recommendations for improvement
+
+**PDF Export:**
+```bash
+ff-test report <run-id> --format pdf
+```
+
+Professional PDF with:
+- Executive summary
+- Metrics tables
+- Scenario details
+- Pagination and headers
+
+**CSV Export:**
+```bash
+ff-test report <run-id> --format csv
+```
+
+Export formats:
+- Full report (all data)
+- Metrics only
+- Criteria scores only
+
+### CLI Reference
+
+**Initialization:**
+```bash
+ff-test init                    # Initialize test workspace
+```
+
+**Running Tests:**
+```bash
+ff-test run <suite>             # Run specific suite
+ff-test run-all                 # Run all suites
+ff-test run <suite> --parallel 4    # Parallel execution
+ff-test run <suite> --dry-run  # Simulate without executing
+```
+
+**Results:**
+```bash
+ff-test list                    # List all runs
+ff-test report <run-id>         # Generate report
+ff-test compare <run1> <run2>   # A/B comparison
+```
+
+**Web UI:**
+```bash
+ff-test serve                   # Start web UI on port 3000
+ff-test serve --port 8080       # Custom port
+```
+
+### Development & Extension
+
+**Adding Custom Evaluators:**
+
+```typescript
+// src/testing/evaluation/evaluators/myEvaluator.ts
+export const myEvaluator: Evaluator = {
+  name: 'my-custom-check',
+  evaluate: async (result: ScenarioResult, context: EvalContext) => {
+    // Your evaluation logic
+    const passed = /* your condition */;
+
+    return {
+      passed,
+      score: passed ? 1.0 : 0.0,
+      criteria_results: [],
+      human_review_required: false,
+      message: "Evaluation complete"
+    };
+  }
+};
+```
+
+**Adding Custom Rubrics:**
+
+```yaml
+# src/testing/evaluation/rubrics/my-rubric.yaml
+id: my-custom-rubric
+name: My Custom Evaluation
+scoring: scale1-5
+criteria:
+  - dimension: correctness
+    weight: 0.5
+    description: Output matches expected
+  - dimension: efficiency
+    weight: 0.3
+    description: Minimal tool usage
+  - dimension: safety
+    weight: 0.2
+    description: No unsafe operations
+```
+
+### Performance Optimization
+
+**Parallel Execution:**
+- Worker pool with configurable concurrency
+- Isolated test environments (worker threads)
+- Load balancing across workers
+- Result aggregation with statistical analysis
+
+**Caching:**
+- Test suite schema validation cached
+- Rubric loading cached
+- Provider initialization reused
+
+**Resource Management:**
+- Timeout enforcement per scenario
+- Memory limits per worker
+- Cleanup after each scenario
 
 ## Quick Troubleshooting
 
@@ -430,3 +974,16 @@ The runtime enforces safety boundaries:
 - Set `FF_WORKSPACE_DIR` to use custom workspace location
 - Set `FF_DEBUG=true` for verbose logging output
 - Set `FF_LOG_HOOKS_JSONL=true` to enable tool call logging for debugging
+- Set `FF_ALLOW_MACOS_CONTROL=1` to enable macOS automation tools
+- Set `FF_ALLOW_BROWSER_USE=1` to enable browser-use automation
+
+### Display Modes
+The CLI supports different display modes for output verbosity:
+- `--display-mode verbose` - Shows detailed tool execution and internal processing
+- `--display-mode clean` - Minimal UI with only essential information
+- Default mode balances information and readability
+
+Example:
+```bash
+npm run dev -- start --display-mode clean
+```
