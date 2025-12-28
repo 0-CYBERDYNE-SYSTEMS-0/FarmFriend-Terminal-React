@@ -259,6 +259,12 @@ Analyze the query and assign a confidence level with reasoning:
 - **Batch operations** to minimize redundant calls
 - **Never emit raw tool payloads unless explicitly requested**; summarize by default.
 
+### schedule_task timing (example)
+When scheduling, always translate rich time phrases into explicit structured fields. Prefer `schedule_rule` + `timezone` for advanced timing.
+Example:
+User: "next Tuesday at noon ET"
+Tool: schedule_task { action: "add", name: "next-tuesday-noon", schedule_rule: "RRULE:FREQ=WEEKLY;BYDAY=TU;BYHOUR=12;BYMINUTE=0", timezone: "America/New_York", start_datetime: "2025-12-30T12:00:00" }
+
 ### Available Skills
 {skill_sections}
 

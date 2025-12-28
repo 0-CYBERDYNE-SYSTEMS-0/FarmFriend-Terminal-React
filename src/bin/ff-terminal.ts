@@ -13,6 +13,8 @@ import { runAgentTurn } from "../runtime/agentLoop.js";
 import { toWire } from "../runtime/streamProtocol.js";
 import { newId } from "../shared/ids.js";
 import { loadTaskStore, saveTaskStore, taskStorePath } from "../runtime/scheduling/taskStore.js";
+import { getSchedulerBackend } from "../runtime/scheduling/backends/index.js";
+import { computeNextRRuleExecutionTimestamp } from "../runtime/scheduling/rrule.js";
 import fs from "node:fs";
 import path from "node:path";
 import { readConfig, writeConfig, getProfileByName, getCredential, deleteCredential, storeCredential } from "../runtime/profiles/storage.js";
@@ -539,7 +541,9 @@ async function run(): Promise<void> {
     const userPrompt = pickArg(rest, "--prompt") || "";
     const scheduledTaskRef = pickArg(rest, "--scheduled-task");
     const headless = hasFlag(rest, "--headless");
-    const profileName = pickArg(rest, "--profile");
+    const cliProfile = pickArg(rest, "--profile");
+    const envProfile = process.env.FF_PROFILE || null;
+    let profileName = cliProfile || envProfile || null;
 
     if (!userPrompt && !scheduledTaskRef) throw new Error("Missing --prompt or --scheduled-task\n");
     if (scheduledTaskRef && !headless) throw new Error("--scheduled-task requires --headless\n");
@@ -553,8 +557,38 @@ async function run(): Promise<void> {
       { repoRoot }
     );
 
+    let promptToRun = userPrompt;
+    let scheduledTaskName: string | null = null;
+    let scheduledTaskProfile: string | undefined;
 
-    // Load profile if specified
+    if (scheduledTaskRef) {
+      const store = loadTaskStore(workspaceDir);
+      const task =
+        store.tasks.find((t) => t.id === scheduledTaskRef) ||
+        store.tasks.find((t) => t.name === scheduledTaskRef);
+      if (!task) throw new Error(`No such scheduled task: ${scheduledTaskRef}\n`);
+      if (!task.prompt && !task.workflow) throw new Error(`Scheduled task ${task.name} has no prompt/workflow\n`);
+      if (task.workflow) throw new Error("workflows are not implemented yet in TS runner\n");
+      promptToRun = task.prompt || "";
+      scheduledTaskName = task.name;
+      scheduledTaskProfile = task.profile;
+
+      task.last_run = { started_at: new Date().toISOString() };
+      saveTaskStore(workspaceDir, store);
+    }
+
+    // Scheduled tasks can override the profile unless an explicit CLI profile was provided.
+    if (scheduledTaskRef && !cliProfile && scheduledTaskProfile) {
+      profileName = scheduledTaskProfile;
+    }
+
+    // If this is a scheduled run and no profile was resolved, fall back to default profile (or sole profile).
+    if (!profileName && scheduledTaskRef) {
+      const config = readConfig();
+      profileName = config.defaultProfile || (config.profiles.length === 1 ? config.profiles[0].name : null);
+    }
+
+    // Load profile if specified (explicit or resolved default)
     if (profileName) {
       const config = readConfig();
       const profile = getProfileByName(config, profileName);
@@ -611,24 +645,6 @@ async function run(): Promise<void> {
     let runLogger: StructuredLogger | null = null;
     const registry = new ToolRegistry();
     registerAllTools(registry, { workspaceDir });
-
-    let promptToRun = userPrompt;
-    let scheduledTaskName: string | null = null;
-
-    if (scheduledTaskRef) {
-      const store = loadTaskStore(workspaceDir);
-      const task =
-        store.tasks.find((t) => t.id === scheduledTaskRef) ||
-        store.tasks.find((t) => t.name === scheduledTaskRef);
-      if (!task) throw new Error(`No such scheduled task: ${scheduledTaskRef}\n`);
-      if (!task.prompt && !task.workflow) throw new Error(`Scheduled task ${task.name} has no prompt/workflow\n`);
-      if (task.workflow) throw new Error("workflows are not implemented yet in TS runner\n");
-      promptToRun = task.prompt || "";
-      scheduledTaskName = task.name;
-
-      task.last_run = { started_at: new Date().toISOString() };
-      saveTaskStore(workspaceDir, store);
-    }
 
     const runLogFile = path.join(
       workspaceDir,
@@ -707,6 +723,39 @@ async function run(): Promise<void> {
           duration_ms: Date.now() - runStartedAt
         };
         saveTaskStore(workspaceDir, store);
+
+        if (task.schedule?.schedule_type === "rrule") {
+          try {
+            const nextTimestamp = computeNextRRuleExecutionTimestamp({
+              rule: task.schedule.schedule_rule || "",
+              timezone: task.schedule.timezone,
+              start: task.schedule.start_datetime,
+              after: new Date()
+            });
+            task.schedule.execution_timestamp = nextTimestamp;
+            task.updated_at = new Date().toISOString();
+            saveTaskStore(workspaceDir, store);
+
+            const backend = getSchedulerBackend();
+            if (backend) {
+              const res = await backend.install({ taskName: task.name, taskId: task.id, schedule: task.schedule });
+              if (!res.ok) {
+                runLogger?.log("error", "schedule_rrule_reschedule_failed", {
+                  session_id: sessionId,
+                  scheduled_task: scheduledTaskName,
+                  message: res.message
+                });
+              }
+            }
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            runLogger?.log("error", "schedule_rrule_reschedule_failed", {
+              session_id: sessionId,
+              scheduled_task: scheduledTaskName,
+              message: msg
+            });
+          }
+        }
       }
     }
     runLogger?.log("info", "run_complete", {

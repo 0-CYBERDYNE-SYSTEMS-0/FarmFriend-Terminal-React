@@ -81,8 +81,8 @@ function generatePlist(params: { taskName: string; taskId: string; schedule: Sch
       Hour: s.hour ?? 0,
       Minute: s.minute ?? 0
     }));
-  } else if (s.schedule_type === "one_time") {
-    if (!s.execution_timestamp) throw new Error("one_time schedule requires execution_timestamp");
+  } else if (s.schedule_type === "one_time" || s.schedule_type === "rrule") {
+    if (!s.execution_timestamp) throw new Error("one_time/rrule schedule requires execution_timestamp");
     const dt = new Date(s.execution_timestamp * 1000);
     plist.StartCalendarInterval = {
       Month: dt.getMonth() + 1,

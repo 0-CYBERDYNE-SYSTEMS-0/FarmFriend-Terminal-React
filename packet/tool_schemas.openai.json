@@ -723,9 +723,25 @@
             "type": "string",
             "description": "Workflow name to replay instead of prompt"
           },
+          "profile": {
+            "type": "string",
+            "description": "Profile name to use when running this scheduled task (overrides default)."
+          },
           "schedule_type": {
             "type": "string",
-            "description": "'one_time', 'daily', 'weekly', or 'interval'"
+            "description": "'one_time', 'daily', 'weekly', 'interval', or 'rrule'"
+          },
+          "schedule_rule": {
+            "type": "string",
+            "description": "RFC5545 RRULE string (or multiline DTSTART+RRULE). If provided, schedule_type defaults to 'rrule'."
+          },
+          "timezone": {
+            "type": "string",
+            "description": "IANA timezone ID (e.g., 'America/Chicago'). Used with schedule_rule or time_string."
+          },
+          "start_datetime": {
+            "type": "string",
+            "description": "ISO 8601 start datetime (used when schedule_rule lacks DTSTART)."
           },
           "hour": {
             "type": "integer",

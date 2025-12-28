@@ -7,13 +7,17 @@ export type ScheduledTask = {
   name: string;
   prompt?: string;
   workflow?: string;
+  profile?: string;
   schedule: {
-    schedule_type: "one_time" | "daily" | "weekly" | "interval";
+    schedule_type: "one_time" | "daily" | "weekly" | "interval" | "rrule";
     hour?: number;
     minute?: number;
     weekdays?: number[];
     interval_seconds?: number;
     execution_timestamp?: number;
+    schedule_rule?: string;
+    timezone?: string;
+    start_datetime?: string;
   };
   enabled: boolean;
   created_at: string;

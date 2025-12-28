@@ -3,7 +3,9 @@
 In FF-Terminal, scheduling is implemented as:
 
 1) A tool: `schedule_task` (see `ff_terminal/simple_tools/scheduled_task_tool.py`)
-   - The agent supplies a structured schedule (or a `time_string` that the tool parses)
+   - The agent supplies a structured schedule (or a `time_string` that the tool parses; e.g. "10:50am", "today 10:50", "in 15 minutes")
+   - For advanced timing, pass `schedule_rule` (RFC5545 RRULE, optionally with DTSTART) plus `timezone`
+   - Optional `profile` sets which configured profile to use when the task runs
    - The tool persists scheduled task metadata to:
      - `ff-terminal-workspace/memory_core/scheduled_tasks/tasks.json`
 

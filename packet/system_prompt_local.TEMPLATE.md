@@ -10,6 +10,10 @@ TOOL PRIORITY: Terminal > GUI > Code
 Files: edit_file (existing) | write_file (new) → ff-terminal-workspace/
 Search: tavily_search | Web: browse_web | Think: structured reasoning
 
+SCHEDULING EXAMPLE:
+User: "next Tuesday at noon ET"
+Tool: schedule_task { action: "add", name: "next-tuesday-noon", schedule_rule: "RRULE:FREQ=WEEKLY;BYDAY=TU;BYHOUR=12;BYMINUTE=0", timezone: "America/New_York", start_datetime: "2025-12-30T12:00:00" }
+
 AUTONOMY RULES:
 • Never ask permission
 • Retry with alternatives on failure
