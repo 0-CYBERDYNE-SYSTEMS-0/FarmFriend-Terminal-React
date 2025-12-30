@@ -33,6 +33,28 @@ export async function writeFileTool(args: unknown): Promise<string> {
     warnings.push("writing under node_modules is usually unintended");
   }
 
+  // Validate HTML files have proper structure
+  if (absPath.endsWith('.html') || absPath.endsWith('.htm')) {
+    const hasHtmlTag = /<html[^>]*>/i.test(content);
+    const hasHeadTag = /<head[^>]*>/i.test(content);
+    const hasBodyTag = /<body[^>]*>/i.test(content);
+    const hasClosingHtml = /<\/html>/i.test(content);
+
+    if (!hasHtmlTag || !hasBodyTag || !hasClosingHtml) {
+      const missing = [];
+      if (!hasHtmlTag) missing.push('<html>');
+      if (!hasHeadTag) missing.push('<head>');
+      if (!hasBodyTag) missing.push('<body>');
+      if (!hasClosingHtml) missing.push('</html>');
+
+      throw new Error(
+        `write_file: HTML file validation failed. Missing required tags: ${missing.join(', ')}. ` +
+        `HTML files must have a complete document structure with <html>, <head>, <body>, and </html> tags. ` +
+        `The content appears to be ${content.length} bytes of ${content.trim().startsWith('/*') || content.trim().startsWith('//') || content.trim().startsWith('function') ? 'JavaScript code' : 'content'} without HTML wrapper.`
+      );
+    }
+  }
+
   fs.mkdirSync(path.dirname(absPath), { recursive: true });
   fs.writeFileSync(absPath, content, "utf8");
   return JSON.stringify({ ok: true, path: absPath, bytes: content.length, warnings: warnings.length ? warnings : undefined }, null, 2);

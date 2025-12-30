@@ -447,7 +447,7 @@ export async function* runAgentTurn(params: {
     // This is the KEY to long-horizon autonomy (matches OpenHands Planner Agent pattern)
     hookRegistry.register(
       createTodoStopHook({
-        enabled: true,
+        enabled: false,
         workspaceDir
       })
     );
@@ -469,10 +469,7 @@ export async function* runAgentTurn(params: {
       let emittedAnyContent = false;
       let emittedAnyThinking = false;
 
-      const shouldForceTools = forceToolCalls && (
-        consecutiveNoAction >= 2 ||
-        (i > 1 && !toolCalls.length)
-      );
+      const shouldForceTools = forceToolCalls && consecutiveNoAction >= 2;
 
       const forceToolChoice = shouldForceTools && tools?.length ? "any" : undefined;
 
