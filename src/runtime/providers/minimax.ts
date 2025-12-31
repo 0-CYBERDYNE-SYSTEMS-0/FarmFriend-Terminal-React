@@ -1,4 +1,5 @@
 import { OpenAIMessage, OpenAIToolSchema, Provider, ProviderStreamEvent, ToolCall } from "./types.js";
+import { readSSEDataLines } from "./sse.js";
 
 function textContentOf(msg: OpenAIMessage): string {
   if (msg.role === "tool") return msg.content;
@@ -79,6 +80,14 @@ function convertMessages(messages: OpenAIMessage[]): { anthropicMessages: any[];
   return { anthropicMessages: out, system: systemBlocks.length ? systemBlocks : undefined };
 }
 
+function safeJsonParse(raw: string): any | null {
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
 function convertTools(tools: OpenAIToolSchema[]): any[] {
   return tools
     .filter((t) => t.type === "function")
@@ -125,7 +134,8 @@ export function minimaxProvider(params: {
         model: actualModel,
         messages: anthropicMessages,
         max_tokens: maxTokens,
-        temperature
+        temperature,
+        stream: true
       };
       if (system) payload.system = system;
       if (tools?.length) payload.tools = convertTools(tools);
@@ -150,29 +160,113 @@ export function minimaxProvider(params: {
         return;
       }
 
-      const data: any = await res.json().catch(() => null);
-      if (!data) {
-        yield { type: "error", message: "MiniMax returned invalid JSON" };
+      if (!res.body) {
+        yield { type: "error", message: `MiniMax response had no body` };
         return;
       }
 
-      const contentBlocks = Array.isArray(data.content) ? data.content : [];
-      const textParts: string[] = [];
-      const toolCalls: ToolCall[] = [];
+      const contentType = res.headers.get("content-type") || "";
+      const isEventStream = contentType.toLowerCase().includes("text/event-stream");
 
-      for (const block of contentBlocks) {
-        if (block?.type === "text") textParts.push(String(block.text || ""));
-        if (block?.type === "tool_use") {
-          toolCalls.push({
-            id: String(block.id || `tool_${toolCalls.length}`),
-            name: String(block.name || ""),
-            arguments: block.input ?? {}
-          });
+      // Non-stream fallback (shouldn't happen with stream: true)
+      if (!isEventStream) {
+        const raw = await new Response(res.body).text().catch(() => "");
+        const obj = safeJsonParse(raw.trim());
+        if (!obj) {
+          yield { type: "error", message: `MiniMax non-stream response was not JSON: ${raw.slice(0, 200)}` };
+          return;
         }
+        const blocks = Array.isArray(obj.content) ? obj.content : [];
+        const textParts: string[] = [];
+        const toolCalls: ToolCall[] = [];
+        for (const block of blocks) {
+          if (block?.type === "text" && typeof block.text === "string") {
+            textParts.push(block.text);
+            yield { type: "content", delta: block.text };
+          }
+          if (block?.type === "thinking" && typeof block.thinking === "string") {
+            yield { type: "thinking", delta: block.thinking };
+          }
+          if (block?.type === "tool_use") {
+            toolCalls.push({
+              id: String(block.id || `tool_${toolCalls.length}`),
+              name: String(block.name || ""),
+              arguments: block.input ?? {}
+            });
+          }
+        }
+        const content = textParts.join("\n").trim();
+        yield { type: "final", content, toolCalls, rawModel: typeof obj.model === "string" ? obj.model : undefined };
+        return;
       }
 
-      const content = textParts.join("\n").trim();
-      yield { type: "final", content, toolCalls, rawModel: String(data.model || model) };
+      // Stream processing
+      let content = "";
+      let rawModel: string | undefined;
+      const toolByIndex = new Map<number, { id?: string; name?: string; args: string }>();
+
+      for await (const data of readSSEDataLines(res.body)) {
+        const obj = safeJsonParse(data);
+        if (!obj || typeof obj !== "object") continue;
+
+        if (obj.type === "message_start" && obj.message && typeof obj.message === "object") {
+          rawModel = typeof obj.message.model === "string" ? obj.message.model : rawModel;
+        }
+
+        if (obj.type === "content_block_start") {
+          const idx = typeof obj.index === "number" ? obj.index : 0;
+          const block = obj.content_block;
+          if (block?.type === "text" && typeof block.text === "string" && block.text) {
+            content += block.text;
+            yield { type: "content", delta: block.text };
+          }
+          if (block?.type === "thinking" && typeof block.thinking === "string" && block.thinking) {
+            yield { type: "thinking", delta: block.thinking };
+          }
+          if (block?.type === "tool_use") {
+            const prev = toolByIndex.get(idx) ?? { args: "" };
+            toolByIndex.set(idx, {
+              id: typeof block.id === "string" ? block.id : prev.id,
+              name: typeof block.name === "string" ? block.name : prev.name,
+              args: prev.args
+            });
+          }
+        }
+
+        if (obj.type === "content_block_delta") {
+          const idx = typeof obj.index === "number" ? obj.index : 0;
+          const text = typeof obj.delta?.text === "string" ? obj.delta.text : "";
+          if (text) {
+            content += text;
+            yield { type: "content", delta: text };
+          }
+          const thinking = typeof obj.delta?.thinking === "string" ? obj.delta.thinking : "";
+          if (thinking) {
+            yield { type: "thinking", delta: thinking };
+          }
+          const partial = typeof obj.delta?.partial_json === "string" ? obj.delta.partial_json : "";
+          if (partial) {
+            const prev = toolByIndex.get(idx) ?? { args: "" };
+            toolByIndex.set(idx, { ...prev, args: prev.args + partial });
+          }
+        }
+
+        if (obj.type === "error") {
+          yield { type: "error", message: `MiniMax stream error: ${String(obj.message || "unknown error")}` };
+        }
+
+        if (obj.type === "message_stop") break;
+      }
+
+      const toolCalls: ToolCall[] = [];
+      for (const [idx, v] of [...toolByIndex.entries()].sort((a, b) => a[0] - b[0])) {
+        const id = v.id || `tool_${idx}`;
+        const name = v.name || "";
+        const parsedArgs = safeJsonParse(v.args) ?? v.args;
+        if (name) toolCalls.push({ id, name, arguments: parsedArgs });
+      }
+
+      yield { type: "final", content, toolCalls, rawModel };
     }
   };
 }

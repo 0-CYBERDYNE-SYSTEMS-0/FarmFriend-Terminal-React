@@ -198,6 +198,9 @@ export function anthropicProvider(params: { apiKey: string; baseUrl?: string; an
             content += block.text;
             yield { type: "content", delta: block.text };
           }
+          if (block?.type === "thinking" && typeof block.thinking === "string" && block.thinking) {
+            yield { type: "thinking", delta: block.thinking };
+          }
           if (block?.type === "tool_use") {
             const prev = toolByIndex.get(idx) ?? { args: "" };
             toolByIndex.set(idx, {
@@ -214,6 +217,10 @@ export function anthropicProvider(params: { apiKey: string; baseUrl?: string; an
           if (text) {
             content += text;
             yield { type: "content", delta: text };
+          }
+          const thinking = typeof obj.delta?.thinking === "string" ? obj.delta.thinking : "";
+          if (thinking) {
+            yield { type: "thinking", delta: thinking };
           }
           const partial = typeof obj.delta?.partial_json === "string" ? obj.delta.partial_json : "";
           if (partial) {
