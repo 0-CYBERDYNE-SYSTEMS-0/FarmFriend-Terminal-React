@@ -1280,7 +1280,7 @@
     "type": "function",
     "function": {
       "name": "TodoWrite",
-      "description": "Use this tool to track progress on complex tasks that require sustained execution over time. Creates persistent state to help maintain context during long-horizon operations (30+ minutes, 5+ complex steps, or tasks that may span multiple turns).\n\nWhen to use: Multi-step investigations, tasks requiring 30+ minutes, operations spanning multiple horizons, work where progress tracking provides real value.\n\nWhen NOT to use: Quick tasks (under 5 minutes), simple queries requiring 1-3 tools, or creating todos just to 'look thorough'. True thoroughness comes from completing work well, not from excessive todo creation.",
+      "description": "Manage todo list for multi-step tasks. CRITICAL: Call this to UPDATE task status as you work (pending→in_progress→completed). Don't just create the list at the start - update it throughout execution to show progress. Users see this in real-time.",
 
       "parameters": {
         "type": "object",

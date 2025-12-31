@@ -95,6 +95,14 @@ export function resolveConfig(params?: { repoRoot?: string; userConfigPath?: str
     }
   }
 
+  // System message variant environment variable
+  if (typeof process.env.FF_SYSTEM_MESSAGE_VARIANT === "string") {
+    const variant = process.env.FF_SYSTEM_MESSAGE_VARIANT.toLowerCase();
+    if (variant === "a" || variant === "b" || variant === "c" || variant === "d" || variant === "unified") {
+      merged.system_message_variant = variant as "a" | "b" | "c" | "d";
+    }
+  }
+
   return merged;
 }
 
