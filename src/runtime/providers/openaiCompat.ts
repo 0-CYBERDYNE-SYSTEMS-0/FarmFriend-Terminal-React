@@ -184,16 +184,18 @@ export function openAICompatProvider(params: {
   appendV1?: boolean;
   preferStream?: boolean;
   reasoningContentFallback?: boolean;
+  supportsThinking?: boolean;
 }): Provider {
   const baseUrl = normalizeBaseUrl(params.baseUrl, params.appendV1 ?? true);
   const extraHeaders = params.extraHeaders ?? {};
   const mapModel = params.mapModel ?? ((m: string) => m);
   const preferStream = params.preferStream ?? true;
   const reasoningContentFallback = params.reasoningContentFallback ?? false;
+  const supportsThinking = params.supportsThinking ?? false;
 
   return {
     name: params.name,
-    async *streamChat({ model, messages, tools, temperature, maxTokens, signal, tool_choice }): AsyncGenerator<ProviderStreamEvent> {
+    async *streamChat({ model, messages, tools, temperature, maxTokens, signal, tool_choice, glmThinkingMode }): AsyncGenerator<ProviderStreamEvent> {
       const url = `${baseUrl}/chat/completions`;
       const debug = ["1", "true", "yes", "on"].includes(String(process.env.FF_DEBUG_PROVIDER || "").trim().toLowerCase());
       const debugLog = (...args: any[]) => {
@@ -206,6 +208,23 @@ export function openAICompatProvider(params: {
         model: mapModel(model),
         messages: normalizeMessages(messages)
       };
+
+      // Add thinking parameter for GLM models
+      if (supportsThinking && glmThinkingMode !== undefined) {
+        const hasTools = tools && tools.length > 0;
+
+        let thinkingType: string;
+        if (glmThinkingMode === "auto") {
+          // Auto mode: disable for tool calls (speed), enable for complex queries
+          thinkingType = hasTools ? "disabled" : "enabled";
+        } else {
+          thinkingType = glmThinkingMode;
+        }
+
+        payloadBase.thinking = {
+          type: thinkingType
+        };
+      }
 
       // Only include optional parameters if they have defined values
       if (tools?.length) {

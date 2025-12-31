@@ -312,6 +312,7 @@ export function zaiProvider(params: { apiKey: string; baseUrl: string }): Provid
     apiKey: params.apiKey,
     appendV1: false,
     reasoningContentFallback: true,
+    supportsThinking: true,
     extraHeaders: {
       "HTTP-Referer": "https://github.com/anthropics/ff-terminal",
       "X-Title": "FF-Terminal"

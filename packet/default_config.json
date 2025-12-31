@@ -79,5 +79,6 @@
   "browser_max_sessions": 5,
   "force_tool_calls": true,
   "force_tool_calls_threshold": 2,
+  "glm_thinking_mode": "disabled",
   "_providers": {}
 }

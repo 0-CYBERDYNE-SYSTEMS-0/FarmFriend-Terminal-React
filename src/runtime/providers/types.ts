@@ -45,5 +45,6 @@ export type Provider = {
     signal: AbortSignal;
     sessionId?: string;
     tool_choice?: "auto" | "any" | "none" | "required" | { type: "function"; name: string };
+    glmThinkingMode?: "auto" | "enabled" | "disabled";
   }): AsyncGenerator<ProviderStreamEvent>;
 };

@@ -480,6 +480,9 @@ export async function* runAgentTurn(params: {
 
       const forceToolChoice = shouldForceTools && tools?.length ? "any" : undefined;
 
+      // Extract GLM thinking mode (applies to all GLM models: 4.5, 4.6, 4.7)
+      const glmThinkingMode = String((cfg as any).glm_thinking_mode ?? "disabled") as "auto" | "enabled" | "disabled";
+
       for await (const ev of provider.streamChat({
         model,
         messages,
@@ -487,6 +490,7 @@ export async function* runAgentTurn(params: {
         tool_choice: forceToolChoice,
         temperature: Number((cfg as any).temperature ?? 0.7),
         maxTokens: Number((cfg as any).max_tokens ?? 12000),
+        glmThinkingMode,
         signal,
         sessionId
       })) {

@@ -21,6 +21,9 @@ export type RuntimeConfig = Record<string, unknown> & {
   force_tool_calls?: boolean;
   force_tool_calls_threshold?: number;
 
+  // GLM-specific thinking configuration (all GLM models: 4.5, 4.6, 4.7)
+  glm_thinking_mode?: "auto" | "enabled" | "disabled";
+
   // Optional key locations (recommended for background runs where env vars may be missing)
   openai_api_key?: string;
   anthropic_api_key?: string;
@@ -100,6 +103,14 @@ export function resolveConfig(params?: { repoRoot?: string; userConfigPath?: str
     const variant = process.env.FF_SYSTEM_MESSAGE_VARIANT.toLowerCase();
     if (variant === "a" || variant === "b" || variant === "c" || variant === "d" || variant === "unified") {
       merged.system_message_variant = variant as "a" | "b" | "c" | "d";
+    }
+  }
+
+  // GLM thinking configuration (applies to all GLM models: 4.5, 4.6, 4.7)
+  if (typeof process.env.GLM_THINKING_MODE === "string") {
+    const mode = process.env.GLM_THINKING_MODE.toLowerCase();
+    if (mode === "auto" || mode === "enabled" || mode === "disabled") {
+      merged.glm_thinking_mode = mode as "auto" | "enabled" | "disabled";
     }
   }
 
