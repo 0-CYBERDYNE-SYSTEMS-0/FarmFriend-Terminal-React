@@ -1442,7 +1442,7 @@ function App(props: { port: number }) {
   const [commandSkippedFields, setCommandSkippedFields] = useState<Set<string>>(new Set());
   const [commandEditValue, setCommandEditValue] = useState("");
 
-  const [showThinking, setShowThinking] = useState(false);
+  const [showThinking, setShowThinking] = useState(true);
   const [showPlanPanel, setShowPlanPanel] = useState(false);
   const [showToolDetails, setShowToolDetails] = useState(false);
   const [scrollOffset, setScrollOffset] = useState(0);
