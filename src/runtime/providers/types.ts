@@ -17,6 +17,7 @@ export type OpenAIToolSchema = {
     name: string;
     description?: string;
     parameters?: unknown;
+    strict?: boolean;
   };
 };
 

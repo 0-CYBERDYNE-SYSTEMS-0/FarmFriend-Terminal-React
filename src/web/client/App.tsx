@@ -46,14 +46,20 @@ const WS_URL = `ws://127.0.0.1:8787/ws/terminal/${DEFAULT_SESSION}`
 // Detect if content is an artifact (HTML, JSON, image, etc.)
 function detectContentType(content: string): 'artifact' | 'markdown' | 'text' {
   const trimmed = content.trim()
+  const lower = trimmed.toLowerCase()
+  const htmlSignal = /<(html|head|body|style|script|svg|canvas|iframe|table|div|section|article|main|header|footer|nav|form)\b/i
 
   // HTML artifact
-  if (trimmed.startsWith('<!DOCTYPE html>') || trimmed.startsWith('<html')) {
+  if (
+    lower.startsWith('<!doctype html>') ||
+    lower.startsWith('<html') ||
+    (trimmed.startsWith('<') && htmlSignal.test(trimmed.slice(0, 200)))
+  ) {
     return 'artifact'
   }
 
-  // JSON artifact (only if it's a complete JSON object and fairly large)
-  if ((trimmed.startsWith('{') || trimmed.startsWith('[')) && trimmed.length > 100) {
+  // JSON artifact (only if it's a complete JSON object/array)
+  if ((trimmed.startsWith('{') || trimmed.startsWith('[')) && (trimmed.endsWith('}') || trimmed.endsWith(']'))) {
     try {
       JSON.parse(trimmed)
       return 'artifact'
@@ -120,6 +126,8 @@ export default function App() {
   const [isConnected, setIsConnected] = useState(false)
   const [isProcessing, setIsProcessing] = useState(false)
   const [assistantContent, setAssistantContent] = useState('')
+  const lastChunkAtRef = useRef<number | null>(null)
+  const turnStartedAtRef = useRef<number | null>(null)
   const [attachments, setAttachments] = useState<FileAttachment[]>([])
   const [messageAddedForTurn, setMessageAddedForTurn] = useState(false)
   const [showConsole, setShowConsole] = useState(false)
@@ -204,6 +212,7 @@ export default function App() {
 
             case 'response':
               // Accumulate streaming content
+              lastChunkAtRef.current = Date.now()
               setAssistantContent(prev => prev + msg.content)
               break
 
@@ -239,10 +248,14 @@ export default function App() {
                 content: msg.content,
                 timestamp: msg.timestamp * 1000
               }])
+              lastChunkAtRef.current = null
+              turnStartedAtRef.current = null
               setIsProcessing(false)
               break
 
             case 'command_received':
+              turnStartedAtRef.current = Date.now()
+              lastChunkAtRef.current = Date.now()
               setIsProcessing(true)
               break
 
@@ -271,6 +284,8 @@ export default function App() {
                 }
                 return ''  // Always clear assistantContent
               })
+              lastChunkAtRef.current = null
+              turnStartedAtRef.current = null
               setIsProcessing(false)
               break
           }
@@ -309,9 +324,15 @@ export default function App() {
 
   // Fallback timeout for streaming detection (in case turn_finished is missed)
   useEffect(() => {
-    if (!isProcessing || assistantContent === '') return
+    if (!isProcessing) return
 
-    const timeout = setTimeout(() => {
+    const interval = setInterval(() => {
+      const lastChunkAt = lastChunkAtRef.current
+      if (!lastChunkAt) return
+
+      const idleMs = Date.now() - lastChunkAt
+      if (idleMs < 20000) return
+
       if (assistantContent && !messageAddedForTurn) {
         setMessages(prev => [...prev, {
           id: `${Date.now()}-assistant`,
@@ -322,10 +343,12 @@ export default function App() {
         setAssistantContent('')
         setIsProcessing(false)
         setMessageAddedForTurn(true)
+        lastChunkAtRef.current = null
+        turnStartedAtRef.current = null
       }
-    }, 5000)
+    }, 2000)
 
-    return () => clearTimeout(timeout)
+    return () => clearInterval(interval)
   }, [assistantContent, isProcessing, messageAddedForTurn])
 
   const sendMessage = useCallback(() => {
