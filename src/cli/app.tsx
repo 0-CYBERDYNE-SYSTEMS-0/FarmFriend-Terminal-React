@@ -15,8 +15,10 @@ import { resolveConfig } from "../runtime/config/loadConfig.js";
 import { loadCommands, listCommands, getCommand } from "../runtime/commands/loader.js";
 import { loadAgentConfigs, listAgentConfigs, getAllTemplates } from "../runtime/agents/loader.js";
 import { parseCommand } from "../runtime/commands/parser.js";
+import { listSkillStubs } from "../runtime/tools/implementations/skills.js";
 import type { Command } from "../runtime/commands/types.js";
 import type { AgentConfig, AgentTemplate } from "../runtime/agents/types.js";
+import type { SkillStub } from "../runtime/tools/implementations/skills.js";
 import { validateWorkspace, generateReport } from "../runtime/workspace/doctor.js";
 import { planMigration, executeMigration } from "../runtime/workspace/migration.js";
 import { isValidSessionId as isValidSessionIdFormat } from "../shared/ids.js";
@@ -793,7 +795,7 @@ const PlanPanel = memo(function PlanPanel(props: {
 
 // TodoSummary removed - replaced with inline task status
 
-type Mode = "chat" | "models" | "mounts" | "init_project" | "wizard" | "commands" | "agents" | "skills";
+type Mode = "chat" | "help" | "models" | "mounts" | "init_project" | "wizard" | "commands" | "agents" | "skills";
 type ModelKey = "model" | "subagentModel" | "toolModel" | "webModel" | "imageModel" | "videoModel";
 type ModelRow = { key: ModelKey; label: string; help: string };
 
@@ -824,6 +826,111 @@ const LINE_COMMIT_DELAY_STREAMING = 50;  // Faster during active streaming
 const LINE_COMMIT_DELAY_IDLE = 120;      // Original delay for idle state
 
 type ProjectStub = { dir: string; name: string; status: "ready" | "needs_setup" };
+type HelpRow = { command: string; description: string };
+type SkillRow = SkillStub & { displaySlug: string };
+
+const HELP_ROWS: HelpRow[] = [
+  { command: "/help", description: "Show this panel" },
+  { command: "/tools", description: "List available tools" },
+  { command: "/agents", description: "Open agent configuration wizard" },
+  { command: "/mounts", description: "Show mounts status (read-only)" },
+  { command: "/wizard", description: "Open wizard menu (models, mounts, init-project, commands, agents, skills)" },
+  { command: "/wizard models", description: "Open models wizard" },
+  { command: "/wizard mounts", description: "Open mounts wizard (read-only)" },
+  { command: "/wizard init-project", description: "Open project initialization picker" },
+  { command: "/wizard commands", description: "Open custom commands manager" },
+  { command: "/wizard agents", description: "Open agent configuration wizard" },
+  { command: "/wizard skills", description: "Open skills wizard (create reusable skills)" },
+  { command: "/models", description: "Shortcut for /wizard models" },
+  { command: "/commands", description: "Open custom commands manager" },
+  { command: "/command", description: "Alias for /commands" },
+  { command: "/<custom> [args]", description: "Run a custom command by slug (e.g., /review $1)" },
+  { command: "/skills", description: "Open skills wizard" },
+  { command: "/mode [auto|confirm|read_only|planning]", description: "Set operation mode" },
+  { command: "/planning", description: "Alias for /mode planning" },
+  { command: "/init", description: "Run initialization analysis" },
+  { command: "/init-project [path]", description: "Initialize from a project directory (picker if omitted)" },
+  { command: "/clear", description: "Clear transcript" },
+  { command: "/doctor", description: "Check workspace health and fix issues" },
+  { command: "/theme (/colors)", description: "Print color-role samples" },
+  { command: "/quit (/exit)", description: "Exit" },
+  { command: "//text", description: "Send a literal prompt starting with '/'" }
+];
+
+const HELP_SHORTCUTS: HelpRow[] = [
+  { command: "Shift+Tab", description: "Cycle operation mode" },
+  { command: "Ctrl+T", description: "Toggle thinking visibility" },
+  { command: "Ctrl+P", description: "Toggle plan panel" },
+  { command: "Ctrl+E", description: "Toggle tool details" },
+  { command: "Ctrl+O", description: "Toggle subagent swarm" },
+  { command: "PageUp/PageDown", description: "Scroll transcript" },
+  { command: "Home", description: "Jump to bottom" }
+];
+
+const wrapText = (text: string, width: number): string[] => {
+  if (width <= 0) return [text];
+  const words = text.split(/\s+/).filter(Boolean);
+  if (words.length === 0) return [""];
+  const lines: string[] = [];
+  let current = "";
+  for (const word of words) {
+    if (!current) {
+      if (word.length <= width) {
+        current = word;
+        continue;
+      }
+      let remaining = word;
+      while (remaining.length > width) {
+        lines.push(remaining.slice(0, width));
+        remaining = remaining.slice(width);
+      }
+      current = remaining;
+      continue;
+    }
+    if (current.length + 1 + word.length <= width) {
+      current += ` ${word}`;
+      continue;
+    }
+    lines.push(current);
+    if (word.length <= width) {
+      current = word;
+      continue;
+    }
+    let remaining = word;
+    while (remaining.length > width) {
+      lines.push(remaining.slice(0, width));
+      remaining = remaining.slice(width);
+    }
+    current = remaining;
+  }
+  if (current) lines.push(current);
+  return lines.length ? lines : [""];
+};
+
+const buildHelpTable = (rows: HelpRow[], cmdWidth: number, descWidth: number): string[] => {
+  const pad = (text: string, width: number) => text.padEnd(width);
+  const border = `+${"-".repeat(cmdWidth + 2)}+${"-".repeat(descWidth + 2)}+`;
+  const divider = `+${"=".repeat(cmdWidth + 2)}+${"=".repeat(descWidth + 2)}+`;
+  const lines: string[] = [
+    border,
+    `| ${pad("Command", cmdWidth)} | ${pad("Description", descWidth)} |`,
+    divider
+  ];
+
+  for (const row of rows) {
+    const cmdLines = wrapText(row.command, cmdWidth);
+    const descLines = wrapText(row.description, descWidth);
+    const rowHeight = Math.max(cmdLines.length, descLines.length);
+    for (let i = 0; i < rowHeight; i += 1) {
+      const cmd = pad(cmdLines[i] || "", cmdWidth);
+      const desc = pad(descLines[i] || "", descWidth);
+      lines.push(`| ${cmd} | ${desc} |`);
+    }
+  }
+
+  lines.push(border);
+  return lines;
+};
 
 type MainViewProps = {
   displayMode: string;
@@ -847,6 +954,8 @@ type MainViewProps = {
   profileName: string;
   commandRows: Command[];
   commandsIndex: number;
+  skillRows: SkillRow[];
+  skillsIndex: number;
   agentRows: AgentConfig[];
   agentsIndex: number;
   agentTemplates: AgentTemplate[];
@@ -893,6 +1002,8 @@ const MainView = memo(function MainView(props: MainViewProps) {
     profileName,
     commandRows,
     commandsIndex,
+    skillRows,
+    skillsIndex,
     agentRows,
     agentsIndex,
     agentTemplates,
@@ -934,6 +1045,32 @@ const MainView = memo(function MainView(props: MainViewProps) {
       <Text dimColor>{WIZARD_ROWS[wizardIndex]?.help}</Text>
     </Box>
   ) : null;
+
+  const helpPanel = mode === "help" ? (() => {
+    const maxWidth = Math.max(40, Math.min(stdoutWidth, 120));
+    const cmdWidth = Math.max(18, Math.min(42, Math.floor((maxWidth - 7) * 0.42)));
+    const descWidth = Math.max(20, maxWidth - cmdWidth - 7);
+    const commandLines = buildHelpTable(HELP_ROWS, cmdWidth, descWidth);
+    const shortcutLines = buildHelpTable(HELP_SHORTCUTS, cmdWidth, descWidth);
+
+    return (
+      <Box flexDirection="column">
+        <Text>Help</Text>
+        <Text dimColor>Esc: back</Text>
+        <Box flexDirection="column" marginTop={1}>
+          {commandLines.map((line, idx) => (
+            <Text key={`help-cmd-${idx}`}>{line}</Text>
+          ))}
+        </Box>
+        <Box flexDirection="column" marginTop={1}>
+          <Text>Shortcuts</Text>
+          {shortcutLines.map((line, idx) => (
+            <Text key={`help-shortcut-${idx}`}>{line}</Text>
+          ))}
+        </Box>
+      </Box>
+    );
+  })() : null;
 
   const mountsPanel = mode === "mounts" ? (
     <Box flexDirection="column">
@@ -1306,14 +1443,44 @@ const MainView = memo(function MainView(props: MainViewProps) {
   const skillsPanel = mode === "skills" ? (() => {
     // Skills list view
     if (skillMenuMode === "list") {
+      const selectedSkill = skillRows[skillsIndex];
       return (
         <Box flexDirection="column">
           <Text>Skills Manager</Text>
-          <Text dimColor>Esc: back • n: create new skill</Text>
+          <Text dimColor>Esc: back • ↑/↓: select • Enter: view • n: create new</Text>
           <Box flexDirection="column" marginTop={1}>
-            <Text dimColor>Skills are stored in: ff-terminal-workspace/skills/</Text>
-            <Text dimColor>Create reusable AI capabilities with custom instructions</Text>
+            {skillRows.length ? (
+              skillRows.slice(Math.max(0, skillsIndex - 8), skillsIndex + 12).map((skill, idx) => {
+                const absoluteIndex = Math.max(0, skillsIndex - 8) + idx;
+                const selected = absoluteIndex === skillsIndex;
+                const summary = skill.summary || skill.description || skill.name || "";
+                const source = skill.source || "workspace";
+                return (
+                  <Text key={`${skill.displaySlug}-${skill.source}-${absoluteIndex}`} color={selected ? theme.selected : theme.unselected} dimColor={!selected}>
+                    {selected ? "› " : "  "}
+                    /{skill.displaySlug}
+                    {summary ? ` — ${summary}` : ""}
+                    {source ? ` [${source}]` : ""}
+                  </Text>
+                );
+              })
+            ) : (
+              <Text color="yellow">No skills found. Press 'n' to create one</Text>
+            )}
           </Box>
+          {selectedSkill ? (
+            <Box flexDirection="column" marginTop={1}>
+              <Text dimColor>Source: {selectedSkill.source} • Kind: {selectedSkill.kind}</Text>
+              <Text dimColor>Path: {selectedSkill.path}</Text>
+              <Text dimColor>Tags: {selectedSkill.tags?.join(", ") || "(none)"}</Text>
+              <Text dimColor>Triggers: {selectedSkill.triggers?.join(", ") || "(none)"}</Text>
+            </Box>
+          ) : (
+            <Box flexDirection="column" marginTop={1}>
+              <Text dimColor>Skills are stored in: {path.join(workspaceDir, "skills")}</Text>
+              <Text dimColor>Create reusable AI capabilities with custom instructions</Text>
+            </Box>
+          )}
         </Box>
       );
     }
@@ -1380,6 +1547,7 @@ const MainView = memo(function MainView(props: MainViewProps) {
         {daemonVersion ? ` (daemon ${daemonVersion})` : ""}
       </Text>
       {wizardPanel}
+      {helpPanel}
       {mountsPanel}
       {initProjectPanel}
       {modelsPanel}
@@ -1439,6 +1607,8 @@ function App(props: { port: number }) {
   const [projectIndex, setProjectIndex] = useState(0);
   const [commandsRefresh, setCommandsRefresh] = useState(0);
   const [commandsIndex, setCommandsIndex] = useState(0);
+  const [skillsRefresh, setSkillsRefresh] = useState(0);
+  const [skillsIndex, setSkillsIndex] = useState(0);
   const [agentsRefresh, setAgentsRefresh] = useState(0);
   const [agentsIndex, setAgentsIndex] = useState(0);
   const [agentMenuMode, setAgentMenuMode] = useState<"list" | "creation_method" | "template_select" | "form" | "ai_description">("list");
@@ -1486,12 +1656,13 @@ function App(props: { port: number }) {
     [mountsCfg.mounts.claude, mountsCfg.mounts.factory]
   );
 
+  const repoRoot = useMemo(() => findRepoRoot(), []);
+
   const workspaceDir = useMemo(() => {
-    const repoRoot = findRepoRoot();
     const runtimeCfg = resolveConfig({ repoRoot });
     const workspaceFromEnv = process.env.FF_WORKSPACE_DIR;
     return resolveWorkspaceDir((runtimeCfg as any).workspace_dir ?? workspaceFromEnv ?? undefined);
-  }, []);
+  }, [repoRoot]);
 
   // Load last active session on mount
   useEffect(() => {
@@ -1554,6 +1725,30 @@ function App(props: { port: number }) {
     const cmds = loadCommands(workspaceDir);
     return listCommands(cmds);
   }, [workspaceDir, commandsRefresh]);
+
+  const skillRows = useMemo(() => {
+    // Force recompute when refresh is triggered
+    // eslint-disable-next-line @typescript-eslint/no-unused-expressions
+    skillsRefresh;
+    const stubs = listSkillStubs({ workspaceDir, repoRoot });
+    const rows: SkillRow[] = stubs.map((skill) => {
+      let displaySlug = String(skill.slug || "").trim();
+      if (!displaySlug) {
+        if (skill.kind === "markdown_commands") {
+          displaySlug = path.basename(skill.path, path.extname(skill.path));
+        } else {
+          displaySlug = path.basename(path.dirname(skill.path));
+        }
+      }
+      return { ...skill, displaySlug };
+    });
+    rows.sort((a, b) => {
+      const sourceCmp = String(a.source).localeCompare(String(b.source));
+      if (sourceCmp !== 0) return sourceCmp;
+      return a.displaySlug.localeCompare(b.displaySlug);
+    });
+    return rows;
+  }, [workspaceDir, repoRoot, skillsRefresh]);
 
   const agentRows = useMemo(() => {
     // Force recompute when refresh is triggered
@@ -1622,6 +1817,41 @@ function App(props: { port: number }) {
       commitLines(opts?.immediate ?? false);
     },
     [commitLines]
+  );
+
+  const pushWrappedSystemLines = useCallback(
+    (rows: Array<{ label: string; value?: string | number | null }>) => {
+      const maxWidth = Math.max(50, Math.min(stdoutWidth, 140));
+      const out: Line[] = [];
+      for (const row of rows) {
+        const label = row.label.trim();
+        const prefix = label ? `${label}: ` : "";
+        const rawValue =
+          row.value === undefined || row.value === null || String(row.value).length === 0
+            ? "(none)"
+            : String(row.value);
+        const wrapWidth = Math.max(20, maxWidth - prefix.length);
+        const logicalLines = rawValue.split(/\r?\n/);
+        if (!logicalLines.length) {
+          out.push({ kind: "system", text: prefix + rawValue });
+          continue;
+        }
+        logicalLines.forEach((line, lineIndex) => {
+          const chunks = wrapText(line, wrapWidth);
+          if (!chunks.length) {
+            const pad = lineIndex === 0 ? prefix : " ".repeat(prefix.length);
+            out.push({ kind: "system", text: pad });
+            return;
+          }
+          chunks.forEach((chunk, chunkIndex) => {
+            const pad = lineIndex === 0 && chunkIndex === 0 ? prefix : " ".repeat(prefix.length);
+            out.push({ kind: "system", text: pad + chunk });
+          });
+        });
+      }
+      if (out.length) pushLines(out);
+    },
+    [pushLines, stdoutWidth]
   );
 
   const appendToLastLine = useCallback(
@@ -2120,6 +2350,13 @@ Then apply it with agent_apply to save the agent config.`;
       return;
     }
 
+    if (mode === "help") {
+      if (key.escape) {
+        setMode("chat");
+      }
+      return;
+    }
+
     // Mounts wizard mode.
     if (mode === "mounts") {
       if (key.escape) {
@@ -2243,6 +2480,8 @@ Then apply it with agent_apply to save the agent config.`;
         }
         if (w === "skills") {
           setMode("skills");
+          setSkillsIndex(0);
+          setSkillsRefresh((n) => n + 1);
           pushLines({ kind: "system", text: "Skills: Esc back • n create new skill using skill_draft" });
           return;
         }
@@ -2313,10 +2552,10 @@ Then apply it with agent_apply to save the agent config.`;
       if (key.return) {
         const cmd = commandRows[commandsIndex];
         if (cmd) {
-          pushLines([
-            { kind: "system", text: `Command: /${cmd.slug}` },
-            { kind: "system", text: `Description: ${cmd.description || "(no description)"}` },
-            { kind: "system", text: `Template preview: ${cmd.template.slice(0, 100)}${cmd.template.length > 100 ? "..." : ""}` }
+          pushWrappedSystemLines([
+            { label: "Command", value: `/${cmd.slug}` },
+            { label: "Description", value: cmd.description || "(no description)" },
+            { label: "Template", value: cmd.template }
           ]);
         }
         return;
@@ -2479,11 +2718,11 @@ After the draft is created, use command_apply to apply it and save the command.`
       if (key.return) {
         const agent = agentRows[agentsIndex];
         if (agent) {
-          pushLines([
-            { kind: "system", text: `Agent: ${agent.name}` },
-            { kind: "system", text: `Description: ${agent.description}` },
-            { kind: "system", text: `Mode: ${agent.mode || "auto"}` },
-            { kind: "system", text: `Max turns: ${agent.maxTurns || "∞"}` }
+          pushWrappedSystemLines([
+            { label: "Agent", value: agent.name || "(unnamed)" },
+            { label: "Description", value: agent.description || "(no description)" },
+            { label: "Mode", value: agent.mode || "auto" },
+            { label: "Max turns", value: agent.maxTurns ?? "∞" }
           ]);
         }
         return;
@@ -2742,6 +2981,33 @@ Call agent_draft with these parameters. Show me the preview but DO NOT call agen
         setMode("chat");
         return;
       }
+      if (key.upArrow) {
+        if (skillRows.length) {
+          setSkillsIndex((i) => (i - 1 + skillRows.length) % skillRows.length);
+        }
+        return;
+      }
+      if (key.downArrow) {
+        if (skillRows.length) {
+          setSkillsIndex((i) => (i + 1) % skillRows.length);
+        }
+        return;
+      }
+      if (key.return) {
+        const skill = skillRows[skillsIndex];
+        if (skill) {
+          pushWrappedSystemLines([
+            { label: "Skill", value: `/${skill.displaySlug}` },
+            { label: "Name", value: skill.name || "(none)" },
+            { label: "Summary", value: skill.summary || skill.description || "(none)" },
+            { label: "Source", value: `${skill.source} (${skill.kind})` },
+            { label: "Path", value: skill.path },
+            { label: "Tags", value: skill.tags?.join(", ") || "(none)" },
+            { label: "Triggers", value: skill.triggers?.join(", ") || "(none)" }
+          ]);
+        }
+        return;
+      }
       if (ch === "n") {
         setSkillMenuMode("form");
         setSkillFormStep(0);
@@ -2891,50 +3157,7 @@ Use skill_draft first to create the draft, then skill_apply to create the final 
     };
 
     const showHelp = () => {
-      pushLines([
-        { kind: "system", text: "Commands:" },
-        { kind: "system", text: "  /help            Show this help" },
-        { kind: "system", text: "  /tools           List available tools" },
-        { kind: "system", text: "  /agents          List available agent roles/models" },
-        { kind: "system", text: "  /mounts          Show mounts status (read-only)" },
-        { kind: "system", text: "" },
-        { kind: "system", text: "Wizards:" },
-        { kind: "system", text: "  /wizard          Open wizard menu (models, mounts, init-project, commands, agents, skills)" },
-        { kind: "system", text: "  /wizard models   Open models wizard" },
-        { kind: "system", text: "  /wizard mounts   Open mounts wizard (read-only)" },
-        { kind: "system", text: "  /wizard init-project  Open project initialization picker" },
-        { kind: "system", text: "  /wizard commands Open custom commands manager" },
-        { kind: "system", text: "  /wizard agents   Open agent configuration wizard" },
-        { kind: "system", text: "  /wizard skills   Open skills wizard (create reusable skills)" },
-        { kind: "system", text: "  /models          Shortcut for /wizard models" },
-        { kind: "system", text: "  /commands        Open custom commands manager" },
-        { kind: "system", text: "  /command SLUG [args]  Execute custom command with arguments" },
-        { kind: "system", text: "  /agents          Open agent configuration" },
-        { kind: "system", text: "  /skills          Open skills wizard" },
-        { kind: "system", text: "" },
-        { kind: "system", text: "Settings:" },
-        { kind: "system", text: "  /mode [auto|confirm|read_only|planning]  Set operation mode" },
-        { kind: "system", text: "  /planning        Alias for /mode planning" },
-        { kind: "system", text: "" },
-        { kind: "system", text: "Project:" },
-        { kind: "system", text: "  /init            Run initialization analysis" },
-        { kind: "system", text: "  /init-project [path]  Initialize from a project directory (picker if omitted)" },
-        { kind: "system", text: "" },
-        { kind: "system", text: "Other:" },
-        { kind: "system", text: "  /clear           Clear transcript" },
-        { kind: "system", text: "  /doctor          Check workspace health and fix issues" },
-        { kind: "system", text: "  /theme (/colors) Print color-role samples" },
-        { kind: "system", text: "  /quit (/exit)    Exit" },
-        { kind: "system", text: "  //text           Send a literal prompt starting with '/'" },
-        { kind: "system", text: "" },
-            { kind: "system", text: "Shortcuts:" },
-            { kind: "system", text: "  Shift+Tab        Cycle operation mode" },
-            { kind: "system", text: "  Ctrl+T           Toggle thinking visibility" },
-            { kind: "system", text: "  Ctrl+P           Toggle plan panel" },
-            { kind: "system", text: "  Ctrl+E           Toggle tool details" },
-            { kind: "system", text: "  PageUp/PageDown  Scroll transcript" },
-            { kind: "system", text: "  Home             Jump to bottom" }
-          ]);
+      setMode("help");
     };
 
     const showAgents = () => {
@@ -3168,6 +3391,8 @@ Use skill_draft first to create the draft, then skill_apply to create the final 
             setSkillFormData({});
             setSkillSkippedFields(new Set());
             setSkillEditValue("");
+            setSkillsIndex(0);
+            setSkillsRefresh((n) => n + 1);
             setInputValue("");
             return;
           }
@@ -3392,6 +3617,8 @@ Use skill_draft first to create the draft, then skill_apply to create the final 
         profileName={profileName}
         commandRows={commandRows}
         commandsIndex={commandsIndex}
+        skillRows={skillRows}
+        skillsIndex={skillsIndex}
         agentRows={agentRows}
         agentsIndex={agentsIndex}
         agentTemplates={agentTemplates}
