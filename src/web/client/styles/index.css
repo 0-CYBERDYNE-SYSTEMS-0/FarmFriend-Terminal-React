@@ -38,3 +38,135 @@ code {
 ::-webkit-scrollbar-thumb:hover {
   background: #444;
 }
+
+/* Thinking message styles - readable but visually distinct */
+.message-thinking {
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.15) 0%, rgba(30, 58, 138, 0.1) 100%);
+  border-left: 4px solid #60a5fa;
+  border-radius: 8px;
+  padding: 16px;
+  margin: 12px 0;
+  position: relative;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.message-thinking::before {
+  content: '💭';
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  opacity: 0.5;
+  font-size: 14px;
+}
+
+.message-thinking p {
+  margin: 0;
+  line-height: 1.7;
+  color: #e2e8f0;
+  font-style: italic;
+  padding-right: 24px;
+}
+
+/* Enhance readability within thinking blocks */
+.message-thinking strong {
+  color: #ffffff;
+  font-weight: 600;
+}
+
+.message-thinking code {
+  background: rgba(0, 0, 0, 0.3);
+  padding: 2px 6px;
+  border-radius: 4px;
+  color: #93c5fd;
+  font-style: normal;
+}
+
+/* Console panel enhancements */
+.console-event-log {
+  font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', 'Monaco', 'Courier New', monospace;
+}
+
+.event-card {
+  position: relative;
+  overflow: hidden;
+}
+
+.event-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 3px;
+  height: 100%;
+  background: linear-gradient(to bottom, transparent, currentColor, transparent);
+  opacity: 0.5;
+}
+
+.event-card:hover {
+  transform: translateX(2px);
+}
+
+/* Smooth scrollbar for console */
+.console-event-log .overflow-y-auto::-webkit-scrollbar {
+  width: 6px;
+}
+
+.console-event-log .overflow-y-auto::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 3px;
+}
+
+.console-event-log .overflow-y-auto::-webkit-scrollbar-thumb {
+  background: linear-gradient(to bottom, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.2));
+  border-radius: 3px;
+}
+
+.console-event-log .overflow-y-auto::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(to bottom, rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0.3));
+}
+
+/* Console header glass effect */
+.console-header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+/* Pulse animation for new events */
+@keyframes pulse-border {
+  0%, 100% { border-color: rgba(59, 130, 246, 0.5); }
+  50% { border-color: rgba(59, 130, 246, 1); }
+}
+
+.event-card.new-event {
+  animation: pulse-border 1s ease-in-out;
+}
+
+/* Mobile drawer animations */
+@keyframes slide-up {
+  from {
+    transform: translateY(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.animate-slide-up {
+  animation: slide-up 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.animate-fade-in {
+  animation: fade-in 0.2s ease-out;
+}

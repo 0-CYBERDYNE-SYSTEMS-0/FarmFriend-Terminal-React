@@ -4,7 +4,7 @@
   "use_lm_studio": false,
   "use_litellm": false,
   "use_groq": false,
-  "use_zai": false,
+  "use_zai": true,
   "use_minimax": false,
   "use_openai_direct": false,
   "ollama_base_url": "http://localhost:11434",
@@ -23,7 +23,8 @@
   "tool_limit_total": 5000,
   "tool_limit_per_tool": 2000,
   "tool_history_limit": 5000,
-  "context_window": 32768,
+  "context_window": 200000,
+  "max_tokens": 16384,
   "temperature": 0.7,
   "ollama_options": {},
   "enable_thinking": true,
@@ -78,5 +79,6 @@
   "browser_max_sessions": 5,
   "force_tool_calls": true,
   "force_tool_calls_threshold": 2,
+  "glm_thinking_mode": "disabled",
   "_providers": {}
 }

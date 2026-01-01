@@ -83,16 +83,34 @@ function convertMessages(messages: OpenAIMessage[]): { anthropicMessages: any[];
 function convertTools(tools: OpenAIToolSchema[]): any[] {
   return tools
     .filter((t) => t.type === "function")
-    .map((t) => ({
-      name: t.function.name,
-      description: t.function.description || "",
-      input_schema: t.function.parameters || { type: "object", properties: {} }
-    }));
+    .map((t) => {
+      const tool: any = {
+        name: t.function.name,
+        description: t.function.description || "",
+        input_schema: t.function.parameters || { type: "object", properties: {} }
+      };
+      // Preserve strict mode for Anthropic structured outputs
+      if (t.function.strict === true) {
+        tool.strict = true;
+      }
+      return tool;
+    });
+}
+
+function unescapeHtml(text: string): string {
+  return text
+    .replace(/&gt;/g, '>')
+    .replace(/&lt;/g, '<')
+    .replace(/&amp;/g, '&')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'");
 }
 
 function safeJsonParse(raw: string): unknown {
   try {
-    return JSON.parse(raw);
+    // Unescape HTML entities before parsing (GLM models sometimes HTML-encode)
+    const unescaped = unescapeHtml(raw);
+    return JSON.parse(unescaped);
   } catch {
     return null;
   }
@@ -112,13 +130,34 @@ function toolCallsFromBlocks(blocks: any[]): ToolCall[] {
   for (const b of blocks) {
     if (!b || typeof b !== "object") continue;
     if (b.type !== "tool_use") continue;
+
+    // Recursively unescape HTML in arguments object
+    const unescapedArgs = unescapeObjectValues(b.input ?? {});
+
     out.push({
       id: String(b.id || `tool_${out.length}`),
       name: String(b.name || ""),
-      arguments: b.input ?? {}
+      arguments: unescapedArgs
     });
   }
   return out;
+}
+
+function unescapeObjectValues(obj: any): any {
+  if (typeof obj === 'string') {
+    return unescapeHtml(obj);
+  }
+  if (Array.isArray(obj)) {
+    return obj.map(unescapeObjectValues);
+  }
+  if (obj && typeof obj === 'object') {
+    const result: any = {};
+    for (const [key, value] of Object.entries(obj)) {
+      result[key] = unescapeObjectValues(value);
+    }
+    return result;
+  }
+  return obj;
 }
 
 function toolCallsFromAnthropicStream(toolByIndex: Map<number, { id?: string; name?: string; args: string }>): ToolCall[] {
@@ -127,8 +166,10 @@ function toolCallsFromAnthropicStream(toolByIndex: Map<number, { id?: string; na
     const id = v.id || `tool_${idx}`;
     const name = v.name || "";
     const parsedArgs = safeJsonParse(v.args) ?? v.args;
+    // Recursively unescape HTML entities in parsed arguments
+    const unescapedArgs = unescapeObjectValues(parsedArgs);
     if (!name) continue;
-    out.push({ id, name, arguments: parsedArgs });
+    out.push({ id, name, arguments: unescapedArgs });
   }
   return out;
 }
@@ -169,7 +210,7 @@ function zaiAnthropicProvider(params: { apiKey: string; baseUrl: string; endpoin
           Authorization: `Bearer ${params.apiKey}`,
           "x-api-key": params.apiKey,
           "anthropic-version": String(process.env.ANTHROPIC_VERSION || "2023-06-01"),
-          "anthropic-beta": "prompt-caching-2024-07-31"
+          "anthropic-beta": "prompt-caching-2024-07-31,structured-outputs-2025-11-13"
         },
         body: JSON.stringify(payload),
         signal
@@ -271,6 +312,7 @@ export function zaiProvider(params: { apiKey: string; baseUrl: string }): Provid
     apiKey: params.apiKey,
     appendV1: false,
     reasoningContentFallback: true,
+    supportsThinking: true,
     extraHeaders: {
       "HTTP-Referer": "https://github.com/anthropics/ff-terminal",
       "X-Title": "FF-Terminal"

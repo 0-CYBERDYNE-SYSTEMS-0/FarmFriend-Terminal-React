@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { Markdown } from './components/Markdown'
 import { ArtifactPreview } from './components/ArtifactPreview'
 import { FileUpload } from './components/FileUpload'
+import { ConsoleEventLog } from './components/ConsoleEventLog'
 import { ThemeProvider, useTheme } from './contexts/ThemeContext'
 
 // Types for WebSocket messages
@@ -9,6 +10,7 @@ type WebSocketMessage =
   | { type: 'system'; content: string; session_id: string; timestamp: number }
   | { type: 'response'; content: string; session_id: string; timestamp: number }
   | { type: 'thinking'; content: string; session_id: string; timestamp: number }
+  | { type: 'thinking_xml'; content: string; session_id: string; timestamp: number }
   | { type: 'tool_call'; tool_name: string; content: string; session_id: string; timestamp: number }
   | { type: 'error'; content: string; session_id: string; timestamp: number }
   | { type: 'pong'; session_id: string; timestamp: number }
@@ -17,7 +19,7 @@ type WebSocketMessage =
 
 type ChatMessage = {
   id: string
-  role: 'user' | 'assistant' | 'system' | 'error'
+  role: 'user' | 'assistant' | 'system' | 'error' | 'thinking'
   content: string
   timestamp: number
   toolName?: string
@@ -31,20 +33,34 @@ type FileAttachment = {
   data: string
 }
 
+type ConsoleEvent = {
+  id: string
+  type: string
+  content: string
+  timestamp: number
+  metadata?: any
+}
+
 const DEFAULT_SESSION = 'default-session'
 const WS_URL = `ws://127.0.0.1:8787/ws/terminal/${DEFAULT_SESSION}`
 
 // Detect if content is an artifact (HTML, JSON, image, etc.)
 function detectContentType(content: string): 'artifact' | 'markdown' | 'text' {
   const trimmed = content.trim()
+  const lower = trimmed.toLowerCase()
+  const htmlSignal = /<(html|head|body|style|script|svg|canvas|iframe|table|div|section|article|main|header|footer|nav|form)\b/i
 
   // HTML artifact
-  if (trimmed.startsWith('<!DOCTYPE html>') || trimmed.startsWith('<html')) {
+  if (
+    lower.startsWith('<!doctype html>') ||
+    lower.startsWith('<html') ||
+    (trimmed.startsWith('<') && htmlSignal.test(trimmed.slice(0, 200)))
+  ) {
     return 'artifact'
   }
 
-  // JSON artifact (only if it's a complete JSON object and fairly large)
-  if ((trimmed.startsWith('{') || trimmed.startsWith('[')) && trimmed.length > 100) {
+  // JSON artifact (only if it's a complete JSON object/array)
+  if ((trimmed.startsWith('{') || trimmed.startsWith('[')) && (trimmed.endsWith('}') || trimmed.endsWith(']'))) {
     try {
       JSON.parse(trimmed)
       return 'artifact'
@@ -85,6 +101,15 @@ function MessageContent({ content, role }: { content: string; role: string }) {
     return <p className={`whitespace-pre-wrap break-words text-sm leading-relaxed ${theme.user}`}>{content}</p>
   }
 
+  // Handle thinking messages with special styling
+  if (role === 'thinking') {
+    return (
+      <div className="message-thinking">
+        <p className="mb-0 whitespace-pre-wrap">{content}</p>
+      </div>
+    );
+  }
+
   const contentType = detectContentType(content)
 
   if (contentType === 'artifact') {
@@ -111,20 +136,44 @@ function AppContent() {
   const [isConnected, setIsConnected] = useState(false)
   const [isProcessing, setIsProcessing] = useState(false)
   const [assistantContent, setAssistantContent] = useState('')
+  const lastChunkAtRef = useRef<number | null>(null)
+  const turnStartedAtRef = useRef<number | null>(null)
   const [attachments, setAttachments] = useState<FileAttachment[]>([])
   const [messageAddedForTurn, setMessageAddedForTurn] = useState(false)
+  const [showConsole, setShowConsole] = useState(false)
+  const [consoleEvents, setConsoleEvents] = useState<ConsoleEvent[]>([])
+  const [isMobile, setIsMobile] = useState(false)
 
   const wsRef = useRef<WebSocket | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const messagesContainerRef = useRef<HTMLDivElement>(null)
   const reconnectTimeoutRef = useRef<NodeJS.Timeout>()
 
   // Streaming optimization: buffer content and update smoothly
   const streamBufferRef = useRef<string>('')
   const streamRafRef = useRef<number | null>(null)
 
-  // Auto-scroll to bottom
+  // Detect mobile/tablet vs desktop for console layout
+  useEffect(() => {
+    const checkScreenSize = () => {
+      setIsMobile(window.innerWidth < 768) // Mobile breakpoint
+    }
+
+    checkScreenSize()
+    window.addEventListener('resize', checkScreenSize)
+    return () => window.removeEventListener('resize', checkScreenSize)
+  }, [])
+
+  // Auto-scroll only if user is near bottom
   const scrollToBottom = useCallback(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    const container = messagesContainerRef.current
+    if (!container) return
+
+    const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 150
+
+    if (isNearBottom) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    }
   }, [])
 
   useEffect(() => {
@@ -146,6 +195,20 @@ function AppContent() {
         ws.onmessage = (event) => {
           const msg = JSON.parse(event.data) as WebSocketMessage
 
+          // Add to console event log (skip streaming response chunks)
+          if (msg.type !== 'response') {
+            setConsoleEvents((prev) => [
+              ...prev,
+              {
+                id: `${Date.now()}-${msg.type}`,
+                type: msg.type,
+                content: 'content' in msg ? (msg.content || '') : '',
+                timestamp: Date.now(),
+                metadata: 'metadata' in msg ? msg.metadata : undefined
+              }
+            ])
+          }
+
           switch (msg.type) {
             case 'system':
               // Skip verbose system messages
@@ -163,6 +226,7 @@ function AppContent() {
 
             case 'response':
               // Accumulate streaming content with smooth batching
+              lastChunkAtRef.current = Date.now()
               streamBufferRef.current += msg.content
 
               // Cancel any pending RAF and schedule a new one for smooth updates
@@ -177,7 +241,17 @@ function AppContent() {
               break
 
             case 'thinking':
-              // Skip thinking for cleaner UI
+              // Skip legacy thinking for cleaner UI
+              break
+
+            case 'thinking_xml':
+              // Display XML-tagged thinking content with special styling
+              setMessages(prev => [...prev, {
+                id: `${Date.now()}-thinking`,
+                role: 'thinking',
+                content: msg.content,
+                timestamp: msg.timestamp * 1000
+              }])
               break
 
             case 'tool_call':
@@ -198,10 +272,14 @@ function AppContent() {
                 content: msg.content,
                 timestamp: msg.timestamp * 1000
               }])
+              lastChunkAtRef.current = null
+              turnStartedAtRef.current = null
               setIsProcessing(false)
               break
 
             case 'command_received':
+              turnStartedAtRef.current = Date.now()
+              lastChunkAtRef.current = Date.now()
               setIsProcessing(true)
               break
 
@@ -218,10 +296,23 @@ function AppContent() {
                     timestamp: msg.timestamp * 1000
                   }])
                   setMessageAddedForTurn(true)
+
+                  // Add complete response to console events
+                  setConsoleEvents((prev) => [
+                    ...prev,
+                    {
+                      id: `${Date.now()}-response-complete`,
+                      type: 'response',
+                      content: content,
+                      timestamp: Date.now()
+                    }
+                  ])
                 }
                 streamBufferRef.current = '' // Clear buffer
                 return ''  // Always clear assistantContent
               })
+              lastChunkAtRef.current = null
+              turnStartedAtRef.current = null
               setIsProcessing(false)
               break
           }
@@ -260,9 +351,15 @@ function AppContent() {
 
   // Fallback timeout for streaming detection (in case turn_finished is missed)
   useEffect(() => {
-    if (!isProcessing || assistantContent === '') return
+    if (!isProcessing) return
 
-    const timeout = setTimeout(() => {
+    const interval = setInterval(() => {
+      const lastChunkAt = lastChunkAtRef.current
+      if (!lastChunkAt) return
+
+      const idleMs = Date.now() - lastChunkAt
+      if (idleMs < 20000) return
+
       if (assistantContent && !messageAddedForTurn) {
         setMessages(prev => [...prev, {
           id: `${Date.now()}-assistant`,
@@ -273,10 +370,12 @@ function AppContent() {
         setAssistantContent('')
         setIsProcessing(false)
         setMessageAddedForTurn(true)
+        lastChunkAtRef.current = null
+        turnStartedAtRef.current = null
       }
-    }, 5000)
+    }, 2000)
 
-    return () => clearTimeout(timeout)
+    return () => clearInterval(interval)
   }, [assistantContent, isProcessing, messageAddedForTurn])
 
   const sendMessage = useCallback(() => {
@@ -348,58 +447,184 @@ function AppContent() {
           <h1 className="text-lg font-semibold text-neutral-100">FF-Terminal</h1>
           <span className="text-sm text-neutral-500">AI Development Assistant</span>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3">
           <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`} />
           <span className="text-xs text-neutral-500">
             {isConnected ? 'Connected' : 'Connecting...'}
           </span>
+          <button
+            onClick={() => setShowConsole(!showConsole)}
+            className={`
+              px-3 py-1.5 rounded-lg text-sm font-medium
+              transition-all duration-200
+              ${showConsole
+                ? 'bg-gradient-to-r from-purple-600 to-blue-600 text-white shadow-lg shadow-purple-500/25'
+                : 'bg-neutral-800 text-gray-400 hover:bg-neutral-700'
+              }
+            `}
+          >
+            {showConsole ? (
+              <span className="flex items-center gap-2">
+                <span>⚡</span>
+                <span>Console</span>
+              </span>
+            ) : (
+              <span className="flex items-center gap-2">
+                <span>💬</span>
+                <span>Chat</span>
+              </span>
+            )}
+          </button>
         </div>
       </header>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-4 py-6">
-        <div className="max-w-3xl mx-auto space-y-4">
-          {messages.length === 0 && (
-            <div className="text-center text-neutral-500 py-20">
-              <p className="text-lg mb-2">Welcome to FF-Terminal</p>
-              <p className="text-sm">Ask me anything about your code</p>
-            </div>
-          )}
+      <div ref={messagesContainerRef} className={`flex-1 overflow-y-auto px-4 py-6 relative ${isMobile && showConsole ? 'mb-[calc(45vh+6rem)]' : ''}`}>
+        {showConsole && !isMobile ? (
+          // Desktop: Side-by-side layout
+          <div className="flex h-full gap-4">
+            {/* Chat view */}
+            <div className="flex-1">
+              <div className="max-w-3xl mx-auto space-y-4">
+                {messages.length === 0 && (
+                  <div className="text-center text-neutral-500 py-20">
+                    <p className="text-lg mb-2">Welcome to FF-Terminal</p>
+                    <p className="text-sm">Ask me anything about your code</p>
+                  </div>
+                )}
 
-          {messages.map(msg => (
-            <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-              <div className={`max-w-[80%] rounded-lg px-4 py-2 ${
-                msg.role === 'user'
-                  ? 'bg-primary-600'
-                  : msg.role === 'error'
-                  ? 'bg-red-900/50 border border-red-800'
-                  : msg.role === 'system'
-                  ? 'text-sm bg-transparent'
-                  : 'bg-neutral-800 w-full'
-              }`}>
-                <MessageContent content={msg.content} role={msg.role} />
+                {messages.map(msg => (
+                  <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                    <div className={`max-w-[80%] rounded-lg ${
+                      msg.role === 'user'
+                        ? 'bg-primary-600 px-4 py-2'
+                      : msg.role === 'error'
+                        ? 'bg-red-900/50 border border-red-800 px-4 py-2'
+                      : msg.role === 'system'
+                        ? 'text-sm bg-transparent px-0 py-1'
+                      : msg.role === 'thinking'
+                        ? 'bg-transparent px-0 py-0 w-full'
+                        : 'bg-neutral-800 px-4 py-2'
+                    }`}>
+                      {msg.role === 'thinking' && (
+                        <div className="text-xs font-semibold text-blue-400 uppercase tracking-wide mb-2 flex items-center gap-2">
+                          <span>💭</span>
+                          <span>Thinking</span>
+                        </div>
+                      )}
+                      <MessageContent content={msg.content} role={msg.role} />
+                    </div>
+                  </div>
+                ))}
+
+                {assistantContent && (
+                  <div className="flex justify-start">
+                    <div className="max-w-[80%] rounded-lg px-4 py-2 bg-neutral-800">
+                      <p className={`whitespace-pre-wrap break-words text-sm leading-relaxed ${theme.assistant}`}>
+                        {assistantContent}
+                        <span className={`inline-block w-2 h-4 ml-1 animate-pulse ${theme.spinner}`} />
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                <div ref={messagesEndRef} />
               </div>
             </div>
-          ))}
 
-          {/* Streaming content - show as plain text, not markdown */}
-          {assistantContent && (
-            <div className="flex justify-start">
-              <div className="max-w-[80%] rounded-lg px-4 py-2 bg-neutral-800">
-                <p className={`whitespace-pre-wrap break-words text-sm leading-relaxed ${theme.assistant}`}>
-                  {assistantContent}
-                  <span className={`inline-block w-2 h-4 ml-1 animate-pulse ${theme.spinner}`} />
-                </p>
-              </div>
+            {/* Desktop Console panel */}
+            <div className="w-96 min-w-0">
+              <ConsoleEventLog
+                events={consoleEvents}
+                onClear={() => setConsoleEvents([])}
+              />
             </div>
-          )}
+          </div>
+        ) : (
+          // Mobile & Chat-only: Full-width chat view
+          <div className="max-w-3xl mx-auto space-y-4">
+            {messages.length === 0 && (
+              <div className="text-center text-neutral-500 py-20">
+                <p className="text-lg mb-2">Welcome to FF-Terminal</p>
+                <p className="text-sm">Ask me anything about your code</p>
+              </div>
+            )}
 
-          <div ref={messagesEndRef} />
-        </div>
+            {messages.map((msg) => (
+              <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                <div
+                  className={`max-w-[80%] rounded-lg ${
+                    msg.role === 'user'
+                      ? 'bg-primary-600 px-4 py-2'
+                      : msg.role === 'error'
+                      ? 'bg-red-900/50 border border-red-800 px-4 py-2'
+                      : msg.role === 'system'
+                      ? 'text-sm bg-transparent px-0 py-1'
+                      : msg.role === 'thinking'
+                        ? 'bg-transparent px-0 py-0 w-full'
+                        : 'bg-neutral-800 px-4 py-2'
+                  }`}
+                >
+                  {msg.role === 'thinking' && (
+                    <div className="text-xs font-semibold text-blue-400 uppercase tracking-wide mb-2 flex items-center gap-2">
+                      <span>💭</span>
+                      <span>Thinking</span>
+                    </div>
+                  )}
+                  <MessageContent content={msg.content} role={msg.role} />
+                </div>
+              </div>
+            ))}
+
+            {assistantContent && (
+              <div className="flex justify-start">
+                <div className="max-w-[80%] rounded-lg px-4 py-2 bg-neutral-800">
+                  <p className={`whitespace-pre-wrap break-words text-sm leading-relaxed ${theme.assistant}`}>
+                    {assistantContent}
+                    <span className={`inline-block w-2 h-4 ml-1 animate-pulse ${theme.spinner}`} />
+                  </p>
+                </div>
+              </div>
+            )}
+
+            <div ref={messagesEndRef} />
+          </div>
+        )}
+
+        {/* Mobile Console Drawer */}
+        {isMobile && showConsole && (
+          <div className="fixed inset-x-0 bottom-0 z-40 bg-neutral-900 border-t border-neutral-800 rounded-t-2xl shadow-2xl animate-slide-up h-[45vh] flex flex-col">
+            {/* Drawer Header */}
+            <div className="flex items-center justify-between px-4 py-3 border-b border-neutral-800 flex-shrink-0">
+              <div className="flex items-center gap-2">
+                <span className="text-lg">⚡</span>
+                <h3 className="text-sm font-semibold text-neutral-100">Console Events</h3>
+              </div>
+              <button
+                onClick={() => setShowConsole(false)}
+                className="p-2 hover:bg-neutral-800 rounded-lg transition-colors"
+                aria-label="Close console"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-neutral-400">
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Drawer Content */}
+            <div className="flex-1 overflow-hidden min-h-0">
+              <ConsoleEventLog
+                events={consoleEvents}
+                onClear={() => setConsoleEvents([])}
+              />
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Input */}
-      <div className="border-t border-neutral-800 bg-neutral-900/50 backdrop-blur">
+      <div className={`border-t border-neutral-800 bg-neutral-900/50 backdrop-blur ${isMobile && showConsole ? 'fixed bottom-[45vh] left-0 right-0 z-50' : ''}`}>
         <div className="max-w-3xl mx-auto p-4">
           {/* File attachments preview */}
           {attachments.length > 0 && (

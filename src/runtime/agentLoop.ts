@@ -435,6 +435,13 @@ export async function* runAgentTurn(params: {
 
   const stepAttempts = new Map<string, { attempts: number; lastError?: string }>();
 
+  // TodoWrite reminder tracking
+  let iterationsSinceLastTodoUpdate = 0;
+  let hasTodoList = false;
+
+  // Thought loop detection tracking
+  const recentThinkingPatterns: string[] = [];
+
   if (planValidationEnabled) {
     hookRegistry.register(
       createPlanValidationStopHook({
@@ -449,7 +456,7 @@ export async function* runAgentTurn(params: {
     // This is the KEY to long-horizon autonomy (matches OpenHands Planner Agent pattern)
     hookRegistry.register(
       createTodoStopHook({
-        enabled: true,
+        enabled: false,
         workspaceDir
       })
     );
@@ -471,12 +478,12 @@ export async function* runAgentTurn(params: {
       let emittedAnyContent = false;
       let emittedAnyThinking = false;
 
-      const shouldForceTools = forceToolCalls && (
-        consecutiveNoAction >= 2 ||
-        (i > 1 && !toolCalls.length)
-      );
+      const shouldForceTools = forceToolCalls && consecutiveNoAction >= 2;
 
       const forceToolChoice = shouldForceTools && tools?.length ? "any" : undefined;
+
+      // Extract GLM thinking mode (applies to all GLM models: 4.5, 4.6, 4.7)
+      const glmThinkingMode = String((cfg as any).glm_thinking_mode ?? "disabled") as "auto" | "enabled" | "disabled";
 
       for await (const ev of provider.streamChat({
         model,
@@ -485,6 +492,7 @@ export async function* runAgentTurn(params: {
         tool_choice: forceToolChoice,
         temperature: Number((cfg as any).temperature ?? 0.7),
         maxTokens: Number((cfg as any).max_tokens ?? 12000),
+        glmThinkingMode,
         signal,
         sessionId
       })) {
@@ -541,6 +549,37 @@ export async function* runAgentTurn(params: {
       content_preview: smartTruncate(assistantContent, 800),
       tool_calls_count: toolCalls.length
     });
+
+    // Thought loop detection: Check if agent is repeating same thinking pattern
+    if (assistantContent && assistantContent.length > 10) {
+      const normalized = assistantContent.toLowerCase().slice(0, 100);
+      recentThinkingPatterns.push(normalized);
+      if (recentThinkingPatterns.length > 10) recentThinkingPatterns.shift();
+
+      // Check for loops (same pattern 5+ times in last 10 iterations)
+      const patternCounts = recentThinkingPatterns.reduce((acc, p) => {
+        const key = p.slice(0, 50); // First 50 chars
+        acc[key] = (acc[key] || 0) + 1;
+        return acc;
+      }, {} as Record<string, number>);
+
+      const maxRepeat = Math.max(...Object.values(patternCounts));
+      if (maxRepeat >= 5) {
+        yield { kind: "status", message: "Loop detected - injecting intervention" };
+        logger.log("warn", "thought_loop_detected", {
+          session_id: sessionId,
+          turn_id: turnId,
+          iteration: i + 1,
+          max_repeat: maxRepeat,
+          pattern_preview: Object.keys(patternCounts)[0]?.slice(0, 50)
+        });
+        messages.push({
+          role: "system",
+          content: "LOOP DETECTED: You've been repeating the same thought pattern 5+ times. STOP and try a completely different approach, or if the task is impossible with available tools, explain the limitation to the user and stop."
+        });
+        recentThinkingPatterns.length = 0; // Clear to avoid repeated warnings
+      }
+    }
 
     // Extract plans from assistant response
     if (planValidationEnabled && planStore !== null) {
@@ -797,6 +836,35 @@ export async function* runAgentTurn(params: {
           break; // Force stop - all tools failed and stop hook allows
         }
       }
+    }
+
+    // TodoWrite reminder: Track if TodoWrite was called and remind agent to update it
+    if (resultsRan.some(r => r.name === "TodoWrite")) {
+      hasTodoList = true;
+      iterationsSinceLastTodoUpdate = 0;
+      logger.log("debug", "todowrite_called", {
+        session_id: sessionId,
+        turn_id: turnId,
+        iteration: i + 1
+      });
+    } else if (hasTodoList) {
+      iterationsSinceLastTodoUpdate++;
+    }
+
+    // Add reminder if todos exist but haven't been updated in 3 iterations
+    if (iterationsSinceLastTodoUpdate >= 3 && hasTodoList) {
+      yield { kind: "status", message: "TodoWrite reminder - updating todo status" };
+      logger.log("info", "todowrite_reminder_injected", {
+        session_id: sessionId,
+        turn_id: turnId,
+        iteration: i + 1,
+        iterations_since_last_update: iterationsSinceLastTodoUpdate
+      });
+      messages.push({
+        role: "system",
+        content: "CRITICAL REMINDER: You created a todo list but haven't updated it in 3 iterations. You MUST call TodoWrite to mark completed tasks as 'completed' and move 'in_progress' tasks forward. TodoWrite is not just for creation - it's for CONTINUOUS status tracking throughout execution."
+      });
+      iterationsSinceLastTodoUpdate = 0; // Reset to avoid spamming
     }
 
     if (planValidationEnabled && activePlan && planStore) {

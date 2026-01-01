@@ -12,9 +12,11 @@ export function ArtifactPreview({ content, type = 'text', className = '' }: Arti
   // Auto-detect type if not specified
   const detectedType = useMemo(() => {
     if (type !== 'text') return type;
+    const trimmed = content.trim();
+    const lower = trimmed.toLowerCase();
 
     // Check for HTML
-    if (content.trim().startsWith('<!DOCTYPE html>') || content.trim().startsWith('<html')) {
+    if (lower.startsWith('<!doctype html>') || lower.startsWith('<html')) {
       return 'html';
     }
     // Check for JSON

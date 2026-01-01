@@ -13,9 +13,37 @@ function authHeader(apiKey: string): Record<string, string> {
   return { Authorization: `Bearer ${apiKey}` };
 }
 
+function unescapeHtml(text: string): string {
+  return text
+    .replace(/&gt;/g, '>')
+    .replace(/&lt;/g, '<')
+    .replace(/&amp;/g, '&')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'");
+}
+
+function unescapeObjectValues(obj: any): any {
+  if (typeof obj === 'string') {
+    return unescapeHtml(obj);
+  }
+  if (Array.isArray(obj)) {
+    return obj.map(unescapeObjectValues);
+  }
+  if (obj && typeof obj === 'object') {
+    const result: any = {};
+    for (const [key, value] of Object.entries(obj)) {
+      result[key] = unescapeObjectValues(value);
+    }
+    return result;
+  }
+  return obj;
+}
+
 function safeJsonParse(raw: string): unknown {
   try {
-    return JSON.parse(raw);
+    // Unescape HTML entities before parsing (some models HTML-encode)
+    const unescaped = unescapeHtml(raw);
+    return JSON.parse(unescaped);
   } catch {
     return null;
   }
@@ -62,11 +90,14 @@ function toolCallsFromMessage(message: any): ToolCall[] {
   const tc = Array.isArray(message?.tool_calls) ? message.tool_calls : [];
   return tc
     .filter((t: any) => t && (t.type === "function" || t.function))
-    .map((t: any, idx: number) => ({
-      id: String(t.id || `tool_${idx}`),
-      name: String(t.function?.name || t.name || ""),
-      arguments: safeJsonParse(String(t.function?.arguments || "")) ?? t.function?.arguments ?? {}
-    }));
+    .map((t: any, idx: number) => {
+      const parsedArgs = safeJsonParse(String(t.function?.arguments || "")) ?? t.function?.arguments ?? {};
+      return {
+        id: String(t.id || `tool_${idx}`),
+        name: String(t.function?.name || t.name || ""),
+        arguments: unescapeObjectValues(parsedArgs)
+      };
+    });
 }
 
 function toolCallsFromDeltas(toolCallDeltas: any[]): ToolCall[] {
@@ -85,7 +116,7 @@ function toolCallsFromDeltas(toolCallDeltas: any[]): ToolCall[] {
     const id = v.id || `tool_${idx}`;
     const name = v.name || "";
     const parsedArgs = safeJsonParse(v.args) ?? v.args;
-    out.push({ id, name, arguments: parsedArgs });
+    out.push({ id, name, arguments: unescapeObjectValues(parsedArgs) });
   }
   return out;
 }
@@ -98,7 +129,7 @@ function toolCallsFromAnthropicContentBlocks(blocks: any[]): ToolCall[] {
     out.push({
       id: String(b.id || `tool_${out.length}`),
       name: String(b.name || ""),
-      arguments: b.input ?? {}
+      arguments: unescapeObjectValues(b.input ?? {})
     });
   }
   return out;
@@ -153,16 +184,18 @@ export function openAICompatProvider(params: {
   appendV1?: boolean;
   preferStream?: boolean;
   reasoningContentFallback?: boolean;
+  supportsThinking?: boolean;
 }): Provider {
   const baseUrl = normalizeBaseUrl(params.baseUrl, params.appendV1 ?? true);
   const extraHeaders = params.extraHeaders ?? {};
   const mapModel = params.mapModel ?? ((m: string) => m);
   const preferStream = params.preferStream ?? true;
   const reasoningContentFallback = params.reasoningContentFallback ?? false;
+  const supportsThinking = params.supportsThinking ?? false;
 
   return {
     name: params.name,
-    async *streamChat({ model, messages, tools, temperature, maxTokens, signal, tool_choice }): AsyncGenerator<ProviderStreamEvent> {
+    async *streamChat({ model, messages, tools, temperature, maxTokens, signal, tool_choice, glmThinkingMode }): AsyncGenerator<ProviderStreamEvent> {
       const url = `${baseUrl}/chat/completions`;
       const debug = ["1", "true", "yes", "on"].includes(String(process.env.FF_DEBUG_PROVIDER || "").trim().toLowerCase());
       const debugLog = (...args: any[]) => {
@@ -176,8 +209,36 @@ export function openAICompatProvider(params: {
         messages: normalizeMessages(messages)
       };
 
+      // Add thinking parameter for GLM models
+      if (supportsThinking && glmThinkingMode !== undefined) {
+        const hasTools = tools && tools.length > 0;
+
+        let thinkingType: string;
+        if (glmThinkingMode === "auto") {
+          // Auto mode: disable for tool calls (speed), enable for complex queries
+          thinkingType = hasTools ? "disabled" : "enabled";
+        } else {
+          thinkingType = glmThinkingMode;
+        }
+
+        payloadBase.thinking = {
+          type: thinkingType
+        };
+      }
+
       // Only include optional parameters if they have defined values
-      if (tools?.length) payloadBase.tools = tools;
+      if (tools?.length) {
+        // Pass tools with strict flag intact (enables structured outputs if schemas have strict: true)
+        payloadBase.tools = tools;
+
+        // Check if ALL tools have strict: true - if so, we can enable parallel tool calls safely
+        const allToolsStrict = tools.every((t: any) => t?.function?.strict === true);
+        if (allToolsStrict) {
+          // When using strict mode, enable parallel tool calls for better performance
+          // (structured outputs guarantee valid JSON, making parallel calls safe)
+          payloadBase.parallel_tool_calls = true;
+        }
+      }
       if (tool_choice !== undefined) payloadBase.tool_choice = tool_choice;
       if (temperature !== undefined && temperature !== null) payloadBase.temperature = temperature;
       if (maxTokens !== undefined && maxTokens !== null) payloadBase.max_tokens = maxTokens;

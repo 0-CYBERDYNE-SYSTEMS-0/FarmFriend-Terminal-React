@@ -35,11 +35,43 @@
       "items_schema": null
     },
     {
+      "name": "profile",
+      "type": "str",
+      "required": false,
+      "default": null,
+      "description": "Profile name to use when running this scheduled task (overrides default).",
+      "items_schema": null
+    },
+    {
       "name": "schedule_type",
       "type": "str",
       "required": false,
       "default": null,
-      "description": "'one_time', 'daily', 'weekly', or 'interval'",
+      "description": "'one_time', 'daily', 'weekly', 'interval', or 'rrule'",
+      "items_schema": null
+    },
+    {
+      "name": "schedule_rule",
+      "type": "str",
+      "required": false,
+      "default": null,
+      "description": "RFC5545 RRULE string (or multiline DTSTART+RRULE). If provided, schedule_type defaults to 'rrule'.",
+      "items_schema": null
+    },
+    {
+      "name": "timezone",
+      "type": "str",
+      "required": false,
+      "default": null,
+      "description": "IANA timezone ID (e.g., 'America/Chicago'). Used with schedule_rule or time_string.",
+      "items_schema": null
+    },
+    {
+      "name": "start_datetime",
+      "type": "str",
+      "required": false,
+      "default": null,
+      "description": "ISO 8601 start datetime (used when schedule_rule lacks DTSTART).",
       "items_schema": null
     },
     {
