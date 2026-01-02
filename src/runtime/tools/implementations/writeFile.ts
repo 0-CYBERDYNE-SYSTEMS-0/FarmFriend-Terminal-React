@@ -40,7 +40,7 @@ export async function writeFileTool(args: unknown): Promise<string> {
     const hasBodyTag = /<body[^>]*>/i.test(content);
     const hasClosingHtml = /<\/html>/i.test(content);
 
-    if (!hasHtmlTag || !hasBodyTag || !hasClosingHtml) {
+    if (!hasHtmlTag || !hasHeadTag || !hasBodyTag || !hasClosingHtml) {
       const missing = [];
       if (!hasHtmlTag) missing.push('<html>');
       if (!hasHeadTag) missing.push('<head>');

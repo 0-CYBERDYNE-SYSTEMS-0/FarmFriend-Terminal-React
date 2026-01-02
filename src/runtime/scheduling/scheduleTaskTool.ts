@@ -2,6 +2,7 @@ import { newId } from "../../shared/ids.js";
 import { loadTaskStore, saveTaskStore, ScheduledTask } from "./taskStore.js";
 import { getSchedulerBackend } from "./backends/index.js";
 import { computeNextRRuleExecutionTimestamp, resolveScheduleTimeZone } from "./rrule.js";
+import { computeNextRunAt } from "./scheduler.js";
 import { DateTime } from "luxon";
 
 type Args = {
@@ -160,11 +161,6 @@ export async function scheduleTaskTool(argsRaw: unknown, workspaceDir: string): 
     if (existingIndex === -1) return `No such task: ${name}`;
     const [removed] = store.tasks.splice(existingIndex, 1);
     saveTaskStore(workspaceDir, store);
-    const backend = getSchedulerBackend();
-    if (backend) {
-      const res = await backend.remove({ taskName: removed.name });
-      if (!res.ok) return `Removed task definition, but failed to remove OS schedule: ${res.message}`;
-    }
     return `Removed task ${removed.name} (${removed.id})`;
   }
 
@@ -173,15 +169,11 @@ export async function scheduleTaskTool(argsRaw: unknown, workspaceDir: string): 
     const task = store.tasks[existingIndex];
     task.enabled = args.action === "enable";
     task.updated_at = new Date().toISOString();
-    saveTaskStore(workspaceDir, store);
-    const backend = getSchedulerBackend();
-    if (backend) {
-      const res =
-        args.action === "enable"
-          ? await backend.enable({ taskName: task.name })
-          : await backend.disable({ taskName: task.name });
-      if (!res.ok) return `${task.enabled ? "Enabled" : "Disabled"} task definition, but OS scheduler failed: ${res.message}`;
+    if (task.enabled) {
+      const nextRunAt = computeNextRunAt(task, DateTime.now());
+      task.next_run_at = nextRunAt ?? undefined;
     }
+    saveTaskStore(workspaceDir, store);
     return `${task.enabled ? "Enabled" : "Disabled"} task ${task.name}`;
   }
 
@@ -191,7 +183,7 @@ export async function scheduleTaskTool(argsRaw: unknown, workspaceDir: string): 
     const task = store.tasks[existingIndex];
     if (!backend) return JSON.stringify(task, null, 2);
     const status = await backend.status({ taskName: task.name });
-    return JSON.stringify({ task, os_schedule: status }, null, 2);
+    return JSON.stringify({ task, scheduler_daemon: status }, null, 2);
   }
 
   // add
@@ -268,8 +260,15 @@ export async function scheduleTaskTool(argsRaw: unknown, workspaceDir: string): 
     if ((schedule_type === "daily" || schedule_type === "weekly") && !hourMinute) {
       throw new Error("schedule_task: missing hour/minute (or time_string) for daily/weekly schedule");
     }
+    if (schedule_type === "weekly" && (!weekdays || weekdays.length === 0)) {
+      throw new Error("schedule_task: missing weekdays for weekly schedule");
+    }
 
     const timezone = args.timezone ? resolveScheduleTimeZone(args.timezone) : undefined;
+
+    if (schedule_type === "interval" && (!intervalSeconds || intervalSeconds < 60)) {
+      throw new Error("schedule_task: interval_seconds must be >= 60");
+    }
 
     const task: ScheduledTask = {
       id: newId("task"),
@@ -293,6 +292,9 @@ export async function scheduleTaskTool(argsRaw: unknown, workspaceDir: string): 
       updated_at: now
     };
 
+    const nextRunAt = computeNextRunAt(task, DateTime.now());
+    if (nextRunAt) task.next_run_at = nextRunAt;
+
     if (existingIndex !== -1) {
       store.tasks[existingIndex] = task;
     } else {
@@ -306,10 +308,10 @@ export async function scheduleTaskTool(argsRaw: unknown, workspaceDir: string): 
     }
 
     const backend = getSchedulerBackend();
-    if (!backend) return `Saved task ${name} (${task.id}). OS scheduler not available in this build.`;
+    if (!backend) return `Saved task ${name} (${task.id}). Scheduler daemon not available in this build.`;
 
     const res = await backend.install({ taskName: name, taskId: task.id, schedule: task.schedule });
-    if (!res.ok) return `Saved task ${name} (${task.id}), but failed to install OS schedule: ${res.message}`;
+    if (!res.ok) return `Saved task ${name} (${task.id}), but failed to ensure scheduler daemon: ${res.message}`;
     return `Saved task ${name} (${task.id}). ${res.message}`;
   }
 

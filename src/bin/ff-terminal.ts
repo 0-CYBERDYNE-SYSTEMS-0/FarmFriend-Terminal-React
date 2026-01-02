@@ -14,7 +14,6 @@ import { toWire } from "../runtime/streamProtocol.js";
 import { newId } from "../shared/ids.js";
 import { loadTaskStore, saveTaskStore, taskStorePath } from "../runtime/scheduling/taskStore.js";
 import { getSchedulerBackend } from "../runtime/scheduling/backends/index.js";
-import { computeNextRRuleExecutionTimestamp } from "../runtime/scheduling/rrule.js";
 import fs from "node:fs";
 import path from "node:path";
 import { readConfig, writeConfig, getProfileByName, getCredential, deleteCredential, storeCredential } from "../runtime/profiles/storage.js";
@@ -25,6 +24,8 @@ import { spawn } from "node:child_process";
 import { loadDefaultDotenv } from "../runtime/config/dotenv.js";
 import { GLOBAL_TOOL_CRED_PROFILE, OPTIONAL_TOOL_ENV_KEYS } from "../runtime/profiles/toolKeys.js";
 import { StructuredLogger, parseLogLevel, truncateForLog } from "../runtime/logging/structuredLogger.js";
+import { computeNextRunAt, runSchedulerLoop } from "../runtime/scheduling/scheduler.js";
+import { DateTime } from "luxon";
 
 function usage(): void {
   // eslint-disable-next-line no-console
@@ -35,6 +36,7 @@ function usage(): void {
   ff-terminal local [profile] [--display-mode verbose|clean]
   ff-terminal web
   ff-terminal acp [--profile <name>]
+  ff-terminal scheduler [--once] [--poll-interval <ms>] [--headless]
   ff-terminal run --prompt "..." [--profile <name>] [--session <id>] [--headless]
   ff-terminal run --scheduled-task <id-or-name> [--profile <name>] [--session <id>] --headless
   ff-terminal schedule list
@@ -536,6 +538,30 @@ async function run(): Promise<void> {
     return;
   }
 
+  if (cmd === "scheduler") {
+    const repoRoot = findRepoRoot();
+    const runtimeCfg = resolveConfig({ repoRoot });
+    const workspaceDir = resolveWorkspaceDir(
+      (runtimeCfg as any).workspace_dir ?? process.env.FF_WORKSPACE_DIR ?? undefined,
+      { repoRoot }
+    );
+    const once = hasFlag(rest, "--once");
+    const pollRaw = pickArg(rest, "--poll-interval") || pickArg(rest, "--poll-interval-ms");
+    const pollIntervalMs = pollRaw ? Number(pollRaw) : undefined;
+    const logMaxBytesRaw = Number((runtimeCfg as any).log_max_bytes ?? NaN);
+    const logRetentionRaw = Number((runtimeCfg as any).log_retention ?? NaN);
+    await runSchedulerLoop({
+      repoRoot,
+      workspaceDir,
+      once,
+      pollIntervalMs: Number.isFinite(pollIntervalMs) && pollIntervalMs! > 0 ? pollIntervalMs : undefined,
+      logLevel: (runtimeCfg as any).log_level,
+      logMaxBytes: Number.isFinite(logMaxBytesRaw) ? logMaxBytesRaw : undefined,
+      logRetention: Number.isFinite(logRetentionRaw) ? logRetentionRaw : undefined
+    });
+    return;
+  }
+
   if (cmd === "run") {
     applyToolAllowFlags(rest);
     const userPrompt = pickArg(rest, "--prompt") || "";
@@ -724,32 +750,15 @@ async function run(): Promise<void> {
         };
         saveTaskStore(workspaceDir, store);
 
-        if (task.schedule?.schedule_type === "rrule") {
+        if (task.schedule) {
           try {
-            const nextTimestamp = computeNextRRuleExecutionTimestamp({
-              rule: task.schedule.schedule_rule || "",
-              timezone: task.schedule.timezone,
-              start: task.schedule.start_datetime,
-              after: new Date()
-            });
-            task.schedule.execution_timestamp = nextTimestamp;
+            const nextTimestamp = computeNextRunAt(task, DateTime.now());
+            task.next_run_at = nextTimestamp ?? undefined;
             task.updated_at = new Date().toISOString();
             saveTaskStore(workspaceDir, store);
-
-            const backend = getSchedulerBackend();
-            if (backend) {
-              const res = await backend.install({ taskName: task.name, taskId: task.id, schedule: task.schedule });
-              if (!res.ok) {
-                runLogger?.log("error", "schedule_rrule_reschedule_failed", {
-                  session_id: sessionId,
-                  scheduled_task: scheduledTaskName,
-                  message: res.message
-                });
-              }
-            }
           } catch (err) {
             const msg = err instanceof Error ? err.message : String(err);
-            runLogger?.log("error", "schedule_rrule_reschedule_failed", {
+            runLogger?.log("error", "schedule_reschedule_failed", {
               session_id: sessionId,
               scheduled_task: scheduledTaskName,
               message: msg

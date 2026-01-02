@@ -22,6 +22,7 @@ export type ScheduledTask = {
   enabled: boolean;
   created_at: string;
   updated_at: string;
+  next_run_at?: number;
   last_run?: {
     started_at: string;
     finished_at?: string;
