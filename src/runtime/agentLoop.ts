@@ -586,7 +586,7 @@ export async function* runAgentTurn(params: {
       const extractedPlans = extractPlansFromContent(assistantContent);
 
       for (const newPlan of extractedPlans) {
-        addPlan(planStore, newPlan);
+        planStore = addPlan(planStore, newPlan);
         activePlan = newPlan;
 
         logger.log("info", "plan_created", {
