@@ -79,9 +79,8 @@ export function computeNextRunAt(task: ScheduledTask, after: DateTime): number |
   if (schedule.schedule_type === "interval") {
     const interval = schedule.interval_seconds;
     if (!interval || interval < 60) throw new Error("schedule_task: interval_seconds must be >= 60");
-    const lastRun = task.last_run?.started_at
-      ? DateTime.fromISO(task.last_run.started_at).toUTC()
-      : null;
+    const lastRunAt = task.last_run?.finished_at || task.last_run?.started_at;
+    const lastRun = lastRunAt ? DateTime.fromISO(lastRunAt).toUTC() : null;
     if (!lastRun) {
       return Math.floor(after.toUTC().plus({ seconds: interval }).toSeconds());
     }
@@ -158,13 +157,8 @@ function acquireSchedulerLock(workspaceDir: string, logger: StructuredLogger): b
     fs.writeFileSync(lockPath, payload, { flag: "wx" });
     return true;
   } catch {
-    try {
-      fs.writeFileSync(lockPath, payload, "utf8");
-      return true;
-    } catch {
-      logger.log("error", "scheduler_lock_failed");
-      return false;
-    }
+    logger.log("error", "scheduler_lock_failed");
+    return false;
   }
 }
 
