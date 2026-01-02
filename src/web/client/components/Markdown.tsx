@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { marked } from 'marked';
+import { marked, type Tokens } from 'marked';
 import DOMPurify from 'dompurify';
 import { codeToHtml } from 'shiki';
 
@@ -18,25 +18,36 @@ function escapeHtml(text: string): string {
 }
 
 const renderer = new marked.Renderer();
-renderer.code = async (code, infostring) => {
-  const language = (infostring || '').match(/\S+/)?.[0] || 'text';
-  try {
-    return await codeToHtml(code, {
-      lang: language,
-      theme: 'dark-plus',
-    });
-  } catch {
-    const escaped = escapeHtml(code);
-    const languageClass = language ? `language-${language}` : '';
-    return `<pre class="bg-gray-900 text-gray-100 p-4 rounded-lg overflow-x-auto"><code class="${languageClass}">${escaped}</code></pre>`;
-  }
+renderer.code = (token: Tokens.Code): string => {
+  const language = token.lang || 'text';
+  const highlighted = (token as Tokens.Code & { highlightedHtml?: string }).highlightedHtml;
+  if (highlighted) return highlighted;
+  const escaped = escapeHtml(token.text);
+  const languageClass = language ? `language-${language}` : '';
+  return `<pre class="bg-gray-900 text-gray-100 p-4 rounded-lg overflow-x-auto"><code class="${languageClass}">${escaped}</code></pre>`;
 };
 
 marked.setOptions({
   breaks: true,
   gfm: true,
 });
-marked.use({ renderer, async: true });
+marked.use({
+  renderer,
+  async: true,
+  walkTokens: async (token) => {
+    if (token.type !== 'code') return;
+    const language = token.lang || 'text';
+    try {
+      const highlightedHtml = await codeToHtml(token.text, {
+        lang: language,
+        theme: 'dark-plus',
+      });
+      (token as Tokens.Code & { highlightedHtml?: string }).highlightedHtml = highlightedHtml;
+    } catch {
+      // Fallback to default renderer without syntax highlighting.
+    }
+  }
+});
 
 export function Markdown({ content, className = '' }: MarkdownProps) {
   const [html, setHtml] = useState('');
