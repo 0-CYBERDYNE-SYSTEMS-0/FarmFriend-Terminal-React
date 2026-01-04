@@ -1,0 +1,253 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Deep Comparison — E2E Loop vs. Ralph Wiggum Loop</title>
+  <style>
+    :root {
+      --bg: #0d1110;
+      --panel: #151c19;
+      --ink: #e9f3ee;
+      --muted: #9ab0a4;
+      --accent: #7fd4a7;
+      --accent-2: #f3b27a;
+      --line: #24312b;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "IBM Plex Mono", "Fira Mono", "Menlo", monospace;
+      background: radial-gradient(1000px 700px at 15% -20%, #1b2a23, transparent), var(--bg);
+      color: var(--ink);
+      line-height: 1.5;
+    }
+    header {
+      padding: 28px 24px 18px;
+      border-bottom: 1px solid var(--line);
+      background: linear-gradient(180deg, #16211b 0%, #0d1110 100%);
+    }
+    h1 {
+      margin: 0 0 6px;
+      font-size: 24px;
+      letter-spacing: 0.6px;
+    }
+    .subtitle {
+      color: var(--muted);
+      max-width: 980px;
+      font-size: 14px;
+    }
+    main {
+      padding: 22px;
+      display: grid;
+      gap: 18px;
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 16px;
+      box-shadow: 0 6px 18px rgba(0,0,0,0.25);
+    }
+    h2 { margin: 0 0 8px; font-size: 17px; }
+    h3 { margin: 12px 0 6px; font-size: 14px; color: var(--accent); }
+    .grid-2 {
+      display: grid;
+      gap: 14px;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    }
+    code, pre {
+      background: #0f1612;
+      color: var(--ink);
+      border: 1px solid #1e2a24;
+      border-radius: 8px;
+      padding: 8px;
+      display: block;
+      overflow-x: auto;
+      font-size: 13px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+    th, td {
+      text-align: left;
+      padding: 10px;
+      border-bottom: 1px solid var(--line);
+      vertical-align: top;
+    }
+    th { color: var(--accent-2); }
+    .diagram {
+      background: #0f1612;
+      border: 1px solid #1e2a24;
+      border-radius: 12px;
+      padding: 12px;
+      white-space: pre;
+      overflow-x: auto;
+      font-size: 12px;
+      color: #d7eadf;
+    }
+    .pill {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 11px;
+      border: 1px solid var(--line);
+      color: var(--muted);
+    }
+    .warn {
+      color: #f2c1a0;
+      background: #2a2019;
+      border: 1px solid #3b2a20;
+      padding: 10px;
+      border-radius: 10px;
+    }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Deep Comparison — ff-terminal E2E Loop vs. Ralph Wiggum Loop</h1>
+    <div class="subtitle">
+      Step‑by‑step breakdown and evaluation. Sources are limited to local code + external references listed below.
+    </div>
+  </header>
+
+  <main>
+    <section class="card">
+      <h2>Scope & Constraints</h2>
+      <div class="warn">
+        This analysis uses local repo code for the E2E loop and external references for Ralph Wiggum. Official plugin
+        README content was not available in this pass; the plugin details below are from a secondary source.
+      </div>
+    </section>
+
+    <section class="card grid-2">
+      <div>
+        <h2>E2E Loop (ff-terminal)</h2>
+        <div class="pill">Runtime Test Harness</div>
+        <h3>Script Entry</h3>
+        <pre><code>./scripts/e2e_loop.sh "&lt;profile&gt;" auto
+...prompts on stdin...</code></pre>
+        <h3>Core Behavior</h3>
+        <p>Invokes <code>dist/bin/ff-terminal.js run --headless</code> per prompt, reusing a session ID to persist context.</p>
+      </div>
+      <div>
+        <h2>Ralph Wiggum Loop</h2>
+        <div class="pill">Autonomous Iteration Pattern</div>
+        <h3>Minimal Loop</h3>
+        <pre><code>while :; do
+  cat PROMPT.md | &lt;agent&gt;
+done</code></pre>
+        <h3>Productized Variant</h3>
+        <p>Runs Claude Code repeatedly using PROMPT.md + task files, with exit heuristics and rate limits.</p>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Architecture Diagrams</h2>
+      <div class="diagram">E2E Loop (ff-terminal)
+
+stdin prompts
+   │
+   ▼
+./scripts/e2e_loop.sh
+   │
+   ▼
+node dist/bin/ff-terminal.js run --headless
+   │
+   ▼
+runAgentTurn (tools + hooks + logs)
+   │
+   ▼
+JSONL session logs</div>
+
+      <div class="diagram" style="margin-top: 12px;">Ralph Wiggum Loop
+
+PROMPT.md (+ task files)
+   │
+   ▼
+Claude Code execution
+   │
+   ▼
+exit heuristics / completion promise
+   │
+   ▼
+repeat until done or limits</div>
+    </section>
+
+    <section class="card">
+      <h2>Step‑By‑Step Mapping</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Step</th>
+            <th>E2E Loop (ff-terminal)</th>
+            <th>Ralph Wiggum Loop</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Input Source</td>
+            <td>stdin lines (one prompt each)</td>
+            <td>PROMPT.md + task files (persistent)</td>
+          </tr>
+          <tr>
+            <td>Entry Point</td>
+            <td>Shell script → ff-terminal CLI</td>
+            <td>Bash loop or ralph/plug‑in command</td>
+          </tr>
+          <tr>
+            <td>Context</td>
+            <td>Explicit session ID + workspace logs</td>
+            <td>File‑based context + logs</td>
+          </tr>
+          <tr>
+            <td>Execution Core</td>
+            <td>runAgentTurn + tool registry</td>
+            <td>Claude Code runtime</td>
+          </tr>
+          <tr>
+            <td>Stop Logic</td>
+            <td>Stop hooks when no tool calls</td>
+            <td>Completion promise / exit heuristics</td>
+          </tr>
+          <tr>
+            <td>Safety</td>
+            <td>Tool schema validation + circuit breakers</td>
+            <td>Rate limiting + circuit breaker</td>
+          </tr>
+          <tr>
+            <td>Observability</td>
+            <td>Session + run JSONL logs</td>
+            <td>Logs + optional tmux monitor</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="card">
+      <h2>Which Is “Better”?</h2>
+      <h3>Best for correctness & integration validation</h3>
+      <p><strong>E2E Loop wins.</strong> It exercises your actual runtime, tools, and hooks deterministically.</p>
+      <h3>Best for long‑horizon autonomy</h3>
+      <p><strong>Ralph loop wins.</strong> It’s designed to keep iterating with exit heuristics and rate controls.</p>
+      <h3>Efficiency</h3>
+      <p>E2E loop is efficient for short, targeted prompts. Ralph loop is efficient for long‑running progress but can be costly on short tasks.</p>
+    </section>
+
+    <section class="card">
+      <h2>Sources (External)</h2>
+      <ul>
+        <li><a href="https://ghuntley.com/ralph/">https://ghuntley.com/ralph/</a></li>
+        <li><a href="https://github.com/frankbria/ralph-claude-code">https://github.com/frankbria/ralph-claude-code</a></li>
+        <li><a href="https://www.awesomeclaude.ai/claude-code/commands/ralph-wiggum">https://www.awesomeclaude.ai/claude-code/commands/ralph-wiggum</a></li>
+      </ul>
+    </section>
+  </main>
+</body>
+</html>

@@ -24,6 +24,7 @@ import { spawn } from "node:child_process";
 import { loadDefaultDotenv } from "../runtime/config/dotenv.js";
 import { GLOBAL_TOOL_CRED_PROFILE, OPTIONAL_TOOL_ENV_KEYS } from "../runtime/profiles/toolKeys.js";
 import { StructuredLogger, parseLogLevel, truncateForLog } from "../runtime/logging/structuredLogger.js";
+import { runAutonomyLoop, type OracleMode, type SessionStrategy } from "../runtime/autonomy/loop.js";
 import { computeNextRunAt, runSchedulerLoop } from "../runtime/scheduling/scheduler.js";
 import { DateTime } from "luxon";
 
@@ -39,6 +40,9 @@ function usage(): void {
   ff-terminal scheduler [--once] [--poll-interval <ms>] [--headless]
   ff-terminal run --prompt "..." [--profile <name>] [--session <id>] [--headless]
   ff-terminal run --scheduled-task <id-or-name> [--profile <name>] [--session <id>] --headless
+  ff-terminal autonomy [--profile <name>] --prompt-file <path> [--tasks-file <path>] [--completion-promise <text>]
+                       [--max-loops <n>] [--stall-limit <n>] [--sleep-ms <n>] [--oracle <mode>] [--session <id>]
+                       [--session-strategy reuse|new] [--headless]
   ff-terminal schedule list
   ff-terminal schedule status <name>
   ff-terminal profile setup
@@ -49,6 +53,7 @@ function usage(): void {
   ff-terminal profile tool-keys
   --allow-macos-control       Enable macOS automation tool (FF_ALLOW_MACOS_CONTROL=1)
   --allow-browser-use         Enable browser-use automation (FF_ALLOW_BROWSER_USE=1)
+  --autonomy-auto             Auto-start autonomy loop if agent requests it (run mode)
   --tts                       Enable text-to-speech voice output
   --voice <voice>             Set TTS voice (af_heart, af_bella, af_sarah, am_adam, am_michael, bf_emma, bm_george)
 `);
@@ -85,6 +90,34 @@ function sanitizeEnvInPlace(): void {
 function safeModel(model?: string): string | undefined {
   const m = (model || "").trim();
   return m.length ? m : undefined;
+}
+
+function parseOracleMode(raw?: string | null): OracleMode {
+  const v = String(raw || "").trim().toLowerCase();
+  if (v === "off" || v === "critical" || v === "on_complete" || v === "on_stall" || v === "on_high_risk" || v === "always") {
+    return v as OracleMode;
+  }
+  return "critical";
+}
+
+function parseSessionStrategy(raw?: string | null): SessionStrategy {
+  const v = String(raw || "").trim().toLowerCase();
+  if (v === "reuse" || v === "new") return v as SessionStrategy;
+  return "new";
+}
+
+function extractAutonomyRequest(text: string): { reason?: string; completionPromise?: string } | null {
+  const tagMatch = text.match(/<autonomy_request(?:\s+reason="([^"]+)")?>([\s\S]*?)<\/autonomy_request>/i);
+  if (tagMatch) {
+    const reason = tagMatch[1]?.trim();
+    const body = tagMatch[2] || "";
+    const promiseMatch = body.match(/completion_promise\\s*[:=]\\s*(.+)/i);
+    const completionPromise = promiseMatch ? promiseMatch[1].trim() : undefined;
+    return { reason, completionPromise };
+  }
+  const lineMatch = text.match(/AUTONOMY_REQUEST\s*:\s*(.*)/i);
+  if (lineMatch) return { reason: lineMatch[1]?.trim() || undefined };
+  return null;
 }
 
 function generatePortFromPath(workspacePath: string): number {
@@ -712,6 +745,7 @@ async function run(): Promise<void> {
 
     const controller = new AbortController();
     const lines: string[] = [];
+    let assistantText = "";
     let ok = true;
     let error: string | undefined;
     try {
@@ -728,6 +762,7 @@ async function run(): Promise<void> {
             const line = toWire(chunk);
             lines.push(line);
             process.stdout.write(line + "\n");
+            if (chunk.kind === "content") assistantText += chunk.delta;
             if (chunk.kind === "task_completed") break;
           }
         }
@@ -797,6 +832,125 @@ async function run(): Promise<void> {
       ok,
       error,
       duration_ms: Date.now() - runStartedAt
+    });
+
+    const autonomyRequest = extractAutonomyRequest(assistantText);
+    if (autonomyRequest) {
+      const reason = autonomyRequest.reason ? ` (${autonomyRequest.reason})` : "";
+      // eslint-disable-next-line no-console
+      console.log(`AUTONOMY_REQUEST detected${reason}`);
+      const suggestedPromise = autonomyRequest.completionPromise || process.env.FF_AUTONOMY_COMPLETION_PROMISE || "✅ COMPLETED";
+      const promptFile = path.join(repoRoot, "PROMPT.md");
+      const tasksFile = path.join(repoRoot, "TASKS.md");
+      // eslint-disable-next-line no-console
+      console.log(`Suggested: ff-terminal autonomy --prompt-file "${promptFile}" --tasks-file "${tasksFile}" --completion-promise "${suggestedPromise}"`);
+
+      if (hasFlag(rest, "--autonomy-auto")) {
+        if (!fs.existsSync(promptFile)) {
+          fs.writeFileSync(promptFile, promptToRun + "\n", "utf8");
+        }
+        if (!fs.existsSync(tasksFile)) {
+          fs.writeFileSync(tasksFile, "", "utf8");
+        }
+        await runAutonomyLoop({
+          repoRoot,
+          workspaceDir,
+          promptFile,
+          tasksFile,
+          completionPromise: suggestedPromise,
+          maxLoops: Number(process.env.FF_AUTONOMY_MAX_LOOPS || 200),
+          stallLimit: Number(process.env.FF_AUTONOMY_STALL_LIMIT || 5),
+          sleepMs: Number(process.env.FF_AUTONOMY_SLEEP_MS || 30000),
+          oracleMode: parseOracleMode(process.env.FF_AUTONOMY_ORACLE_MODE || "critical"),
+          highRiskKeywords: [],
+          sessionStrategy: "new",
+          headless: true
+        });
+      }
+    }
+    return;
+  }
+
+  if (cmd === "autonomy") {
+    applyToolAllowFlags(rest);
+    const cliProfile = pickArg(rest, "--profile");
+    const envProfile = process.env.FF_PROFILE || null;
+    let profileName = cliProfile || envProfile || null;
+
+    const repoRoot = findRepoRoot();
+    const runtimeCfg = resolveConfig({ repoRoot });
+    const workspaceDir = resolveWorkspaceDir(
+      (runtimeCfg as any).workspace_dir ?? process.env.FF_WORKSPACE_DIR ?? undefined,
+      { repoRoot }
+    );
+
+    if (profileName) {
+      const config = readConfig();
+      const profile = getProfileByName(config, profileName);
+      if (!profile) throw new Error(`No such profile: ${profileName}\n`);
+
+      process.env.FF_PROVIDER = profile.provider;
+      process.env.FF_PROFILE = profile.name;
+
+      const model = profile.model?.trim();
+      if (model) process.env.FF_MODEL = model;
+
+      await applyProviderCredentialsFromProfile(profile);
+
+      if (profile.subagentModel?.trim()) process.env.FF_SUBAGENT_MODEL = profile.subagentModel.trim();
+      if (profile.toolModel?.trim()) process.env.FF_TOOL_MODEL = profile.toolModel.trim();
+      if (profile.webModel?.trim()) process.env.FF_WEB_MODEL = profile.webModel.trim();
+      if (profile.imageModel?.trim()) process.env.FF_IMAGE_MODEL = profile.imageModel.trim();
+      if (profile.videoModel?.trim()) process.env.FF_VIDEO_MODEL = profile.videoModel.trim();
+
+      for (const k of OPTIONAL_TOOL_ENV_KEYS) {
+        const profileValue = await getCredential(profile.name, k);
+        if (profileValue) {
+          process.env[k] = profileValue;
+          continue;
+        }
+        if (String(process.env[k] || "").trim()) continue;
+        const globalValue = await getCredential(GLOBAL_TOOL_CRED_PROFILE, k);
+        if (globalValue) {
+          process.env[k] = globalValue;
+          continue;
+        }
+      }
+    }
+
+    const promptFile = pickArg(rest, "--prompt-file") || process.env.FF_AUTONOMY_PROMPT_FILE || "PROMPT.md";
+    const tasksFile = pickArg(rest, "--tasks-file") || process.env.FF_AUTONOMY_TASKS_FILE || "TASKS.md";
+    const completionPromise = pickArg(rest, "--completion-promise") || process.env.FF_AUTONOMY_COMPLETION_PROMISE || "";
+    const maxLoops = Number(pickArg(rest, "--max-loops") || process.env.FF_AUTONOMY_MAX_LOOPS || 200);
+    const stallLimit = Number(pickArg(rest, "--stall-limit") || process.env.FF_AUTONOMY_STALL_LIMIT || 5);
+    const sleepMs = Number(pickArg(rest, "--sleep-ms") || process.env.FF_AUTONOMY_SLEEP_MS || 30000);
+    const oracleMode = parseOracleMode(pickArg(rest, "--oracle") || process.env.FF_AUTONOMY_ORACLE_MODE || "critical");
+    const highRiskRaw = pickArg(rest, "--high-risk-keywords") || process.env.FF_AUTONOMY_HIGH_RISK_KEYWORDS || "";
+    const highRiskKeywords = highRiskRaw ? highRiskRaw.split(",").map((s) => s.trim()).filter(Boolean) : [];
+    const sessionStrategyRaw = pickArg(rest, "--session-strategy");
+    const sessionId = pickArg(rest, "--session") || undefined;
+    const sessionStrategy = sessionId && !sessionStrategyRaw
+      ? "reuse"
+      : parseSessionStrategy(sessionStrategyRaw || process.env.FF_AUTONOMY_SESSION_STRATEGY || "new");
+    const headless = true;
+
+    await runAutonomyLoop({
+      repoRoot,
+      workspaceDir,
+      promptFile,
+      tasksFile,
+      completionPromise,
+      maxLoops,
+      stallLimit,
+      sleepMs,
+      oracleMode,
+      highRiskKeywords,
+      sessionStrategy,
+      sessionId,
+      logLevel: (runtimeCfg as any).log_level,
+      logMaxBytes: (runtimeCfg as any).log_max_bytes,
+      logRetention: (runtimeCfg as any).log_retention,
+      headless
     });
     return;
   }
