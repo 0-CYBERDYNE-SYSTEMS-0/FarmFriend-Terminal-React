@@ -606,6 +606,123 @@ ff-terminal-workspace/
 
 ---
 
+## HTML/CSS/JS File Generation (CRITICAL)
+
+When creating HTML files with `write_file`, you MUST ensure all assets are properly linked:
+
+### **Required Checklist for Every HTML File:**
+
+**1. Directory Structure:**
+Projects MUST be created in `ff-terminal-workspace/projects/` with proper organization:
+```
+ff-terminal-workspace/projects/project-name/
+├── index.html          # Main HTML file
+├── styles.css          # CSS (if external)
+├── script.js           # JavaScript (if external)
+└── assets/            # Images, fonts, etc.
+    ├── logo.png
+    └── background.jpg
+```
+
+**2. CSS Linking (REQUIRED):**
+- **External CSS:** `<link rel="stylesheet" href="styles.css">` (MUST be in same directory)
+- **CDN CSS:** `<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/font-awesome@...">`
+- **Inline CSS:** `<style> ... </style>` tags in `<head>` section
+- **NEVER reference non-existent CSS files**
+
+**3. JavaScript Linking (REQUIRED):**
+- **External JS:** `<script src="script.js"></script>` (MUST be in same directory, typically before `</body>`)
+- **CDN JS:** `<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>`
+- **Inline JS:** `<script> ... </script>` tags (before `</body>` or in `<head>` with `defer`)
+- **NEVER reference non-existent JS files**
+
+**4. Image and Asset References (REQUIRED):**
+- **Local assets:** `<img src="assets/logo.png">` (MUST create the file)
+- **Relative paths work best:** `./assets/`, `../assets/`, or just `assets/`
+- **CDN images:** `<img src="https://example.com/image.jpg">`
+- **Data URIs:** For small images: `<img src="data:image/png;base64,...">`
+
+**5. Navigation Links (REQUIRED):**
+- **Internal links:** `<a href="page2.html">` (MUST create page2.html)
+- **External links:** `<a href="https://example.com" target="_blank">`
+- **Anchor links:** `<a href="#section">` (MUST have `<section id="section">`)
+- **Test all links:** Every link must point to an existing file or valid URL
+
+**6. Common Pitfalls to Avoid:**
+
+❌ **WRONG:**
+```html
+<link rel="stylesheet" href="css/main.css">  <!-- File doesn't exist! -->
+<script src="js/app.js"></script>            <!-- Wrong path! -->
+<img src="image.png">                       <!-- No image created! -->
+<a href="about.html">About</a>              <!-- about.html not created! -->
+```
+
+✅ **RIGHT:**
+```html
+<link rel="stylesheet" href="styles.css">     <!-- File exists in same dir -->
+<script src="script.js"></script>            <!-- File exists in same dir -->
+<img src="assets/logo.png">                  <!-- Create assets/logo.png -->
+<a href="about.html">About</a>               <!-- Create about.html -->
+```
+
+**7. Always Verify After Creating HTML:**
+- [ ] CSS file exists (if `<link>` used)
+- [ ] JS file exists (if `<script>` used)
+- [ ] All images exist (if `<img>` tags used)
+- [ ] All linked pages exist (if `<a>` tags used)
+- [ ] Relative paths are correct
+- [ ] File names match exactly (case-sensitive)
+
+**8. Recommended Approach:**
+
+**For Simple Pages:** Use inline CSS/JS
+```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Page Title</title>
+    <style>
+        /* All CSS here - no external file needed */
+        body { font-family: Arial, sans-serif; }
+    </style>
+</head>
+<body>
+    <h1>Hello World</h1>
+    <script>
+        // All JS here - no external file needed
+        console.log('Page loaded');
+    </script>
+</body>
+</html>
+```
+
+**For Complex Projects:** Use external files
+```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Project Name</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <h1>Project Title</h1>
+    <script src="script.js"></script>
+</body>
+</html>
+```
+
+**Then create supporting files:**
+- `styles.css` (must exist)
+- `script.js` (must exist)
+- Any assets in `assets/` folder
+
+---
+
 ## Project Detection
 
 Before creating new projects, check `ff-terminal-workspace/projects/` for existing matches:

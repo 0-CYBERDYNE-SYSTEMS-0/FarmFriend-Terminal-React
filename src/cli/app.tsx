@@ -74,6 +74,7 @@ function parseWireChunk(chunk: string, displayMode: string = "clean"): Line | nu
   if (chunk.startsWith("content:")) return { kind: "assistant", text: chunk.slice("content:".length) };
   if (chunk.startsWith("thinking:")) return { kind: "thinking", text: chunk.slice("thinking:".length) };
   if (chunk.startsWith("error:")) return { kind: "error", text: chunk.slice("error:".length) };
+  if (chunk.startsWith("update:")) return { kind: "system", text: chunk.slice("update:".length).trim() };
 
   if (chunk.startsWith("tool_start:")) {
     const rest = chunk.slice("tool_start:".length);
@@ -81,11 +82,11 @@ function parseWireChunk(chunk: string, displayMode: string = "clean"): Line | nu
     const contextMsg = contextParts.join("|").trim();
 
     if (contextMsg) {
-      // Clean mode: show contextual message with emoji
+      // Clean mode: show contextual message with the tool context
       return { kind: "tool", text: contextMsg };
     } else {
       // Fallback: show traditional format
-      return { kind: "tool", text: `▶ ${toolName.trim()}` };
+      return { kind: "tool", text: `>> ${toolName.trim()}` };
     }
   }
 
@@ -95,26 +96,26 @@ function parseWireChunk(chunk: string, displayMode: string = "clean"): Line | nu
     const preview = previewParts.join("|").trim();
 
     if (duration && status) {
-      // Clean mode: show result with checkmark/X and duration
-      const icon = status === "ok" ? "✓" : "✗";
-      let text = `${icon} `;
+      // Clean mode: show result with status and duration
+      const label = status === "ok" ? "OK" : "ERR";
+      let text = `${label} `;
 
       if (preview && status === "ok") {
         // Smart previews are already concise, show them in full
-        text += preview;
+        text += `${toolName.trim()}: ${preview}`;
       } else if (status === "error") {
         // Failed tool
         text += `${toolName.trim()} failed`;
         if (preview) text += `: ${preview.slice(0, 200)}`;
       } else {
         // No preview available, just show completion
-        text += `Completed in ${duration}`;
+        text += `${toolName.trim()} completed in ${duration}`;
       }
 
       return { kind: "tool", text };
     } else {
       // Fallback: show traditional format
-      return { kind: "tool", text: `■ ${toolName.trim()}` };
+      return { kind: "tool", text: `<< ${toolName.trim()}` };
     }
   }
 
@@ -177,7 +178,7 @@ const Banner = memo(function Banner(props: { displayMode: string; width: number;
       <Box flexDirection="column">
         {FARMFRIEND_ASCII_ART.map((line, i) => {
           if (!line) return <Text key={i}> </Text>;
-          // Approximate the Python aurora gradient (leafy green → sky teal) with theme colors.
+          // Approximate the Python aurora gradient (leafy green -> sky teal) with theme colors.
           const t = i / Math.max(1, FARMFRIEND_ASCII_ART.length - 1);
           const lineColor = t < 0.5 ? theme.bannerSecondary : theme.bannerPrimary;
           return (
@@ -187,7 +188,7 @@ const Banner = memo(function Banner(props: { displayMode: string; width: number;
           );
         })}
         <Text> </Text>
-        <Text color={theme.system}>🌾 Ultra-Autonomous AI Terminal Interface</Text>
+        <Text color={theme.system}>Ultra-Autonomous AI Terminal Interface</Text>
       </Box>
     );
   }
@@ -371,12 +372,12 @@ const InlineTodoStatus = memo(function InlineTodoStatus(props: {
     priority === "high" ? "!" : "";
 
   // Build summary line based on what's visible
-  let summaryText = `⚡ Tasks (${inProgressCount} active, ${pendingCount} pending`;
+  let summaryText = `Tasks (${inProgressCount} active, ${pendingCount} pending`;
   if (completedCount > 0) {
     summaryText += `, ${completedCount} done`;
   }
   if (hiddenCompletedCount > 0) {
-    summaryText += ` · ${hiddenCompletedCount} auto-hidden`;
+    summaryText += ` | ${hiddenCompletedCount} auto-hidden`;
   }
   summaryText += ")";
 
@@ -385,7 +386,7 @@ const InlineTodoStatus = memo(function InlineTodoStatus(props: {
       <Text color={theme.todoSummary}>{summaryText}</Text>
 
       {displayTodos.map(t => {
-        const symbol = t.status === "completed" ? "✓" : t.status === "in_progress" ? "▶" : "○";
+        const symbol = t.status === "completed" ? "x" : t.status === "in_progress" ? ">" : "-";
         const statusColor = statusColors[t.status];
         const priColor = priorityColors[t.priority];
         const lineColor = priColor || statusColor;
@@ -416,12 +417,15 @@ const InlineTodoStatus = memo(function InlineTodoStatus(props: {
  */
 type SubagentState = {
   id: string;
+  displayId: number;
   task: string;
   status: "running" | "done" | "error";
   currentAction?: string;
   currentFile?: string;
   toolCount: number;
   tokens: number;
+  startedAt: number;
+  updatedAt: number;
 };
 
 const SubagentSwarm = memo(function SubagentSwarm(props: {
@@ -431,38 +435,64 @@ const SubagentSwarm = memo(function SubagentSwarm(props: {
 }) {
   const { agents, expanded } = props;
   const theme = getTheme(props.themeName);
+  const [now, setNow] = useState(Date.now());
+
+  useEffect(() => {
+    if (agents.length === 0) return;
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [agents.length]);
 
   if (agents.length === 0) return null;
 
+  const orderedAgents = [...agents].sort((a, b) => a.displayId - b.displayId);
   const runningCount = agents.filter(a => a.status === "running").length;
   const doneCount = agents.filter(a => a.status === "done").length;
+  const errorCount = agents.filter(a => a.status === "error").length;
+  const totalTools = agents.reduce((sum, a) => sum + a.toolCount, 0);
+  const totalTokens = agents.reduce((sum, a) => sum + a.tokens, 0);
+
+  const formatAge = (ms: number): string => {
+    const sec = Math.max(0, Math.floor(ms / 1000));
+    if (sec < 60) return `${sec}s`;
+    const min = Math.floor(sec / 60);
+    const rem = sec % 60;
+    return `${min}m${rem}s`;
+  };
 
   return (
     <Box flexDirection="column" marginY={1}>
       <Text color={theme.subagentSummary}>
-        ⚡ Running {runningCount} Task agents...
+        Running {runningCount} agents
         {doneCount > 0 && <Text color={theme.subagentDone}> ({doneCount} complete)</Text>}
+        {errorCount > 0 && <Text color={theme.subagentError}> ({errorCount} error)</Text>}
+        <Text color={theme.subagentMeta}> | {totalTools} tools | {(totalTokens / 1000).toFixed(1)}k tokens</Text>
         <Text dimColor> (ctrl+o to {expanded ? "collapse" : "expand"})</Text>
       </Text>
 
-      {expanded && agents.map((agent, idx) => {
-        const prefix = idx === agents.length - 1 ? "└─" : "├─";
+      {expanded && orderedAgents.map((agent, idx) => {
+        const prefix = idx === orderedAgents.length - 1 ? "`-" : "|-";
         const statusColor = agent.status === "done" ? theme.subagentDone : agent.status === "error" ? theme.subagentError : theme.subagentRunning;
-        const statusSymbol = agent.status === "done" ? "✓" : agent.status === "error" ? "✗" : "⚙";
+        const statusLabel = agent.status === "done" ? "DONE" : agent.status === "error" ? "ERR" : "RUN";
+        const age = formatAge(now - agent.updatedAt);
+        const normalizedAction = agent.currentAction ? agent.currentAction.replace(/\s+/g, " ").trim() : "";
+        const actionText = normalizedAction.length > 140
+          ? `${normalizedAction.slice(0, 140)}...`
+          : normalizedAction || undefined;
 
         return (
           <Box key={agent.id} flexDirection="column" marginLeft={1}>
             <Text>
               <Text color={theme.subagentMeta}>{prefix}</Text>
-              <Text color={statusColor}> {statusSymbol} Agent {agent.id}</Text>
+              <Text color={statusColor}> [{statusLabel}] Agent {agent.displayId}</Text>
               <Text>: {agent.task}</Text>
-              <Text color={theme.subagentMeta}> · {agent.toolCount} tools · {(agent.tokens / 1000).toFixed(1)}k tokens</Text>
+              <Text color={theme.subagentMeta}> | {agent.toolCount} tools | {(agent.tokens / 1000).toFixed(1)}k tokens | last {age}</Text>
             </Text>
 
-            {agent.currentAction && agent.status === "running" && (
+            {actionText && agent.status !== "done" && (
               <Box marginLeft={3}>
-                <Text color={theme.subagentMeta}>└ </Text>
-                <Text color={theme.subagentAction}>{agent.currentAction}</Text>
+                <Text color={theme.subagentMeta}>|- </Text>
+                <Text color={theme.subagentAction}>{actionText}</Text>
                 {agent.currentFile && <Text color={theme.subagentMeta}>: {agent.currentFile}</Text>}
               </Box>
             )}
@@ -474,9 +504,10 @@ const SubagentSwarm = memo(function SubagentSwarm(props: {
 });
 
 const TOOL_NAME_PATTERNS = [
-  /^▶\s*([A-Za-z0-9_-]+)/,
-  /^■\s*([A-Za-z0-9_-]+)/,
-  /^✓\s*([A-Za-z0-9_-]+)/,
+  /^>>\s*([A-Za-z0-9_-]+)/,
+  /^<<\s*([A-Za-z0-9_-]+)/,
+  /^OK\s+([A-Za-z0-9_-]+)/,
+  /^ERR\s+([A-Za-z0-9_-]+)/,
   /^Tool:\s*([A-Za-z0-9_-]+)/i
 ];
 
@@ -513,8 +544,8 @@ function summarizeToolGroup(lines: LineEntry[]): string {
     const name = extractToolName(text);
     if (name) names.add(name);
 
-    // Count failures (marked with ✗ or containing "failed")
-    if (text.includes('✗') || text.toLowerCase().includes('failed')) {
+    // Count failures (marked with "ERR" or containing "failed")
+    if (text.startsWith("ERR") || text.toLowerCase().includes("failed")) {
       failureCount++;
     }
   }
@@ -762,9 +793,9 @@ const PlanPanel = memo(function PlanPanel(props: {
 
   const getStatusIcon = (status: string) => {
     switch (status) {
-      case "completed": return "✓";
-      case "in_progress": return "⧗";
-      case "blocked": return "✗";
+      case "completed": return "x";
+      case "in_progress": return ">";
+      case "blocked": return "!";
       default: return " ";
     }
   };
@@ -785,7 +816,7 @@ const PlanPanel = memo(function PlanPanel(props: {
           {step.status === "blocked" && step.lastError && (
             <Box marginLeft={2}>
               <Text color={theme.planBlocked}>
-                ↳ BLOCKED: {step.lastError.slice(0, 60)}
+                {"->"} BLOCKED: {step.lastError.slice(0, 60)}
               </Text>
             </Box>
           )}
@@ -1575,7 +1606,8 @@ function App(props: { port: number }) {
   const [currentModel, setCurrentModel] = useState<string | null>(null);
   const [currentTodos, setCurrentTodos] = useState<Todo[]>([]);
   const [runningSubagents, setRunningSubagents] = useState<Map<string, SubagentState>>(new Map());
-  const [subagentsExpanded, setSubagentsExpanded] = useState(false);
+  const [subagentsExpanded, setSubagentsExpanded] = useState(true);
+  const subagentCounterRef = useRef(1);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [turnId, setTurnId] = useState<string | null>(null);
   const [processing, setProcessing] = useState(false);
@@ -2064,7 +2096,7 @@ This is the ${title.toLowerCase()} project.
     }
 
     const created = createMissingProjectContextFiles(abs);
-    if (created.length) pushLines({ kind: "system", text: `✓ Created: ${created.join(", ")}` });
+    if (created.length) pushLines({ kind: "system", text: `Created: ${created.join(", ")}` });
 
     const candidates = ["FF_PROJECT.md", "ff_project.md", "PROJECT.md", "project.md"].map((n) => path.join(abs, n));
     const seen = new Set<string>();
@@ -2129,7 +2161,7 @@ Project Context:
 ${fullContext}`;
 
     pushLines([
-      { kind: "system", text: `✓ Loaded ${contextFiles.length} project context files (${totalChars.toLocaleString()} chars)` },
+      { kind: "system", text: `Loaded ${contextFiles.length} project context files (${totalChars.toLocaleString()} chars)` },
       { kind: "system", text: `Project: ${projectName} at ${abs}` }
     ]);
     sendTurn(initPrompt, { echoUser: false });
@@ -2271,12 +2303,17 @@ ${fullContext}`;
         if (msg.type === "subagent_start") {
           setRunningSubagents(prev => {
             const updated = new Map(prev);
+            const now = Date.now();
             updated.set(msg.agentId, {
               id: msg.agentId,
+              displayId: subagentCounterRef.current++,
               task: msg.task,
               status: "running",
+              currentAction: "Starting...",
               toolCount: 0,
-              tokens: 0
+              tokens: 0,
+              startedAt: now,
+              updatedAt: now
             });
             return updated;
           });
@@ -2293,7 +2330,8 @@ ${fullContext}`;
                 currentAction: msg.action,
                 currentFile: msg.file,
                 toolCount: msg.toolCount,
-                tokens: msg.tokens
+                tokens: msg.tokens,
+                updatedAt: Date.now()
               });
             }
             return updated;
@@ -2309,19 +2347,20 @@ ${fullContext}`;
               updated.set(msg.agentId, {
                 ...agent,
                 status: msg.status,
-                currentAction: msg.status === "done" ? "Done" : msg.error || "Error"
+                currentAction: msg.status === "done" ? "Done" : msg.error || "Error",
+                updatedAt: Date.now()
               });
             }
             return updated;
           });
-          // Keep completed agents visible for 5 seconds, then remove
+          // Keep completed agents visible for a short period, then remove
           setTimeout(() => {
             setRunningSubagents(prev => {
               const updated = new Map(prev);
               updated.delete(msg.agentId);
               return updated;
             });
-          }, 5000);
+          }, 20000);
           return;
         }
       });
@@ -3441,7 +3480,7 @@ Use skill_draft first to create the draft, then skill_apply to create the final 
                       text: `Failed operations: ${migrationResult.failed.map((f) => f.error).join(", ")}`
                     });
                   } else {
-                    resultLines.push({ kind: "system", text: "✓ All issues fixed successfully!" });
+                    resultLines.push({ kind: "system", text: "All issues fixed successfully." });
                   }
 
                   pushLines(resultLines);
@@ -3654,13 +3693,13 @@ Use skill_draft first to create the draft, then skill_apply to create the final 
               { kind: "system", text: `Current theme: ${themeName.toUpperCase()}` },
               { kind: "system", text: "Set theme with FF_THEME environment (default|highContrast|muted)" },
               { kind: "system", text: "" },
-              { kind: "system", text: "Theme preview (semantic roles → Ink color tokens):" },
+              { kind: "system", text: "Theme preview (semantic roles -> Ink color tokens):" },
               { kind: "system", text: "system/meta (gray): connected (daemon 0.0.0)" },
               { kind: "user", text: "user (cyanBright+bold): hello from user input" },
               { kind: "assistant", text: "assistant (whiteBright+bold): hello from assistant response" },
               { kind: "thinking", text: "thinking (magenta): thinking: planning next step..." },
-              { kind: "tool", text: "tool (yellow): ▶ example_tool" },
-              { kind: "tool", text: "tool (yellow): ■ example_tool" },
+              { kind: "tool", text: "tool (yellow): >> example_tool" },
+              { kind: "tool", text: "tool (yellow): << example_tool" },
               { kind: "error", text: "error (red): error: example failure message" },
               { kind: "system", text: "spinner (yellow): see footer for [|] while a turn is processing" }
             ]);

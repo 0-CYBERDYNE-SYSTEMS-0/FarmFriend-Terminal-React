@@ -157,7 +157,7 @@ export async function promptSelectProfile(params: {
     config.profiles.forEach((p, idx) => {
       const isDefault = config.defaultProfile && p.name === config.defaultProfile;
       // eslint-disable-next-line no-console
-      console.log(`  ${idx + 1}) ${p.name}${isDefault ? " (default)" : ""} — ${p.provider}`);
+      console.log(`  ${idx + 1}) ${p.name}${isDefault ? " (default)" : ""} - ${p.provider}`);
     });
     const answer = await rl.question(`\nSelect profile [1-${config.profiles.length}] (default: ${config.defaultProfile ?? "1"}): `);
     const trimmed = answer.trim();
@@ -310,7 +310,7 @@ export async function runProfileSetupWizard(params: {
       // eslint-disable-next-line no-console
       console.log("\nGlobal tool API keys detected:");
       for (const key of keyStatus.all) {
-        const status = keyStatus.configured.includes(key) ? "✓" : "✗";
+        const status = keyStatus.configured.includes(key) ? "OK" : "NO";
         // eslint-disable-next-line no-console
         console.log(`  ${status} ${key}`);
       }
@@ -322,7 +322,7 @@ export async function runProfileSetupWizard(params: {
 
     if (!shouldPrompt) {
       // eslint-disable-next-line no-console
-      console.log("\n✓ All tool API keys already configured globally (skipping prompt)");
+      console.log("\nAll tool API keys already configured globally (skipping prompt)");
     }
 
     const addOptional = shouldPrompt
@@ -362,13 +362,13 @@ export async function runProfileSetupWizard(params: {
           // Store directly to global (primary storage)
           await storeCredential(GLOBAL_TOOL_CRED_PROFILE, key, v);
           // eslint-disable-next-line no-console
-          console.log(`  ✓ ${key} saved globally`);
+          console.log(`  ${key} saved globally`);
         } else if (!hasValue) {
           // eslint-disable-next-line no-console
-          console.log(`  ⊘ ${key} skipped`);
+          console.log(`  ${key} skipped`);
         } else {
           // eslint-disable-next-line no-console
-          console.log(`  ↻ ${key} unchanged`);
+          console.log(`  ${key} unchanged`);
         }
       }
     }

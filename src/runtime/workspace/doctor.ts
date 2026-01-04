@@ -182,13 +182,13 @@ export function generateReport(result: ValidationResult): string {
   lines.push('');
   lines.push(`Workspace: ${result.workspaceDir}`);
   lines.push(`Scanned at: ${new Date(result.timestamp).toLocaleString()}`);
-  lines.push(`Status: ${result.ok ? '✓ Healthy' : '✗ Issues Found'}`);
+  lines.push(`Status: ${result.ok ? 'OK (healthy)' : 'Issues found'}`);
   lines.push(`Expected dirs: ${CANONICAL_DIRECTORIES.join(", ")}`);
   lines.push('');
 
   if (result.issues.length === 0) {
-    lines.push('✓ All checks passed');
-    lines.push('✓ No issues detected');
+    lines.push('All checks passed');
+    lines.push('No issues detected');
     return lines.join('\n');
   }
 
@@ -213,14 +213,14 @@ export function generateReport(result: ValidationResult): string {
     const severityIssues = groupedIssues[severity];
     if (severityIssues.length === 0) continue;
 
-    const symbol = severity === 'error' ? '✗' : severity === 'warning' ? '⚠' : 'ℹ';
+    const symbol = severity === 'error' ? 'ERR' : severity === 'warning' ? 'WARN' : 'INFO';
     const label = severity.toUpperCase();
 
     lines.push(`${label}S:`);
     for (const issue of severityIssues) {
-      lines.push(`  ${symbol} ${issue.message}`);
+      lines.push(`  ${symbol}: ${issue.message}`);
       if (issue.expectedPath) {
-        lines.push(`    → Expected: ${issue.expectedPath}`);
+        lines.push(`    -> Expected: ${issue.expectedPath}`);
       }
     }
     lines.push('');

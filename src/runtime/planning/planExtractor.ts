@@ -99,26 +99,26 @@ export function isPlanComplete(plan: ExecutionPlan): boolean {
 
 export function formatPlanForPrompt(plan: ExecutionPlan): string {
   const statusSymbols: Record<string, string> = {
-    completed: "✓",
-    in_progress: "⧗",
-    pending: "○",
-    blocked: "✗",
+    completed: "x",
+    in_progress: ">",
+    pending: "-",
+    blocked: "!",
   };
 
   const progress = `${plan.completedSteps}/${plan.totalSteps}`;
   const statusIcon =
     plan.status === "completed"
-      ? "✓ Complete"
+      ? "Complete"
       : plan.status === "abandoned"
-        ? "✗ Abandoned"
-        : "⧗ Active";
+        ? "Abandoned"
+        : "Active";
 
   let formatted = `## Execution Plan: ${plan.objective}\n`;
   formatted += `**Status**: ${statusIcon} (${progress} steps)\n\n`;
   formatted += `**Steps**:\n`;
 
   for (const step of plan.steps) {
-    const symbol = statusSymbols[step.status] || "○";
+    const symbol = statusSymbols[step.status] || "-";
     formatted += `- ${symbol} [${step.id}] ${step.description}`;
 
     if (step.status === "in_progress") {

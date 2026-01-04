@@ -33,7 +33,7 @@ export async function runToolKeysManager(): Promise<void> {
     const value = await getCredential(GLOBAL_TOOL_CRED_PROFILE, key);
     keyStatus[key] = !!value;
     // eslint-disable-next-line no-console
-    console.log(`  ${value ? "✓" : "✗"} ${key}`);
+    console.log(`  ${value ? "OK" : "NO"} ${key}`);
   }
 
   // eslint-disable-next-line no-console
@@ -70,17 +70,17 @@ export async function runToolKeysManager(): Promise<void> {
       if (v) {
         await storeCredential(GLOBAL_TOOL_CRED_PROFILE, key, v);
         // eslint-disable-next-line no-console
-        console.log(`  ✓ ${key} saved`);
+        console.log(`  ${key} saved`);
       } else if (!hasValue) {
         // eslint-disable-next-line no-console
-        console.log(`  ⊘ ${key} skipped`);
+        console.log(`  ${key} skipped`);
       } else {
         // eslint-disable-next-line no-console
-        console.log(`  ↻ ${key} unchanged`);
+        console.log(`  ${key} unchanged`);
       }
     }
     // eslint-disable-next-line no-console
-    console.log("\n✓ Tool keys updated successfully!");
+    console.log("\nTool keys updated successfully.");
   }
 
   if (action === "view") {
@@ -120,6 +120,6 @@ export async function runToolKeysManager(): Promise<void> {
 
     await deleteCredential(GLOBAL_TOOL_CRED_PROFILE, keyToDelete);
     // eslint-disable-next-line no-console
-    console.log(`✓ ${keyToDelete} deleted`);
+    console.log(`${keyToDelete} deleted`);
   }
 }

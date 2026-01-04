@@ -37,7 +37,24 @@ export async function subagentTool(argsRaw: unknown, signal: AbortSignal): Promi
   let error: string | undefined;
   let toolCount = 0;
   let tokens = 0;
-  let lastAction = "";
+  let lastProgressAt = Date.now();
+
+  const emitProgress = (action: string, file?: string) => {
+    lastProgressAt = Date.now();
+    parent?.emitSubagentEvent?.({
+      event: "progress",
+      agentId: subagentId,
+      action,
+      file,
+      toolCount,
+      tokens: Math.floor(tokens)
+    });
+  };
+
+  const extractFileFromText = (text: string): string | undefined => {
+    const match = text.match(/([A-Za-z0-9_./\\-]+\.[A-Za-z0-9]{1,8})/);
+    return match?.[1];
+  };
 
   // Emit start event
   parent?.emitSubagentEvent?.({
@@ -54,31 +71,35 @@ export async function subagentTool(argsRaw: unknown, signal: AbortSignal): Promi
           tokens += ch.delta.length / 4; // Rough token estimate
           chunks.push({ kind: "content", value: ch.delta });
         } else if (ch.kind === "thinking") {
+          if (Date.now() - lastProgressAt > 45000) {
+            emitProgress("Thinking...");
+          }
           chunks.push({ kind: "thinking", value: ch.delta });
         } else if (ch.kind === "error") {
           hadError = true;
           error = ch.message;
           chunks.push({ kind: "error", value: ch.message });
         } else if (ch.kind === "status") {
-          // Extract tool action from status messages
+          // Extract tool and update actions from status messages
           const statusMsg = ch.message;
-          if (statusMsg.includes("▶") || statusMsg.includes("■")) {
+          if (statusMsg.startsWith("tool_start:")) {
             toolCount++;
-            // Try to extract action and file from status
-            const match = statusMsg.match(/(?:▶|■)\s*([A-Za-z_]+)(?:\.\.\.)?\s*(?:.*?([a-zA-Z0-9_/.\\-]+\.[a-zA-Z]{2,}))?/);
-            if (match) {
-              lastAction = match[1];
-              const file = match[2];
-              // Emit progress event
-              parent?.emitSubagentEvent?.({
-                event: "progress",
-                agentId: subagentId,
-                action: lastAction,
-                file,
-                toolCount,
-                tokens: Math.floor(tokens)
-              });
-            }
+            const rest = statusMsg.slice("tool_start:".length);
+            const [toolName, ...contextParts] = rest.split("|");
+            const contextMsg = contextParts.join("|").trim();
+            const action = contextMsg || toolName.trim();
+            const file = contextMsg ? extractFileFromText(contextMsg) : undefined;
+            emitProgress(action, file);
+          } else if (statusMsg.startsWith("update:")) {
+            const updateMsg = statusMsg.slice("update:".length).trim();
+            if (updateMsg) emitProgress(updateMsg);
+          } else if (statusMsg.startsWith("tool_end:")) {
+            const rest = statusMsg.slice("tool_end:".length);
+            const [toolName] = rest.split("|");
+            if (toolName.trim()) emitProgress(`Completed ${toolName.trim()}`);
+          } else if (statusMsg && Date.now() - lastProgressAt > 45000) {
+            // Soft heartbeat if no visible updates for a while
+            emitProgress("Working...");
           }
           chunks.push({ kind: "status", value: ch.message });
         }

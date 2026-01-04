@@ -36,49 +36,49 @@ function smartTruncate(text: string, maxLen: number): string {
 function getToolContextMessage(toolName: string, args: unknown): string {
   const toolMessages: Record<string, (args: any) => string> = {
     // File operations
-    read_file: (a) => `📖 Reading ${a?.file_path ? path.basename(String(a.file_path)) : "file"}...`,
-    write_file: (a) => `✏️  Writing ${a?.file_path ? path.basename(String(a.file_path)) : "file"}...`,
-    edit_file: (a) => `✏️  Editing ${a?.file_path ? path.basename(String(a.file_path)) : "file"}...`,
-    multi_edit_file: (a) => `✏️  Editing ${a?.file_path ? path.basename(String(a.file_path)) : "file"}...`,
-    glob: (a) => `🔍 Finding ${smartTruncate(String(a?.pattern || "files"), 60)}...`,
-    grep: (a) => `🔍 Searching for "${smartTruncate(String(a?.pattern || ""), 60)}"...`,
+    read_file: (a) => `Reading ${a?.file_path ? path.basename(String(a.file_path)) : "file"}...`,
+    write_file: (a) => `Writing ${a?.file_path ? path.basename(String(a.file_path)) : "file"}...`,
+    edit_file: (a) => `Editing ${a?.file_path ? path.basename(String(a.file_path)) : "file"}...`,
+    multi_edit_file: (a) => `Editing ${a?.file_path ? path.basename(String(a.file_path)) : "file"}...`,
+    glob: (a) => `Finding ${smartTruncate(String(a?.pattern || "files"), 60)}...`,
+    grep: (a) => `Searching for "${smartTruncate(String(a?.pattern || ""), 60)}"...`,
 
     // Execution
-    run_command: (a) => `🔧 Running ${smartTruncate(String(a?.command || "command"), 70)}...`,
+    run_command: (a) => `Running ${smartTruncate(String(a?.command || "command"), 70)}...`,
 
     // Web & search
-    tavily_search: (a) => `🔍 Searching the web for ${smartTruncate(String(a?.query || ""), 80)}...`,
-    tavily_extract: (a) => `🌐 Extracting from ${a?.url ? new URL(String(a.url)).hostname : "URL"}...`,
-    perplexity_search: (a) => `🔍 Searching for ${smartTruncate(String(a?.query || ""), 80)}...`,
-    browse_web: (a) => `🌐 Browsing ${a?.url ? new URL(String(a.url)).hostname : "URL"}...`,
+    tavily_search: (a) => `Searching the web for ${smartTruncate(String(a?.query || ""), 80)}...`,
+    tavily_extract: (a) => `Extracting from ${a?.url ? new URL(String(a.url)).hostname : "URL"}...`,
+    perplexity_search: (a) => `Searching for ${smartTruncate(String(a?.query || ""), 80)}...`,
+    browse_web: (a) => `Browsing ${a?.url ? new URL(String(a.url)).hostname : "URL"}...`,
 
     // Code & analysis
-    search_code: (a) => `🔎 Searching code for "${smartTruncate(String(a?.query || ""), 60)}"...`,
-    semantic_search: (a) => `🔎 Semantic search for "${smartTruncate(String(a?.query || ""), 60)}"...`,
-    ast_grep: (a) => `🔎 AST search for pattern...`,
-    analyze_data: (a) => `📊 Analyzing data...`,
+    search_code: (a) => `Searching code for "${smartTruncate(String(a?.query || ""), 60)}"...`,
+    semantic_search: (a) => `Semantic search for "${smartTruncate(String(a?.query || ""), 60)}"...`,
+    ast_grep: (a) => `AST search for pattern...`,
+    analyze_data: (a) => `Analyzing data...`,
 
     // Images & media
-    generate_image_gemini: (a) => `🎨 Generating image: ${smartTruncate(String(a?.prompt || ""), 70)}...`,
-    generate_image_openai: (a) => `🎨 Generating image: ${smartTruncate(String(a?.prompt || ""), 70)}...`,
-    analyze_image_gemini: (a) => `🖼️  Analyzing image...`,
-    analyze_image_openai: (a) => `🖼️  Analyzing image...`,
+    generate_image_gemini: (a) => `Generating image: ${smartTruncate(String(a?.prompt || ""), 70)}...`,
+    generate_image_openai: (a) => `Generating image: ${smartTruncate(String(a?.prompt || ""), 70)}...`,
+    analyze_image_gemini: (a) => `Analyzing image...`,
+    analyze_image_openai: (a) => `Analyzing image...`,
 
     // Task management
-    manage_task: (a) => `📝 Managing tasks...`,
-    schedule_task: (a) => `⏰ Scheduling task...`,
+    manage_task: (a) => `Managing tasks...`,
+    schedule_task: (a) => `Scheduling task...`,
 
     // Skills
-    skill_apply: (a) => `🎯 Applying ${a?.skill_name || "skill"}...`,
-    skill_sequencer: (a) => `🔄 Sequencing skills...`,
+    skill_apply: (a) => `Applying ${a?.skill_name || "skill"}...`,
+    skill_sequencer: (a) => `Sequencing skills...`,
 
     // Notebook
-    notebook_edit: (a) => `📓 Editing notebook cell...`,
+    notebook_edit: (a) => `Editing notebook cell...`,
 
     // Thinking & updates
-    think: (a) => `💭 Thinking...`,
-    quick_update: (a) => `💬 ${smartTruncate(String(a?.message || "Updating"), 70)}...`,
-    session_summary: (a) => `📋 Generating summary...`
+    think: (a) => `Thinking...`,
+    quick_update: (a) => `Update: ${smartTruncate(String(a?.message || "Updating"), 70)}...`,
+    session_summary: (a) => `Generating summary...`
   };
 
   const formatter = toolMessages[toolName];
@@ -89,10 +89,10 @@ function getToolContextMessage(toolName: string, args: unknown): string {
       if (process.env.FF_DEBUG === "1") {
         console.debug(`[agentLoop] Tool context formatter failed for ${toolName}:`, err);
       }
-      return `⚙️  ${toolName}...`;
+      return `Running ${toolName}...`;
     }
   }
-  return `⚙️  ${toolName}...`;
+  return `Running ${toolName}...`;
 }
 
 function getToolPreview(toolName: string, output: string, ok: boolean): string {
@@ -304,7 +304,7 @@ export async function* runAgentTurn(params: {
       .slice(0, 8)
       .map(({ s }) => {
         const desc = (s.summary || s.description || "").trim().replace(/\s+/g, " ");
-        const tail = desc ? ` — ${desc}` : "";
+        const tail = desc ? ` - ${desc}` : "";
         return `- \`${s.slug}\`${tail} _(source: ${s.source}, kind: ${s.kind})_`;
       });
 
