@@ -25,6 +25,7 @@ import { loadDefaultDotenv } from "../runtime/config/dotenv.js";
 import { GLOBAL_TOOL_CRED_PROFILE, OPTIONAL_TOOL_ENV_KEYS } from "../runtime/profiles/toolKeys.js";
 import { StructuredLogger, parseLogLevel, truncateForLog } from "../runtime/logging/structuredLogger.js";
 import { runAutonomyLoop, type OracleMode, type SessionStrategy } from "../runtime/autonomy/loop.js";
+import { runAutonomyWizard } from "../runtime/autonomy/wizard.js";
 import { computeNextRunAt, runSchedulerLoop } from "../runtime/scheduling/scheduler.js";
 import { DateTime } from "luxon";
 
@@ -43,6 +44,7 @@ function usage(): void {
   ff-terminal autonomy [--profile <name>] --prompt-file <path> [--tasks-file <path>] [--completion-promise <text>]
                        [--max-loops <n>] [--stall-limit <n>] [--sleep-ms <n>] [--oracle <mode>] [--session <id>]
                        [--session-strategy reuse|new] [--headless]
+  ff-terminal autonomy --wizard [--profile <name>]
   ff-terminal schedule list
   ff-terminal schedule status <name>
   ff-terminal profile setup
@@ -883,6 +885,59 @@ async function run(): Promise<void> {
       (runtimeCfg as any).workspace_dir ?? process.env.FF_WORKSPACE_DIR ?? undefined,
       { repoRoot }
     );
+
+    if (hasFlag(rest, "--wizard")) {
+      const wizardResult = await runAutonomyWizard({
+        repoRoot,
+        workspaceDir,
+        defaultCompletionPromise: process.env.FF_AUTONOMY_COMPLETION_PROMISE || "✅ COMPLETED",
+        preferredProfile: profileName
+      });
+
+      if (!wizardResult) return;
+
+      profileName = wizardResult.profileName;
+
+      if (!wizardResult.startNow) {
+        const args: string[] = [];
+        if (profileName) args.push(`--profile \"${profileName}\"`);
+        args.push(`--prompt-file \"${wizardResult.promptFile}\"`);
+        args.push(`--tasks-file \"${wizardResult.tasksFile}\"`);
+        args.push(`--completion-promise \"${wizardResult.completionPromise}\"`);
+        args.push(`--max-loops ${wizardResult.maxLoops}`);
+        args.push(`--stall-limit ${wizardResult.stallLimit}`);
+        args.push(`--sleep-ms ${wizardResult.sleepMs}`);
+        args.push(`--oracle ${wizardResult.oracleMode}`);
+        if (wizardResult.highRiskKeywords.length > 0) {
+          args.push(`--high-risk-keywords \"${wizardResult.highRiskKeywords.join(",")}\"`);
+        }
+        if (wizardResult.sessionStrategy) {
+          args.push(`--session-strategy ${wizardResult.sessionStrategy}`);
+        }
+        if (wizardResult.sessionId) {
+          args.push(`--session \"${wizardResult.sessionId}\"`);
+        }
+
+        // eslint-disable-next-line no-console
+        console.log(`Run later: ff-terminal autonomy ${args.join(" ")}`);
+        return;
+      }
+
+      rest.push("--prompt-file", wizardResult.promptFile);
+      rest.push("--tasks-file", wizardResult.tasksFile);
+      rest.push("--completion-promise", wizardResult.completionPromise);
+      rest.push("--max-loops", String(wizardResult.maxLoops));
+      rest.push("--stall-limit", String(wizardResult.stallLimit));
+      rest.push("--sleep-ms", String(wizardResult.sleepMs));
+      rest.push("--oracle", wizardResult.oracleMode);
+      if (wizardResult.highRiskKeywords.length > 0) {
+        rest.push("--high-risk-keywords", wizardResult.highRiskKeywords.join(","));
+      }
+      rest.push("--session-strategy", wizardResult.sessionStrategy);
+      if (wizardResult.sessionId) {
+        rest.push("--session", wizardResult.sessionId);
+      }
+    }
 
     if (profileName) {
       const config = readConfig();

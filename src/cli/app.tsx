@@ -54,6 +54,19 @@ type Todo = {
   completedAt?: number;
 };
 
+type AutonomyLogInfo = {
+  name: string;
+  path: string;
+  mtimeMs: number;
+  size: number;
+  lastEvent?: string;
+  lastTs?: string;
+  loopsRun?: number;
+  promptFile?: string;
+  tasksFile?: string;
+  oracleMode?: string;
+};
+
 function parseWireChunk(chunk: string, displayMode: string = "clean"): Line | null | { type: "provider_info"; provider: string; model: string } {
   // Hide verbose metadata in clean mode
   if (displayMode === "clean") {
@@ -802,7 +815,7 @@ const PlanPanel = memo(function PlanPanel(props: {
 
 // TodoSummary removed - replaced with inline task status
 
-type Mode = "chat" | "help" | "models" | "mounts" | "init_project" | "wizard" | "commands" | "agents" | "skills";
+type Mode = "chat" | "help" | "models" | "mounts" | "init_project" | "wizard" | "commands" | "agents" | "skills" | "logs";
 type ModelKey = "model" | "subagentModel" | "toolModel" | "webModel" | "imageModel" | "videoModel";
 type ModelRow = { key: ModelKey; label: string; help: string };
 
@@ -815,7 +828,7 @@ const MODEL_ROWS: ModelRow[] = [
   { key: "videoModel", label: "Video model", help: "Reserved (future video tools)" }
 ];
 
-type WizardId = "models" | "mounts" | "init_project" | "commands" | "agents" | "skills";
+type WizardId = "models" | "mounts" | "init_project" | "commands" | "agents" | "skills" | "logs";
 type WizardRow = { id: WizardId; label: string; help: string };
 const WIZARD_ROWS: WizardRow[] = [
   { id: "models", label: "Models", help: "Edit model overrides for this profile" },
@@ -823,7 +836,8 @@ const WIZARD_ROWS: WizardRow[] = [
   { id: "init_project", label: "Init Project", help: "Load FF_PROJECT.md / PROJECT.md from a project directory" },
   { id: "commands", label: "Commands", help: "Create and manage custom slash commands" },
   { id: "agents", label: "Agents", help: "Configure specialized agent personas" },
-  { id: "skills", label: "Skills", help: "Create and manage reusable skills" }
+  { id: "skills", label: "Skills", help: "Create and manage reusable skills" },
+  { id: "logs", label: "Autonomy Logs", help: "View autonomy loop run logs" }
 ];
 
 type OperationMode = "auto" | "confirm" | "read_only" | "planning";
@@ -848,11 +862,13 @@ const HELP_ROWS: HelpRow[] = [
   { command: "/wizard commands", description: "Open custom commands manager" },
   { command: "/wizard agents", description: "Open agent configuration wizard" },
   { command: "/wizard skills", description: "Open skills wizard (create reusable skills)" },
+  { command: "/wizard logs", description: "Open autonomy logs view" },
   { command: "/models", description: "Shortcut for /wizard models" },
   { command: "/commands", description: "Open custom commands manager" },
   { command: "/command", description: "Alias for /commands" },
   { command: "/<custom> [args]", description: "Run a custom command by slug (e.g., /review $1)" },
   { command: "/skills", description: "Open skills wizard" },
+  { command: "/logs", description: "Open autonomy logs view" },
   { command: "/mode [auto|confirm|read_only|planning]", description: "Set operation mode" },
   { command: "/planning", description: "Alias for /mode planning" },
   { command: "/init", description: "Run initialization analysis" },
@@ -873,6 +889,108 @@ const HELP_SHORTCUTS: HelpRow[] = [
   { command: "PageUp/PageDown", description: "Scroll transcript" },
   { command: "Home", description: "Jump to bottom" }
 ];
+
+const formatBytes = (size: number): string => {
+  if (!Number.isFinite(size) || size <= 0) return "0 B";
+  const units = ["B", "KB", "MB", "GB"];
+  let idx = 0;
+  let value = size;
+  while (value >= 1024 && idx < units.length - 1) {
+    value /= 1024;
+    idx += 1;
+  }
+  return `${value.toFixed(value >= 10 || idx === 0 ? 0 : 1)} ${units[idx]}`;
+};
+
+const readFileTail = (filePath: string, maxBytes = 20000): string => {
+  try {
+    const stat = fs.statSync(filePath);
+    const size = stat.size;
+    const start = Math.max(0, size - maxBytes);
+    const length = size - start;
+    const buffer = Buffer.alloc(length);
+    const fd = fs.openSync(filePath, "r");
+    try {
+      fs.readSync(fd, buffer, 0, length, start);
+    } finally {
+      fs.closeSync(fd);
+    }
+    return buffer.toString("utf8");
+  } catch {
+    return "";
+  }
+};
+
+const readLogTailLines = (filePath: string, maxLines = 12): string[] => {
+  const tail = readFileTail(filePath, 20000);
+  const lines = tail.split(/\r?\n/).filter(Boolean);
+  if (!lines.length) return [];
+  return lines.slice(-maxLines);
+};
+
+const summarizeAutonomyLog = (filePath: string): Partial<AutonomyLogInfo> => {
+  const tail = readFileTail(filePath, 20000);
+  const lines = tail.split(/\r?\n/).filter(Boolean);
+  let lastEvent: string | undefined;
+  let lastTs: string | undefined;
+  let loopsRun: number | undefined;
+  let promptFile: string | undefined;
+  let tasksFile: string | undefined;
+  let oracleMode: string | undefined;
+
+  for (const line of lines) {
+    try {
+      const entry = JSON.parse(line);
+      if (entry?.event) {
+        lastEvent = String(entry.event);
+        lastTs = entry.ts ? String(entry.ts) : lastTs;
+      }
+      if (entry?.event === "autonomy_loop_complete") {
+        if (Number.isFinite(entry.loops_run)) loopsRun = entry.loops_run;
+        if (entry.prompt_file) promptFile = String(entry.prompt_file);
+        if (entry.tasks_file) tasksFile = String(entry.tasks_file);
+      }
+      if (entry?.event === "autonomy_loop_start" && !oracleMode && entry.oracle_mode) {
+        oracleMode = String(entry.oracle_mode);
+      }
+    } catch {
+      // ignore parse failures from partial tails
+    }
+  }
+
+  return { lastEvent, lastTs, loopsRun, promptFile, tasksFile, oracleMode };
+};
+
+const listAutonomyLogs = (workspaceDir: string): AutonomyLogInfo[] => {
+  const logsDir = path.join(workspaceDir, "logs", "autonomy");
+  if (!fs.existsSync(logsDir)) return [];
+  let entries: string[] = [];
+  try {
+    entries = fs.readdirSync(logsDir).filter((f) => f.endsWith(".jsonl"));
+  } catch {
+    return [];
+  }
+
+  const rows: AutonomyLogInfo[] = [];
+  for (const name of entries) {
+    const filePath = path.join(logsDir, name);
+    try {
+      const stat = fs.statSync(filePath);
+      const summary = summarizeAutonomyLog(filePath);
+      rows.push({
+        name,
+        path: filePath,
+        mtimeMs: stat.mtimeMs,
+        size: stat.size,
+        ...summary
+      });
+    } catch {
+      // ignore stat errors
+    }
+  }
+  rows.sort((a, b) => b.mtimeMs - a.mtimeMs);
+  return rows;
+};
 
 const wrapText = (text: string, width: number): string[] => {
   if (width <= 0) return [text];
@@ -963,6 +1081,8 @@ type MainViewProps = {
   commandsIndex: number;
   skillRows: SkillRow[];
   skillsIndex: number;
+  logRows: AutonomyLogInfo[];
+  logsIndex: number;
   agentRows: AgentConfig[];
   agentsIndex: number;
   agentTemplates: AgentTemplate[];
@@ -1011,6 +1131,8 @@ const MainView = memo(function MainView(props: MainViewProps) {
     commandsIndex,
     skillRows,
     skillsIndex,
+    logRows,
+    logsIndex,
     agentRows,
     agentsIndex,
     agentTemplates,
@@ -1543,6 +1665,47 @@ const MainView = memo(function MainView(props: MainViewProps) {
     return null;
   })() : null;
 
+  const logsPanel = mode === "logs" ? (() => {
+    const selectedLog = logRows[logsIndex];
+    return (
+      <Box flexDirection="column">
+        <Text>Autonomy Logs</Text>
+        <Text dimColor>Esc: back • ↑/↓: select • r: refresh • t: tail</Text>
+        <Box flexDirection="column" marginTop={1}>
+          {logRows.length ? (
+            logRows.slice(Math.max(0, logsIndex - 8), logsIndex + 12).map((log, idx) => {
+              const absoluteIndex = Math.max(0, logsIndex - 8) + idx;
+              const selected = absoluteIndex === logsIndex;
+              const eventLabel = log.lastEvent ? ` — ${log.lastEvent}` : "";
+              const loopsLabel = Number.isFinite(log.loopsRun) ? ` (loops ${log.loopsRun})` : "";
+              return (
+                <Text key={log.name} color={selected ? theme.selected : theme.unselected} dimColor={!selected}>
+                  {selected ? "› " : "  "}
+                  {log.name}
+                  {eventLabel}
+                  {loopsLabel}
+                </Text>
+              );
+            })
+          ) : (
+            <Text color={theme.notificationWarning}>No autonomy logs found in logs/autonomy/</Text>
+          )}
+        </Box>
+        {selectedLog ? (
+          <Box flexDirection="column" marginTop={1}>
+            <Text dimColor>File: {selectedLog.path}</Text>
+            <Text dimColor>Size: {formatBytes(selectedLog.size)}</Text>
+            <Text dimColor>Last event: {selectedLog.lastEvent || "(unknown)"} {selectedLog.lastTs ? `@ ${selectedLog.lastTs}` : ""}</Text>
+            <Text dimColor>Loops: {Number.isFinite(selectedLog.loopsRun) ? selectedLog.loopsRun : "(n/a)"}</Text>
+            <Text dimColor>Oracle: {selectedLog.oracleMode || "(n/a)"}</Text>
+            <Text dimColor>Prompt: {selectedLog.promptFile || "(n/a)"}</Text>
+            <Text dimColor>Tasks: {selectedLog.tasksFile || "(n/a)"}</Text>
+          </Box>
+        ) : null}
+      </Box>
+    );
+  })() : null;
+
   return (
     <>
       <Banner displayMode={displayMode} width={stdoutWidth} themeName={props.themeName} />
@@ -1561,6 +1724,7 @@ const MainView = memo(function MainView(props: MainViewProps) {
       {commandsPanel}
       {agentsPanel}
       {skillsPanel}
+      {logsPanel}
     </>
   );
 });
@@ -1616,6 +1780,8 @@ function App(props: { port: number }) {
   const [commandsIndex, setCommandsIndex] = useState(0);
   const [skillsRefresh, setSkillsRefresh] = useState(0);
   const [skillsIndex, setSkillsIndex] = useState(0);
+  const [logsRefresh, setLogsRefresh] = useState(0);
+  const [logsIndex, setLogsIndex] = useState(0);
   const [agentsRefresh, setAgentsRefresh] = useState(0);
   const [agentsIndex, setAgentsIndex] = useState(0);
   const [agentMenuMode, setAgentMenuMode] = useState<"list" | "creation_method" | "template_select" | "form" | "ai_description">("list");
@@ -1780,6 +1946,23 @@ function App(props: { port: number }) {
     const templates = getAllTemplates(workspaceDir);
     return Array.from(templates.values());
   }, [workspaceDir]);
+
+  const logRows = useMemo(() => {
+    // Force recompute when refresh is triggered
+    // eslint-disable-next-line @typescript-eslint/no-unused-expressions
+    logsRefresh;
+    return listAutonomyLogs(workspaceDir);
+  }, [workspaceDir, logsRefresh]);
+
+  useEffect(() => {
+    if (logRows.length === 0 && logsIndex !== 0) {
+      setLogsIndex(0);
+      return;
+    }
+    if (logRows.length > 0 && logsIndex >= logRows.length) {
+      setLogsIndex(logRows.length - 1);
+    }
+  }, [logRows.length, logsIndex]);
 
   // Models wizard state
   const [modelIndex, setModelIndex] = useState(0);
@@ -2606,6 +2789,13 @@ Then apply it with agent_apply to save the agent config.`;
           pushLines({ kind: "system", text: "Skills: Esc back • n create new skill using skill_draft" });
           return;
         }
+        if (w === "logs") {
+          setMode("logs");
+          setLogsIndex(0);
+          setLogsRefresh((n) => n + 1);
+          pushLines({ kind: "system", text: "Autonomy Logs: Esc back • ↑/↓ select • r refresh • t tail" });
+          return;
+        }
       }
       return;
     }
@@ -3271,6 +3461,41 @@ Use skill_draft first to create the draft, then skill_apply to create the final 
       return;
     }
 
+    if (mode === "logs") {
+      if (key.escape) {
+        setMode("chat");
+        return;
+      }
+      if (key.upArrow) {
+        if (logRows.length) {
+          setLogsIndex((i) => Math.max(0, i - 1));
+        }
+        return;
+      }
+      if (key.downArrow) {
+        if (logRows.length) {
+          setLogsIndex((i) => Math.min(logRows.length - 1, i + 1));
+        }
+        return;
+      }
+      if (ch === "r") {
+        setLogsRefresh((n) => n + 1);
+        return;
+      }
+      if (ch === "t") {
+        const log = logRows[logsIndex];
+        if (log) {
+          const tailLines = readLogTailLines(log.path, 10);
+          pushLines([
+            { kind: "system", text: `Log tail: ${log.name}` },
+            ...tailLines.map((line) => ({ kind: "system", text: line }))
+          ]);
+        }
+        return;
+      }
+      return;
+    }
+
     const openWizardMenu = () => {
       setMode("wizard");
       setWizardIndex(0);
@@ -3546,6 +3771,14 @@ Use skill_draft first to create the draft, then skill_apply to create the final 
             return;
           }
 
+          if (command === "logs") {
+            setMode("logs");
+            setLogsIndex(0);
+            setLogsRefresh((n) => n + 1);
+            setInputValue("");
+            return;
+          }
+
           if (command === "quit" || command === "exit") {
             exit();
             return;
@@ -3571,6 +3804,11 @@ Use skill_draft first to create the draft, then skill_apply to create the final 
               setProjectIndex(0);
               setProjectRefresh((n) => n + 1);
               pushLines({ kind: "system", text: "Init Project: type to filter • ↑/↓ select • Enter load • Esc quit" });
+            } else if (arg0 === "logs") {
+              setMode("logs");
+              setLogsIndex(0);
+              setLogsRefresh((n) => n + 1);
+              pushLines({ kind: "system", text: "Autonomy Logs: Esc back • ↑/↓ select • r refresh • t tail" });
             } else {
               openWizardMenu();
             }
@@ -3768,6 +4006,8 @@ Use skill_draft first to create the draft, then skill_apply to create the final 
         commandsIndex={commandsIndex}
         skillRows={skillRows}
         skillsIndex={skillsIndex}
+        logRows={logRows}
+        logsIndex={logsIndex}
         agentRows={agentRows}
         agentsIndex={agentsIndex}
         agentTemplates={agentTemplates}
