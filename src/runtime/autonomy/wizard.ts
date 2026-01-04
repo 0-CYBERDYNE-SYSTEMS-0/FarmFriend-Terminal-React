@@ -198,13 +198,15 @@ async function generateAutonomyDrafts(params: {
   const registry = new ToolRegistry();
   registerAllTools(registry, { workspaceDir: params.workspaceDir });
   const sessionId = newId("session");
+  const controller = new AbortController();
   let assistantText = "";
   await withToolContext({ sessionId, workspaceDir: params.workspaceDir, repoRoot: params.repoRoot }, async () => {
     for await (const chunk of runAgentTurn({
       userInput: prompt,
       registry,
       sessionId,
-      repoRoot: params.repoRoot
+      repoRoot: params.repoRoot,
+      signal: controller.signal
     })) {
       if (chunk.kind === "content") assistantText += chunk.delta;
     }

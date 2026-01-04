@@ -3488,7 +3488,7 @@ Use skill_draft first to create the draft, then skill_apply to create the final 
           const tailLines = readLogTailLines(log.path, 10);
           pushLines([
             { kind: "system", text: `Log tail: ${log.name}` },
-            ...tailLines.map((line) => ({ kind: "system", text: line }))
+            ...tailLines.map((line): Line => ({ kind: "system", text: line }))
           ]);
         }
         return;
