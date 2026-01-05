@@ -6,7 +6,6 @@ import { ToolRegistry } from "../tools/registry.js";
 import { registerAllTools } from "../registerDefaultTools.js";
 import { withToolContext } from "../tools/context.js";
 import { StructuredLogger, parseLogLevel, truncateForLog } from "../logging/structuredLogger.js";
-import { askOracleTool } from "../tools/implementations/askOracle.js";
 import { toWire } from "../streamProtocol.js";
 import { newId } from "../../shared/ids.js";
 
@@ -32,29 +31,29 @@ export type AutonomyLoopOptions = {
   headless?: boolean;
 };
 
-type OracleVerdict = "approved" | "rejected" | "unknown";
-
-type OracleResult = {
-  ok: boolean;
-  verdict: OracleVerdict;
-  answer: string;
-  raw?: any;
-  error?: string;
-};
-
 type RunResult = {
   assistantText: string;
 };
 
-const DEFAULT_HIGH_RISK = [
-  "deploy", "production", "prod", "rollback", "migration", "migrate",
-  "delete", "drop", "truncate", "rm -rf", "terminate", "destroy",
-  "payment", "billing", "invoice", "money", "transfer", "bank",
-  "credentials", "secrets", "rotate", "security", "breach"
-];
-
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function startSpinner(label: string): () => void {
+  const frames = ["|", "/", "-", "\\"];
+  let idx = 0;
+  const write = () => {
+    const frame = frames[idx % frames.length];
+    idx += 1;
+    process.stderr.write(`\r[${frame}] ${label}`);
+  };
+  write();
+  const timer = setInterval(write, 120);
+  return () => {
+    clearInterval(timer);
+    const clear = " ".repeat(label.length + 4);
+    process.stderr.write(`\r${clear}\r`);
+  };
 }
 
 function readFileSafe(p: string): string {
@@ -70,33 +69,29 @@ function hashText(text: string): string {
 }
 
 function detectCompletionClaim(text: string, promise?: string | null): boolean {
-  if (promise && text.includes(promise)) return true;
-  const rx = /\b(i'?m done|task complete|completed the task|all tasks (are )?complete|work is complete)\b/i;
+  if (promise) {
+    const match = text.match(/<promise>([\s\S]*?)<\/promise>/i);
+    if (!match) return false;
+    const inner = match[1].replace(/\s+/g, " ").trim();
+    return inner === promise;
+  }
+  const rx = /\b(i'?m done|task complete|task completed|task completed successfully|completed the task|all tasks (are )?complete|work is complete|✅ completed)\b/i;
   return rx.test(text);
 }
 
-function parseOracleVerdict(answer: string): OracleVerdict {
-  const first = answer.trim().split("\n")[0]?.trim().toLowerCase();
-  if (first.startsWith("approved")) return "approved";
-  if (first.startsWith("rejected")) return "rejected";
-  if (answer.toLowerCase().includes("approved")) return "approved";
-  if (answer.toLowerCase().includes("rejected")) return "rejected";
-  return "unknown";
-}
-
-function detectHighRisk(text: string, keywords: string[]): boolean {
-  const lower = text.toLowerCase();
-  return keywords.some((k) => lower.includes(k.toLowerCase()));
-}
-
-function buildPrompt(promptText: string, tasksText: string, oracleNote: string | null, loopNum: number): string {
+function buildPrompt(promptText: string, tasksText: string, oracleNote: string | null, loopNum: number, completionPromise?: string | null): string {
   const parts: string[] = [];
   parts.push(promptText.trim());
   if (tasksText.trim()) {
     parts.push("Current tasks/state:\n" + tasksText.trim());
   }
   if (oracleNote) {
-    parts.push("Oracle feedback:\n" + oracleNote.trim());
+    parts.push("Note:\n" + oracleNote.trim());
+  }
+  if (completionPromise) {
+    parts.push(
+      `Completion requirement: When truly finished, output exactly <promise>${completionPromise}</promise> on its own line.`
+    );
   }
   parts.push(`Autonomy loop: ${loopNum}`);
   return parts.filter(Boolean).join("\n\n");
@@ -109,9 +104,11 @@ async function runSingleTurn(params: {
   sessionId: string;
   prompt: string;
   headless: boolean;
+  onActivity?: (activity: string) => void;
 }): Promise<RunResult> {
   const controller = new AbortController();
   let assistantText = "";
+  let headlessPrinted = false;
   await withToolContext({ sessionId: params.sessionId, workspaceDir: params.workspaceDir, repoRoot: params.repoRoot }, async () => {
     for await (const chunk of runAgentTurn({
       userInput: params.prompt,
@@ -121,37 +118,24 @@ async function runSingleTurn(params: {
       signal: controller.signal
     })) {
       if (chunk.kind === "content") assistantText += chunk.delta;
+      if (params.onActivity) {
+        let activity = chunk.kind;
+        if (chunk.kind === "status") activity = chunk.message;
+        else if (chunk.kind === "error") activity = `error: ${chunk.message}`;
+        else if (chunk.kind === "subagent_event") activity = `subagent:${chunk.event}`;
+        params.onActivity(activity);
+      }
       if (params.headless) {
         const line = toWire(chunk);
         process.stdout.write(line + "\n");
+        if (chunk.kind === "content") headlessPrinted = true;
       }
     }
   });
-  return { assistantText };
-}
-
-async function runOracleCheck(question: string, context: string): Promise<OracleResult> {
-  const controller = new AbortController();
-  try {
-    const raw = await askOracleTool({ question, context, include_reasoning: false }, controller.signal);
-    const parsed = JSON.parse(raw);
-    const answer = String(parsed?.oracle_answer || "").trim();
-    const verdict = parseOracleVerdict(answer);
-    return { ok: true, verdict, answer, raw: parsed };
-  } catch (err) {
-    return { ok: false, verdict: "unknown", answer: "", error: err instanceof Error ? err.message : String(err) };
+  if (params.headless && headlessPrinted && !assistantText.endsWith("\n")) {
+    process.stdout.write("\n");
   }
-}
-
-function oraclePolicy(mode: OracleMode, highRisk: boolean): { onComplete: boolean; onStall: boolean; onHighRisk: boolean } {
-  if (mode === "always") return { onComplete: true, onStall: true, onHighRisk: true };
-  if (mode === "critical") return { onComplete: true, onStall: true, onHighRisk: true };
-  if (mode === "off") return { onComplete: false, onStall: false, onHighRisk: highRisk };
-  return {
-    onComplete: mode === "on_complete",
-    onStall: mode === "on_stall",
-    onHighRisk: mode === "on_high_risk"
-  };
+  return { assistantText };
 }
 
 export async function runAutonomyLoop(opts: AutonomyLoopOptions): Promise<void> {
@@ -175,7 +159,6 @@ export async function runAutonomyLoop(opts: AutonomyLoopOptions): Promise<void> 
   let stallCount = 0;
   let oracleNote: string | null = null;
   const completionPromise = opts.completionPromise || "";
-  const highRiskKeywords = opts.highRiskKeywords?.length ? opts.highRiskKeywords : DEFAULT_HIGH_RISK;
   const loopSessionId = opts.sessionId || newId("session");
 
   let loopsRun = 0;
@@ -183,32 +166,49 @@ export async function runAutonomyLoop(opts: AutonomyLoopOptions): Promise<void> 
     loopsRun = loop;
     const promptText = readFileSafe(promptFile);
     const tasksText = readFileSafe(tasksFile);
-    const highRisk = detectHighRisk(`${promptText}\n${tasksText}`, highRiskKeywords);
-    const policy = oraclePolicy(opts.oracleMode, highRisk);
-
-    const prompt = buildPrompt(promptText, tasksText, oracleNote, loop);
+    const prompt = buildPrompt(promptText, tasksText, oracleNote, loop, completionPromise);
     const sessionId = opts.sessionStrategy === "reuse" ? loopSessionId : newId("session");
 
     logger.log("info", "autonomy_loop_start", {
       loop,
       session_id: sessionId,
       prompt_preview: truncateForLog(prompt, 400),
-      high_risk: highRisk,
       oracle_mode: opts.oracleMode
     });
 
-    const result = await runSingleTurn({
-      registry,
-      repoRoot: opts.repoRoot,
-      workspaceDir: opts.workspaceDir,
-      sessionId,
-      prompt,
-      headless: Boolean(opts.headless)
-    });
+    const stopSpinner = startSpinner(`Autonomy loop ${loop}/${opts.maxLoops} running...`);
+    let lastActivity = "starting";
+    let lastActivityAt = Date.now();
+    const recordActivity = (activity: string) => {
+      lastActivity = activity;
+      lastActivityAt = Date.now();
+    };
+    const heartbeatIntervalMs = 20000;
+    const heartbeatTimer = setInterval(() => {
+      const ageSec = Math.round((Date.now() - lastActivityAt) / 1000);
+      const activity = truncateForLog(lastActivity, 120);
+      process.stderr.write(`\n[heartbeat] loop ${loop}/${opts.maxLoops} - last: ${activity} (${ageSec}s ago)\n`);
+    }, heartbeatIntervalMs);
+    let result: RunResult;
+    try {
+      result = await runSingleTurn({
+        registry,
+        repoRoot: opts.repoRoot,
+        workspaceDir: opts.workspaceDir,
+        sessionId,
+        prompt,
+        headless: Boolean(opts.headless),
+        onActivity: recordActivity
+      });
+    } finally {
+      stopSpinner();
+      clearInterval(heartbeatTimer);
+    }
 
     const completionClaimed = detectCompletionClaim(result.assistantText, completionPromise);
     const tasksTextAfter = readFileSafe(tasksFile);
     const tasksHash = hashText(tasksTextAfter);
+    const tasksUnchanged = Boolean(tasksHash && tasksHash === lastTasksHash);
     if (tasksHash && tasksHash === lastTasksHash) stallCount += 1;
     else stallCount = 0;
     lastTasksHash = tasksHash;
@@ -220,57 +220,24 @@ export async function runAutonomyLoop(opts: AutonomyLoopOptions): Promise<void> 
       stall_count: stallCount,
       assistant_preview: truncateForLog(result.assistantText, 400)
     });
+    process.stderr.write(
+      `\n[loop ${loop}/${opts.maxLoops}] completion=${completionClaimed ? "yes" : "no"} | tasks=${tasksUnchanged ? "unchanged" : "updated"} | stall=${stallCount}\n`
+    );
 
     if (completionClaimed) {
-      if (policy.onComplete || (policy.onHighRisk && highRisk)) {
-        const question = "Validate whether the task is truly complete. Reply with APPROVED or REJECTED as the first line, then list gaps if any.";
-        const context = [
-          `Prompt:\n${promptText}`,
-          `Tasks:\n${tasksTextAfter}`,
-          `Assistant output:\n${result.assistantText}`
-        ].join("\n\n");
-        const oracle = await runOracleCheck(question, context);
-        logger.log("info", "oracle_completion_check", {
-          loop,
-          session_id: sessionId,
-          ok: oracle.ok,
-          verdict: oracle.verdict,
-          error: oracle.error
-        });
-        if (oracle.ok && oracle.verdict === "approved") {
-          oracleNote = null;
-          break;
-        }
-        oracleNote = oracle.ok ? oracle.answer : `Oracle unavailable: ${oracle.error || "unknown error"}`;
-      } else {
-        break;
-      }
+      break;
     }
 
     if (stallCount >= opts.stallLimit) {
-      if (policy.onStall) {
-        const question = "We appear stalled (no progress across multiple loops). Diagnose the stall and suggest a recovery plan.";
-        const context = [
-          `Prompt:\n${promptText}`,
-          `Tasks:\n${tasksTextAfter}`,
-          `Assistant output:\n${result.assistantText}`
-        ].join("\n\n");
-        const oracle = await runOracleCheck(question, context);
-        logger.log("info", "oracle_stall_check", {
-          loop,
-          session_id: sessionId,
-          ok: oracle.ok,
-          verdict: oracle.verdict,
-          error: oracle.error
-        });
-        oracleNote = oracle.ok ? oracle.answer : `Oracle unavailable: ${oracle.error || "unknown error"}`;
-      } else {
-        oracleNote = "Stall detected. Consider revising tasks or prompt.";
-      }
+      oracleNote = "Stall detected. Consider revising tasks or prompt.";
       stallCount = 0;
     }
 
     if (loop < opts.maxLoops) {
+      const sleepSec = Math.round(opts.sleepMs / 1000);
+      if (sleepSec > 0) {
+        process.stderr.write(`[sleep] waiting ${sleepSec}s before next loop...\n`);
+      }
       await sleep(opts.sleepMs);
     }
   }
@@ -280,4 +247,7 @@ export async function runAutonomyLoop(opts: AutonomyLoopOptions): Promise<void> 
     prompt_file: promptFile,
     tasks_file: tasksFile
   });
+  if (opts.headless) {
+    process.stderr.write(`Autonomy loop complete after ${loopsRun} loop(s).\n`);
+  }
 }

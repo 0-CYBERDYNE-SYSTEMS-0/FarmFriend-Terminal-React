@@ -43,7 +43,7 @@ function usage(): void {
   ff-terminal run --scheduled-task <id-or-name> [--profile <name>] [--session <id>] --headless
   ff-terminal autonomy [--profile <name>] --prompt-file <path> [--tasks-file <path>] [--completion-promise <text>]
                        [--max-loops <n>] [--stall-limit <n>] [--sleep-ms <n>] [--oracle <mode>] [--session <id>]
-                       [--session-strategy reuse|new] [--headless]
+                       [--headless|--no-headless]
   ff-terminal autonomy --wizard [--profile <name>]
   ff-terminal schedule list
   ff-terminal schedule status <name>
@@ -102,18 +102,12 @@ function parseOracleMode(raw?: string | null): OracleMode {
   return "critical";
 }
 
-function parseSessionStrategy(raw?: string | null): SessionStrategy {
-  const v = String(raw || "").trim().toLowerCase();
-  if (v === "reuse" || v === "new") return v as SessionStrategy;
-  return "new";
-}
-
 function extractAutonomyRequest(text: string): { reason?: string; completionPromise?: string } | null {
   const tagMatch = text.match(/<autonomy_request(?:\s+reason="([^"]+)")?>([\s\S]*?)<\/autonomy_request>/i);
   if (tagMatch) {
     const reason = tagMatch[1]?.trim();
     const body = tagMatch[2] || "";
-    const promiseMatch = body.match(/completion_promise\\s*[:=]\\s*(.+)/i);
+    const promiseMatch = body.match(/completion_promise\s*[:=]\s*(.+)/i);
     const completionPromise = promiseMatch ? promiseMatch[1].trim() : undefined;
     return { reason, completionPromise };
   }
@@ -625,7 +619,7 @@ async function run(): Promise<void> {
     applyToolAllowFlags(rest);
     const userPrompt = pickArg(rest, "--prompt") || "";
     const scheduledTaskRef = pickArg(rest, "--scheduled-task");
-    const headless = hasFlag(rest, "--headless");
+    const headless = hasFlag(rest, "--headless") || !hasFlag(rest, "--no-headless");
     const cliProfile = pickArg(rest, "--profile");
     const envProfile = process.env.FF_PROFILE || null;
     let profileName = cliProfile || envProfile || null;
@@ -911,9 +905,6 @@ async function run(): Promise<void> {
         if (wizardResult.highRiskKeywords.length > 0) {
           args.push(`--high-risk-keywords \"${wizardResult.highRiskKeywords.join(",")}\"`);
         }
-        if (wizardResult.sessionStrategy) {
-          args.push(`--session-strategy ${wizardResult.sessionStrategy}`);
-        }
         if (wizardResult.sessionId) {
           args.push(`--session \"${wizardResult.sessionId}\"`);
         }
@@ -933,7 +924,6 @@ async function run(): Promise<void> {
       if (wizardResult.highRiskKeywords.length > 0) {
         rest.push("--high-risk-keywords", wizardResult.highRiskKeywords.join(","));
       }
-      rest.push("--session-strategy", wizardResult.sessionStrategy);
       if (wizardResult.sessionId) {
         rest.push("--session", wizardResult.sessionId);
       }
@@ -975,19 +965,18 @@ async function run(): Promise<void> {
 
     const promptFile = pickArg(rest, "--prompt-file") || process.env.FF_AUTONOMY_PROMPT_FILE || "PROMPT.md";
     const tasksFile = pickArg(rest, "--tasks-file") || process.env.FF_AUTONOMY_TASKS_FILE || "TASKS.md";
-    const completionPromise = pickArg(rest, "--completion-promise") || process.env.FF_AUTONOMY_COMPLETION_PROMISE || "";
+    const completionPromise = pickArg(rest, "--completion-promise")
+      || process.env.FF_AUTONOMY_COMPLETION_PROMISE
+      || "✅ COMPLETED";
     const maxLoops = Number(pickArg(rest, "--max-loops") || process.env.FF_AUTONOMY_MAX_LOOPS || 200);
     const stallLimit = Number(pickArg(rest, "--stall-limit") || process.env.FF_AUTONOMY_STALL_LIMIT || 5);
     const sleepMs = Number(pickArg(rest, "--sleep-ms") || process.env.FF_AUTONOMY_SLEEP_MS || 30000);
     const oracleMode = parseOracleMode(pickArg(rest, "--oracle") || process.env.FF_AUTONOMY_ORACLE_MODE || "critical");
     const highRiskRaw = pickArg(rest, "--high-risk-keywords") || process.env.FF_AUTONOMY_HIGH_RISK_KEYWORDS || "";
     const highRiskKeywords = highRiskRaw ? highRiskRaw.split(",").map((s) => s.trim()).filter(Boolean) : [];
-    const sessionStrategyRaw = pickArg(rest, "--session-strategy");
     const sessionId = pickArg(rest, "--session") || undefined;
-    const sessionStrategy = sessionId && !sessionStrategyRaw
-      ? "reuse"
-      : parseSessionStrategy(sessionStrategyRaw || process.env.FF_AUTONOMY_SESSION_STRATEGY || "new");
-    const headless = true;
+    const sessionStrategy: SessionStrategy = sessionId ? "reuse" : "new";
+    const headless = hasFlag(rest, "--no-headless") ? false : true;
 
     await runAutonomyLoop({
       repoRoot,

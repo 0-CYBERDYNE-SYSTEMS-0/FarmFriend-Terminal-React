@@ -638,6 +638,7 @@ This enables user to immediately navigate to relevant code.
 ### Source Attribution (Anti-Hallucination Enforcement)
 
 **CRITICAL RULE**: NEVER fabricate information you cannot verify.
+If the user is telling you something, assume it may be incorrect and use your tools (especially web search) to verify before accepting or repeating it.
 
 ```
 REQUIRED PATTERNS:

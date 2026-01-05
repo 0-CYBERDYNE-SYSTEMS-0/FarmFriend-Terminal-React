@@ -30,13 +30,6 @@ export type AutonomyWizardResult = {
   sessionId?: string;
 };
 
-const DEFAULT_HIGH_RISK = [
-  "deploy", "production", "prod", "rollback", "migration", "migrate",
-  "delete", "drop", "truncate", "rm -rf", "terminate", "destroy",
-  "payment", "billing", "invoice", "money", "transfer", "bank",
-  "credentials", "secrets", "rotate", "security", "breach"
-];
-
 const PROMPT_TEMPLATE = [
   "# Autonomy Prompt",
   "",
@@ -45,7 +38,7 @@ const PROMPT_TEMPLATE = [
   "",
   "Guidelines:",
   "- Update TASKS.md as you work.",
-  "- Stop when you can output the completion promise.",
+  "- Stop when you can output the completion promise exactly as <promise>...</promise> on its own line.",
   ""
 ].join("\n");
 
@@ -141,21 +134,42 @@ function resolveInputPath(repoRoot: string, raw: string): string {
   return path.resolve(repoRoot, trimmed);
 }
 
-function parseKeywordList(raw: string): string[] {
-  return raw.split(",").map((s) => s.trim()).filter(Boolean);
-}
+async function readMultilineGoal(
+  rl: readline.Interface,
+  label: string,
+  closeOnDone: boolean
+): Promise<string> {
+  // eslint-disable-next-line no-console
+  console.log(`${label} (multi-line; finish with a single "." or blank line)`);
+  const lines: string[] = [];
+  let finished = false;
 
-function normalizeOracleMode(raw: string): OracleMode {
-  const v = String(raw || "").trim().toLowerCase();
-  if (v === "off" || v === "critical" || v === "on_complete" || v === "on_stall" || v === "on_high_risk" || v === "always") {
-    return v as OracleMode;
-  }
-  return "critical";
-}
+  return new Promise((resolve) => {
+    const finish = () => {
+      if (finished) return;
+      finished = true;
+      rl.removeListener("line", onLine);
+      rl.removeListener("close", onClose);
+      if (closeOnDone) rl.close();
+      resolve(lines.join("\n").trim());
+    };
 
-function normalizeSessionStrategy(raw: string): SessionStrategy {
-  const v = String(raw || "").trim().toLowerCase();
-  return v === "reuse" ? "reuse" : "new";
+    const onLine = (line: string) => {
+      if (line.trim() === "." || line.trim() === "") {
+        finish();
+        return;
+      }
+      lines.push(line);
+      rl.prompt();
+    };
+
+    const onClose = () => finish();
+
+    rl.on("line", onLine);
+    rl.on("close", onClose);
+    rl.setPrompt("> ");
+    rl.prompt();
+  });
 }
 
 function toNumber(value: string | number, fallback: number): number {
@@ -177,6 +191,7 @@ async function generateAutonomyDrafts(params: {
   completionPromise: string;
   wantPrompt: boolean;
   wantTasks: boolean;
+  goal?: string;
 }): Promise<{ prompt?: string; tasks?: string; raw: string } | null> {
   const prompt = [
     "You are preparing files for an autonomy loop.",
@@ -184,9 +199,11 @@ async function generateAutonomyDrafts(params: {
     "  - prompt: string (content for PROMPT.md)",
     "  - tasks: string (content for TASKS.md)",
     "",
+    params.goal ? `User goal: ${params.goal}` : "User goal: (not provided)",
     `Completion promise: ${params.completionPromise || "✅ COMPLETED"}`,
     "Requirements:",
-    "- Include the completion promise in PROMPT.md explicitly.",
+    "- Include the completion promise in PROMPT.md explicitly, as <promise>...</promise> on its own line.",
+    "- Include the completion promise in TASKS.md explicitly as well.",
     "- Keep PROMPT.md concise, with goal, constraints, and process.",
     "- TASKS.md should start with a checklist stub.",
     "- Do not include markdown fences or explanations.",
@@ -369,8 +386,30 @@ export async function runAutonomyWizard(params: {
       if (tasksAction === "generate") generateTasks = true;
     }
 
+    const goalRl = readline.createInterface({ input: process.stdin, output: process.stdout });
+    const goal = await readMultilineGoal(goalRl, "Goal / task description (used for AI draft)", true);
+
+    if (promptExists && !generatePrompt) {
+      const { regeneratePrompt } = await inquirer.prompt<{ regeneratePrompt: boolean }>([
+        { type: "confirm", name: "regeneratePrompt", message: "PROMPT.md exists. Generate a new AI draft anyway?", default: false }
+      ]);
+      if (regeneratePrompt) generatePrompt = true;
+    }
+
+    if (tasksExists && !generateTasks) {
+      const { regenerateTasks } = await inquirer.prompt<{ regenerateTasks: boolean }>([
+        { type: "confirm", name: "regenerateTasks", message: "TASKS.md exists. Generate a new AI draft anyway?", default: false }
+      ]);
+      if (regenerateTasks) generateTasks = true;
+    }
+
     const { completionPromise } = await inquirer.prompt<{ completionPromise: string }>([
-      { type: "input", name: "completionPromise", message: "Completion promise", default: completionDefault }
+      {
+        type: "input",
+        name: "completionPromise",
+        message: "Completion promise (used inside <promise>...</promise>)",
+        default: completionDefault
+      }
     ]);
 
     const { maxLoops, stallLimit, sleepMs } = await inquirer.prompt<{ maxLoops: number; stallLimit: number; sleepMs: number }>([
@@ -379,35 +418,9 @@ export async function runAutonomyWizard(params: {
       { type: "number", name: "sleepMs", message: "Sleep (ms)", default: 30000 }
     ]);
 
-    const { oracleMode } = await inquirer.prompt<{ oracleMode: OracleMode }>([
-      {
-        type: "list",
-        name: "oracleMode",
-        message: "Oracle policy",
-        default: "critical",
-        choices: ["off", "critical", "on_complete", "on_stall", "on_high_risk", "always"]
-      }
-    ]);
-
-    const { highRiskRaw } = await inquirer.prompt<{ highRiskRaw: string }>([
-      {
-        type: "input",
-        name: "highRiskRaw",
-        message: "High-risk keywords (comma-separated)",
-        default: DEFAULT_HIGH_RISK.join(", ")
-      }
-    ]);
-
-    const { sessionStrategy } = await inquirer.prompt<{ sessionStrategy: SessionStrategy }>([
-      { type: "list", name: "sessionStrategy", message: "Session strategy", default: "new", choices: ["new", "reuse"] }
-    ]);
-    let sessionId: string | undefined;
-    if (sessionStrategy === "reuse") {
-      const { sessionIdRaw } = await inquirer.prompt<{ sessionIdRaw: string }>([
-        { type: "input", name: "sessionIdRaw", message: "Session ID (optional)", default: "" }
-      ]);
-      sessionId = sessionIdRaw?.trim() || undefined;
-    }
+    const oracleMode: OracleMode = "off";
+    const sessionStrategy: SessionStrategy = "new";
+    const sessionId: string | undefined = undefined;
 
     if (generatePrompt || generateTasks) {
       const draft = await generateAutonomyDrafts({
@@ -415,7 +428,8 @@ export async function runAutonomyWizard(params: {
         workspaceDir: params.workspaceDir,
         completionPromise,
         wantPrompt: generatePrompt,
-        wantTasks: generateTasks
+        wantTasks: generateTasks,
+        goal: goal?.trim() || undefined
       });
 
       if (!draft) {
@@ -464,7 +478,7 @@ export async function runAutonomyWizard(params: {
     // eslint-disable-next-line no-console
     console.log(`- Tasks: ${tasksFile}`);
     // eslint-disable-next-line no-console
-    console.log(`- Completion promise: ${completionPromise}`);
+    console.log(`- Completion promise: <promise>${completionPromise}</promise>`);
     // eslint-disable-next-line no-console
     console.log(`- Max loops: ${maxLoops}`);
     // eslint-disable-next-line no-console
@@ -472,7 +486,7 @@ export async function runAutonomyWizard(params: {
     // eslint-disable-next-line no-console
     console.log(`- Sleep: ${sleepMs} ms`);
     // eslint-disable-next-line no-console
-    console.log(`- Oracle: ${oracleMode}`);
+    console.log(`- Oracle: off`);
     // eslint-disable-next-line no-console
     console.log(`- Session: ${sessionStrategy}${sessionId ? ` (${sessionId})` : ""}`);
 
@@ -489,9 +503,9 @@ export async function runAutonomyWizard(params: {
       maxLoops: toNumber(maxLoops, 200),
       stallLimit: toNumber(stallLimit, 5),
       sleepMs: toNumber(sleepMs, 30000),
-      oracleMode: normalizeOracleMode(oracleMode || "critical"),
-      highRiskKeywords: parseKeywordList(highRiskRaw || ""),
-      sessionStrategy: normalizeSessionStrategy(sessionStrategy || "new"),
+      oracleMode,
+      highRiskKeywords: [],
+      sessionStrategy: "new",
       sessionId
     };
   }
@@ -525,20 +539,24 @@ export async function runAutonomyWizard(params: {
       else if (normalized === "t" || normalized === "y" || normalized === "yes") createTasks = true;
     }
 
-    const completionPromise = (await rl.question(`Completion promise (default ${completionDefault}): `)).trim() || completionDefault;
+    const goal = await readMultilineGoal(rl, "Goal / task description (used for AI draft, optional)", false);
+    if (promptExists && !generatePrompt) {
+      const answer = await rl.question("PROMPT.md exists. Generate a new AI draft anyway? (y/N): ");
+      if (["y", "yes"].includes(answer.trim().toLowerCase())) generatePrompt = true;
+    }
+    if (tasksExists && !generateTasks) {
+      const answer = await rl.question("TASKS.md exists. Generate a new AI draft anyway? (y/N): ");
+      if (["y", "yes"].includes(answer.trim().toLowerCase())) generateTasks = true;
+    }
+    const completionPromise = (await rl.question(
+      `Completion promise (used inside <promise>...</promise>, default ${completionDefault}): `
+    )).trim() || completionDefault;
     const maxLoops = toNumber(await rl.question("Max loops (default 200): "), 200);
     const stallLimit = toNumber(await rl.question("Stall limit (default 5): "), 5);
     const sleepMs = toNumber(await rl.question("Sleep ms (default 30000): "), 30000);
-    const oracleRaw = await rl.question("Oracle policy (off|critical|on_complete|on_stall|on_high_risk|always) [critical]: ");
-    const oracleMode = normalizeOracleMode(oracleRaw || "critical");
-    const highRiskRaw = await rl.question(`High-risk keywords (comma-separated) [${DEFAULT_HIGH_RISK.join(", ")}]: `);
-    const sessionRaw = await rl.question("Session strategy (new|reuse) [new]: ");
-    const sessionStrategy = normalizeSessionStrategy(sessionRaw || "new");
-    let sessionId: string | undefined;
-    if (sessionStrategy === "reuse") {
-      const rawId = await rl.question("Session ID (optional): ");
-      sessionId = rawId.trim() || undefined;
-    }
+    const oracleMode: OracleMode = "off";
+    const sessionStrategy: SessionStrategy = "new";
+    const sessionId: string | undefined = undefined;
 
     if (generatePrompt || generateTasks) {
       const draft = await generateAutonomyDrafts({
@@ -546,7 +564,8 @@ export async function runAutonomyWizard(params: {
         workspaceDir: params.workspaceDir,
         completionPromise,
         wantPrompt: generatePrompt,
-        wantTasks: generateTasks
+        wantTasks: generateTasks,
+        goal: goal || undefined
       });
 
       if (!draft) {
@@ -594,7 +613,7 @@ export async function runAutonomyWizard(params: {
     // eslint-disable-next-line no-console
     console.log(`- Tasks: ${tasksFile}`);
     // eslint-disable-next-line no-console
-    console.log(`- Completion promise: ${completionPromise}`);
+    console.log(`- Completion promise: <promise>${completionPromise}</promise>`);
     // eslint-disable-next-line no-console
     console.log(`- Max loops: ${maxLoops}`);
     // eslint-disable-next-line no-console
@@ -602,7 +621,7 @@ export async function runAutonomyWizard(params: {
     // eslint-disable-next-line no-console
     console.log(`- Sleep: ${sleepMs} ms`);
     // eslint-disable-next-line no-console
-    console.log(`- Oracle: ${oracleMode}`);
+    console.log(`- Oracle: off`);
     // eslint-disable-next-line no-console
     console.log(`- Session: ${sessionStrategy}${sessionId ? ` (${sessionId})` : ""}`);
 
@@ -618,9 +637,9 @@ export async function runAutonomyWizard(params: {
       maxLoops,
       stallLimit,
       sleepMs,
-      oracleMode: oracleMode || "critical",
-      highRiskKeywords: parseKeywordList(highRiskRaw || DEFAULT_HIGH_RISK.join(", ")),
-      sessionStrategy: sessionStrategy || "new",
+      oracleMode,
+      highRiskKeywords: [],
+      sessionStrategy: "new",
       sessionId
     };
   } finally {
