@@ -31,6 +31,7 @@ import { generateImageOpenAITool } from "./tools/implementations/openaiImage.js"
 import { askOracleTool } from "./tools/implementations/askOracle.js";
 import { macosControlTool } from "./tools/implementations/macosControl.js";
 import { workflowAutomationTool } from "./tools/implementations/workflowAutomation.js";
+import { mailTool } from "./tools/implementations/mail.js";
 
 export function registerDefaultTools(registry: ToolRegistry, opts: { workspaceDir: string }): void {
   registry.register("read_file", async (args) => readFileTool(args));
@@ -103,6 +104,9 @@ export function registerDefaultTools(registry: ToolRegistry, opts: { workspaceDi
   // System automation (best-effort; gated).
   registry.register("macos_control", async (args, signal) => macosControlTool(args, signal));
   registry.register("workflow_automation", async (args, signal) => workflowAutomationTool(args, signal));
+  
+  // Mail operations with local PII processing.
+  registry.register("mail", async (args, signal) => mailTool(args, signal));
 }
 
 // Default + higher-level orchestration tools that may recurse.

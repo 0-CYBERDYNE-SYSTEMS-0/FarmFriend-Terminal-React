@@ -41,7 +41,7 @@
     "@types/busboy": "^1.5.4",
     "@types/inquirer": "^9.0.8",
     "@types/luxon": "^3.7.1",
-    "@types/node": "^22.10.2",
+    "@types/node": "^22.19.3",
     "@types/react": "^18.3.18",
     "@types/ws": "^8.5.12",
     "@vitest/coverage-v8": "^4.0.16",
