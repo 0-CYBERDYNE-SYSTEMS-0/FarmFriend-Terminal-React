@@ -145,14 +145,15 @@ export async function navigateAndExtractContent(url: string, options?: {
     throw new Error("browse_web: aborted");
   }
 
+  const signal = options?.signal;
   let abortHandler: (() => void) | null = null;
-  const abortPromise = options?.signal
+  const abortPromise = signal
     ? new Promise<never>((_, reject) => {
         abortHandler = () => {
           closeBrowser().catch(() => {});
           reject(new Error("browse_web: aborted"));
         };
-        options.signal.addEventListener("abort", abortHandler, { once: true });
+        signal.addEventListener("abort", abortHandler, { once: true });
       })
     : null;
 
@@ -167,7 +168,7 @@ export async function navigateAndExtractContent(url: string, options?: {
       await gotoPromise;
     }
 
-    if (options?.signal?.aborted) {
+    if (signal?.aborted) {
       throw new Error("browse_web: aborted");
     }
 
@@ -181,7 +182,7 @@ export async function navigateAndExtractContent(url: string, options?: {
       }
     }
 
-    if (options?.signal?.aborted) {
+    if (signal?.aborted) {
       throw new Error("browse_web: aborted");
     }
 
@@ -206,8 +207,8 @@ export async function navigateAndExtractContent(url: string, options?: {
       html
     };
   } finally {
-    if (abortHandler && options?.signal) {
-      options.signal.removeEventListener("abort", abortHandler);
+    if (abortHandler && signal) {
+      signal.removeEventListener("abort", abortHandler);
     }
   }
 }

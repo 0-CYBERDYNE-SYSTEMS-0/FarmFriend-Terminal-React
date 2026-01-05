@@ -119,7 +119,7 @@ async function runSingleTurn(params: {
     })) {
       if (chunk.kind === "content") assistantText += chunk.delta;
       if (params.onActivity) {
-        let activity = chunk.kind;
+        let activity: string = chunk.kind;
         if (chunk.kind === "status") activity = chunk.message;
         else if (chunk.kind === "error") activity = `error: ${chunk.message}`;
         else if (chunk.kind === "subagent_event") activity = `subagent:${chunk.event}`;
