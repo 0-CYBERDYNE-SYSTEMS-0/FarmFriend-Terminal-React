@@ -484,7 +484,12 @@
         "properties": {
           "action": {
             "type": "string",
-            "enum": ["list", "create", "update", "complete"],
+            "enum": [
+              "list",
+              "create",
+              "update",
+              "complete"
+            ],
             "description": "Action to perform on tasks"
           },
           "task_id": {
@@ -497,12 +502,20 @@
           },
           "status": {
             "type": "string",
-            "enum": ["pending", "in_progress", "completed"],
+            "enum": [
+              "pending",
+              "in_progress",
+              "completed"
+            ],
             "description": "Task status for create/update actions"
           },
           "priority": {
             "type": "string",
-            "enum": ["high", "medium", "low"],
+            "enum": [
+              "high",
+              "medium",
+              "low"
+            ],
             "description": "Task priority for create/update actions"
           }
         },
@@ -1281,7 +1294,6 @@
     "function": {
       "name": "TodoWrite",
       "description": "Manage todo list for multi-step tasks. CRITICAL: Call this to UPDATE task status as you work (pending→in_progress→completed). Don't just create the list at the start - update it throughout execution to show progress. Users see this in real-time.",
-
       "parameters": {
         "type": "object",
         "properties": {
@@ -1400,6 +1412,84 @@
         "required": [
           "path",
           "content"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "mail",
+      "description": "Interact with macOS Mail.app for email operations with local PII processing via maclocal-api. Supports search, read, compose, edit, archive, and AI-powered analysis. All PII-sensitive operations use on-device LLM processing for privacy. Requires macOS and optional maclocal-api for enhanced privacy features.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "description": "Action to perform: 'search' (find emails), 'read' (read specific email), 'compose' or 'send' (send new email), 'create_draft' (create draft), 'edit_draft' (edit existing draft), 'archive' or 'move' (move to mailbox), 'analyze' (AI analysis of email content), 'redact_pii' (redact personally identifiable information)"
+          },
+          "message_id": {
+            "type": "string",
+            "description": "Email message ID (required for read, archive, move actions)"
+          },
+          "sender": {
+            "type": "string",
+            "description": "Filter emails by sender address or name (for search action)"
+          },
+          "subject": {
+            "type": "string",
+            "description": "Email subject (for search filter or compose/draft actions)"
+          },
+          "recipient": {
+            "type": "string",
+            "description": "Email recipient address (for compose/draft actions)"
+          },
+          "body": {
+            "type": "string",
+            "description": "Email body content (for compose/draft/edit actions or direct text analysis)"
+          },
+          "query": {
+            "type": "string",
+            "description": "Analysis type for analyze action: 'summary', 'sentiment', 'action_items', 'priority', 'category'"
+          },
+          "mailbox": {
+            "type": "string",
+            "description": "Mailbox name for search filter or archive/move target (default: 'Archive' for archive action)"
+          },
+          "limit": {
+            "type": "number",
+            "description": "Maximum number of search results to return (default: 10)"
+          },
+          "include_body": {
+            "type": "boolean",
+            "description": "Include email body content in search results (default: false for performance)"
+          },
+          "pii_redact": {
+            "type": "boolean",
+            "description": "Enable automatic PII redaction when reading emails using local LLM (default: false)"
+          },
+          "date_from": {
+            "type": "string",
+            "description": "Filter emails from this date (ISO 8601 format, for search action)"
+          },
+          "date_to": {
+            "type": "string",
+            "description": "Filter emails until this date (ISO 8601 format, for search action)"
+          },
+          "draft_id": {
+            "type": "string",
+            "description": "Draft message ID (for edit_draft action)"
+          },
+          "attachment_paths": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Array of file paths to attach to email (for compose/send actions)"
+          }
+        },
+        "required": [
+          "action"
         ]
       }
     }
