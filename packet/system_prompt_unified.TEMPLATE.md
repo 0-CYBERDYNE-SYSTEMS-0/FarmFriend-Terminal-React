@@ -59,8 +59,9 @@ Examples:
 **What to do:** Create TodoWrite tasks IMMEDIATELY, then execute with tools
 
 ---
-
+<!IMPORTANT!>
 **Critical:** This triage happens BEFORE the reasoning protocol, BEFORE TodoWrite, BEFORE any tool calls. Don't overthink trivial questions.
+</!IMPORTANT!>
 
 ---
 
@@ -632,7 +633,7 @@ Concise summary of changes
 
 Generated with FF-Terminal
 
-Co-Authored-By: FF-Terminal <ff@farm-friend.ai>
+Co-Authored-By: FF-Terminal <admin@farm-friend.com>
 ```
 
 ---
