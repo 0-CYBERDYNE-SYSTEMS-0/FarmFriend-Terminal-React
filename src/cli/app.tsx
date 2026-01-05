@@ -570,9 +570,9 @@ function summarizeToolGroup(lines: LineEntry[]): string {
     const shown = unique.slice(0, 3).join(", ");
     const more = unique.length > 3 ? ` +${unique.length - 3}` : "";
     const failedText = failureCount > 0 ? ` (${failureCount} failed)` : "";
-    result = `Tools · ${unique.length} ran${failedText} (${shown}${more}) · Ctrl+E to expand`;
+    result = `Tool details collapsed · ${unique.length} ran${failedText} (${shown}${more}) · Ctrl+E to expand`;
   } else {
-    result = `Tools · ${lines.length} events · Ctrl+E to expand`;
+    result = `Tool details collapsed · ${lines.length} events · Ctrl+E to expand`;
   }
 
   // LRU eviction: if cache is full, delete oldest entry (first in Map)
@@ -663,14 +663,15 @@ const Transcript = memo(function Transcript(props: {
   // Helper to truncate long lines
   const truncateText = (text: string, maxLength = 2000): string => {
     if (text.length <= maxLength) return text;
-    return text.substring(0, maxLength) + "... (truncated, Ctrl+E to expand)";
+    return text.substring(0, maxLength) + "... (truncated)";
   };
 
   return (
     <Box flexDirection="column">
       {windowingData.windowed.map((l) => {
         const displayText = l.kind === "user" ? `› ${l.text}` : l.text;
-        const truncated = props.showToolDetails ? displayText : truncateText(displayText);
+        const shouldTruncate = l.kind === "tool" && !props.showToolDetails;
+        const truncated = shouldTruncate ? truncateText(displayText) : displayText;
 
         return (
           <Text
