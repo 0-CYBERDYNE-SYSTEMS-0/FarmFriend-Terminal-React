@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="See FF-Terminal in action - autonomous farm automation that monitors, researches, and executes complex tasks.">
+    <meta property="og:title" content="Live Demo - Your AI Farm Hand | Desmond Digital Services">
+    <meta property="og:description" content="Watch FF-Terminal automate inventory, generate business plans, and optimize your entire farm operation.">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://desmonddigital.com/live-demo">
+
+    <title>Live Demo - Your AI Farm Hand | Desmond Digital Services</title>
+
+    <!-- Preconnect for performance -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+
+    <!-- Typography -->
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&family=Source+Sans+Pro:wght@300;400;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+    <!-- Stylesheets -->
+    <link rel="stylesheet" href="assets/css/parallax-hero.css">
+    <link rel="stylesheet" href="assets/css/components.css">
+    <link rel="stylesheet" href="assets/css/terminal.css">
+    <link rel="stylesheet" href="assets/css/premium-header.css">
+    <link rel="stylesheet" href="assets/css/premium-buttons.css">
+
+    <!-- GSAP + ScrollTrigger -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js"></script>
+
+    <!-- Lenis Smooth Scroll -->
+    <script src="https://cdn.jsdelivr.net/npm/@studio-freight/lenis@1.0.42/dist/lenis.min.js"></script>
+
+    <style>
+        body {
+            font-family: 'Source Sans Pro', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: #0a0807;
+            color: #ffffff;
+            overflow-x: hidden;
+            margin: 0;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- ==========================================
+         PREMIUM HEADER
+         ========================================== -->
+    <header class="premium-header">
+        <div class="header-inner">
+            <a href="index.html" class="brand">
+                <div class="brand-name">Desmond Digital</div>
+                <div class="brand-tagline">FarmFriend-Terminal</div>
+            </a>
+
+            <nav class="nav" role="navigation">
+                <a href="index.html" class="nav-link">Home</a>
+                <a href="how-it-works.html" class="nav-link">How It Works</a>
+                <a href="pricing.html" class="nav-link">Pricing</a>
+                <a href="success-story.html" class="nav-link">Success Story</a>
+                <a href="live-demo.html" class="nav-link active">Live Demo</a>
+                <a href="contact.html" class="nav-link">Contact</a>
+            </nav>
+
+            <div class="header-actions">
+                <a href="contact.html" class="cta-button">
+                    <span>Contact</span>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="5" y1="12" x2="19" y2="12"/>
+                        <polyline points="12 5 19 12 12 19"/>
+                    </svg>
+                </a>
+
+                <button class="mobile-toggle" aria-label="Toggle mobile menu" aria-expanded="false">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Mobile Overlay -->
+    <div class="mobile-overlay"></div>
+
+    <!-- Mobile Drawer Menu -->
+    <div class="mobile-drawer">
+        <nav class="mobile-nav" role="navigation">
+            <a href="index.html" class="mobile-nav-link">Home</a>
+            <a href="how-it-works.html" class="mobile-nav-link">How It Works</a>
+            <a href="pricing.html" class="mobile-nav-link">Pricing</a>
+            <a href="success-story.html" class="mobile-nav-link">Success Story</a>
+            <a href="live-demo.html" class="mobile-nav-link">Live Demo</a>
+            <a href="contact.html" class="mobile-nav-link">Contact</a>
+        </nav>
+
+        <div class="mobile-cta">
+            <a href="contact.html" class="cta-button" style="width: 100%; justify-content: center;">
+                <span>Get Started</span>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="5" y1="12" x2="19" y2="12"/>
+                    <polyline points="12 5 19 12 12 19"/>
+                </svg>
+            </a>
+        </div>
+    </div>
+
+    <!-- ==========================================
+         TERMINAL HERO SECTION
+         ========================================== -->
+    <section class="terminal-hero">
+        <h1>Your AI Farm Hand<br>In Action</h1>
+        <p>
+            Watch FF-Terminal autonomously handle complex farm operations—from inventory management 
+            to market research to complete business planning. Just tell it what you need.
+        </p>
+        
+        <div class="feature-badges">
+            <span class="feature-badge">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"/>
+                    <polyline points="12 6 12 12 16 14"/>
+                </svg>
+                24/7 Autonomous
+            </span>
+            <span class="feature-badge">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                </svg>
+                Smart Automation
+            </span>
+            <span class="feature-badge">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+                </svg>
+                Real Results
+            </span>
+            <span class="feature-badge">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
+                    <line x1="8" y1="21" x2="16" y2="21"/>
+                    <line x1="12" y1="17" x2="12" y2="21"/>
+                </svg>
+                Live Execution
+            </span>
+        </div>
+    </section>
+
+    <!-- ==========================================
+         TERMINAL DEMO SECTION
+         ========================================== -->
+    <section class="terminal-section">
+        <div class="terminal-layout">
+            
+            <!-- Demo Sidebar -->
+            <aside class="terminal-sidebar">
+                <h3 class="demo-scenarios-title">Demo Scenarios</h3>
+                
+                <!-- Demo 1: Inventory -->
+                <div class="demo-scenario-card" data-demo="inventory">
+                    <div class="demo-scenario-header">
+                        <div class="demo-scenario-icon">📦</div>
+                        <div class="demo-scenario-name">Smart Inventory Auto-Stock</div>
+                    </div>
+                    <div class="demo-scenario-desc">
+                        Scheduled camera checks → Analyze stock → Research best prices → Auto-order replacements
+                    </div>
+                    <div class="demo-scenario-duration">~30s playback</div>
+                </div>
+
+                <!-- Demo 2: Market Intelligence -->
+                <div class="demo-scenario-card" data-demo="market">
+                    <div class="demo-scenario-header">
+                        <div class="demo-scenario-icon">📊</div>
+                        <div class="demo-scenario-name">Byproduct Market Intelligence</div>
+                    </div>
+                    <div class="demo-scenario-desc">
+                        Research monetization → Gap analysis → Generate business plan → Create pitch & landing page
+                    </div>
+                    <div class="demo-scenario-duration">~45s playback</div>
+                </div>
+
+                <!-- Demo 3: Farm Optimization -->
+                <div class="demo-scenario-card" data-demo="optimization">
+                    <div class="demo-scenario-header">
+                        <div class="demo-scenario-icon">🌾</div>
+                        <div class="demo-scenario-name">Farm Intelligence Dashboard</div>
+                    </div>
+                    <div class="demo-scenario-desc">
+                        Aggregate sensor data → Predictive analytics → Optimization plan → Auto-implementation
+                    </div>
+                    <div class="demo-scenario-duration">~35s playback</div>
+                </div>
+            </aside>
+
+            <!-- Terminal Window -->
+            <main class="terminal-window">
+                <div class="terminal-header">
+                    <div class="terminal-controls">
+                        <span class="terminal-btn close"></span>
+                        <span class="terminal-btn minimize"></span>
+                        <span class="terminal-btn maximize"></span>
+                    </div>
+                    <div class="terminal-title">FF-Terminal Farm Assistant</div>
+                    <div class="terminal-status">
+                        <span class="status-indicator">
+                            <span class="status-dot active"></span>
+                            <span id="status-state">READY</span>
+                        </span>
+                        <span id="status-demo">Select a demo</span>
+                        <span id="status-timestamp">--:--:--</span>
+                    </div>
+                </div>
+
+                <div class="terminal-body" id="terminal-output">
+                    <!-- Initial state message -->
+                    <div class="terminal-output">
+                        <div class="terminal-line" style="color: rgba(255,255,255,0.6); margin-bottom: 1.5rem;">
+                            FF-Terminal v2.4.0 | Agricultural Intelligence System
+                        </div>
+                        <div class="terminal-line">
+                            <span class="terminal-prompt">ff-terminal</span>
+                            <span class="terminal-text">Waiting for command...</span>
+                        </div>
+                        <div class="terminal-line" style="margin-top: 2rem;">
+                            <span class="terminal-response">Select a demo scenario from the sidebar to see FF-Terminal in action.</span>
+                        </div>
+                        <div class="terminal-line">
+                            <span class="terminal-response">Try: "Monitor inventory" or "Research market opportunities"</span>
+                        </div>
+                    </div>
+
+                    <!-- Input trigger (for replay) -->
+                    <div class="terminal-input-line" style="display: none;" id="input-trigger">
+                        <span class="terminal-prompt">ff-terminal</span>
+                        <span class="terminal-text">Click to run command again</span>
+                    </div>
+                </div>
+            </main>
+
+        </div>
+    </section>
+
+    <!-- ==========================================
+         FEATURE HIGHLIGHTS SECTION
+         ========================================== -->
+    <section class="section-darker" style="padding: 6rem 0;">
+        <div class="container">
+            <h2 style="font-family: 'Playfair Display', serif; font-size: 2.5rem; margin-bottom: 1rem; text-align: center; color: var(--celestial-gold);">
+                What FF-Terminal Can Do
+            </h2>
+            <p style="font-size: 1.125rem; line-height: 1.8; color: rgba(255, 255, 255, 0.7); margin-bottom: 4rem; text-align: center; max-width: 700px; margin-left: auto; margin-right: auto;">
+                FF-Terminal uses tools like a magic wand—researching, planning, executing, and documenting 
+                complex multi-step tasks while you focus on running your farm.
+            </p>
+
+            <div class="grid-3">
+                <!-- Feature 1 -->
+                <div class="card">
+                    <h3 style="color: var(--celestial-gold); margin-bottom: 1rem;">Schedule & Monitor</h3>
+                    <p style="color: rgba(255, 255, 255, 0.8); line-height: 1.7; margin-bottom: 1rem;">
+                        Create recurring tasks with RRULE scheduling. FF-Terminal wakes up on schedule, 
+                        checks your sensors and cameras, and takes action.
+                    </p>
+                    <p style="color: var(--celestial-gold); font-size: 0.875rem; font-style: italic;">
+                        "Check parts inventory every 48 hours"
+                    </p>
+                </div>
+
+                <!-- Feature 2 -->
+                <div class="card">
+                    <h3 style="color: var(--celestial-gold); margin-bottom: 1rem;">Research & Plan</h3>
+                    <p style="color: rgba(255, 255, 255, 0.8); line-height: 1.7; margin-bottom: 1rem;">
+                        FF-Terminal researches markets, analyzes gaps, simulates business scenarios, 
+                        and generates complete business plans with financials.
+                    </p>
+                    <p style="color: var(--celestial-gold); font-size: 0.875rem; font-style: italic;">
+                        "Find ways to monetize whey byproduct"
+                    </p>
+                </div>
+
+                <!-- Feature 3 -->
+                <div class="card">
+                    <h3 style="color: var(--celestial-gold); margin-bottom: 1rem;">Execute & Document</h3>
+                    <p style="color: rgba(255, 255, 255, 0.8); line-height: 1.7; margin-bottom: 1rem;">
+                        From ordering replacement parts to creating marketing assets, FF-Terminal 
+                        executes and creates detailed documentation of everything.
+                    </p>
+                    <p style="color: var(--celestial-gold); font-size: 0.875rem; font-style: italic;">
+                        "Generate a pitch deck and landing page"
+                    </p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ==========================================
+         TOOL CAPABILITIES SECTION
+         ========================================== -->
+    <section class="section-dark" style="padding: 6rem 0;">
+        <div class="container">
+            <div style="max-width: 1100px; margin: 0 auto;">
+                <h2 style="font-family: 'Playfair Display', serif; font-size: 2.5rem; margin-bottom: 1rem; text-align: center; color: var(--celestial-gold);">
+                    Tools FF-Terminal Uses
+                </h2>
+                <p style="font-size: 1.125rem; line-height: 1.8; color: rgba(255, 255, 255, 0.7); margin-bottom: 4rem; text-align: center;">
+                    FF-Terminal orchestrates 35+ tools to accomplish complex farm tasks.
+                </p>
+
+                <div class="grid-4">
+                    <div class="equipment-card">
+                        <h4 style="color: var(--celestial-gold); font-size: 1.125rem; margin-bottom: 0.5rem;">schedule_task</h4>
+                        <p style="color: rgba(255, 255, 255, 0.6); font-size: 0.875rem;">RRULE-based recurring automation</p>
+                    </div>
+                    <div class="equipment-card">
+                        <h4 style="color: var(--celestial-gold); font-size: 1.125rem; margin-bottom: 0.5rem;">Camera Tools</h4>
+                        <p style="color: rgba(255, 255, 255, 0.6); font-size: 0.875rem;">Image capture & analysis</p>
+                    </div>
+                    <div class="equipment-card">
+                        <h4 style="color: var(--celestial-gold); font-size: 1.125rem; margin-bottom: 0.5rem;">browser_use</h4>
+                        <p style="color: rgba(255, 255, 255, 0.6); font-size: 0.875rem;">Web research & ordering</p>
+                    </div>
+                    <div class="equipment-card">
+                        <h4 style="color: var(--celestial-gold); font-size: 1.125rem; margin-bottom: 0.5rem;">Skills System</h4>
+                        <p style="color: rgba(255, 255, 255, 0.6); font-size: 0.875rem;">Analysis & validation</p>
+                    </div>
+                    <div class="equipment-card">
+                        <h4 style="color: var(--celestial-gold); font-size: 1.125rem; margin-bottom: 0.5rem;">Web Research</h4>
+                        <p style="color: rgba(255, 255, 255, 0.6); font-size: 0.875rem;">Market intelligence</p>
+                    </div>
+                    <div class="equipment-card">
+                        <h4 style="color: var(--celestial-gold); font-size: 1.125rem; margin-bottom: 0.5rem;">Simulation</h4>
+                        <p style="color: rgba(255, 255, 255, 0.6); font-size: 0.875rem;">Business modeling</p>
+                    </div>
+                    <div class="equipment-card">
+                        <h4 style="color: var(--celestial-gold); font-size: 1.125rem; margin-bottom: 0.5rem;">Documents</h4>
+                        <p style="color: rgba(255, 255, 255, 0.6); font-size: 0.875rem;">Plans & reports</p>
+                    </div>
+                    <div class="equipment-card">
+                        <h4 style="color: var(--celestial-gold); font-size: 1.125rem; margin-bottom: 0.5rem;">IoT Sensors</h4>
+                        <p style="color: rgba(255, 255, 255, 0.6); font-size: 0.875rem;">Data aggregation</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ==========================================
+         CTA SECTION
+         ========================================== -->
+    <section class="section-teal">
+        <div class="container" style="text-align: center;">
+            <h2 style="font-family: 'Playfair Display', serif; font-size: 3rem; margin-bottom: 1.5rem; color: var(--celestial-cream);">
+                Ready for Your Own AI Farm Hand?
+            </h2>
+            <p style="font-size: 1.25rem; max-width: 700px; margin: 0 auto 2.5rem; color: rgba(255, 255, 255, 0.9);">
+                FF-Terminal works 24/7 handling the complex tasks so you can focus on what matters—running your farm.
+            </p>
+            <div style="display: inline-flex; gap: 1rem; flex-wrap: wrap; justify-content: center;">
+                <a href="contact.html" class="btn-primary">Talk to Us</a>
+                <a href="how-it-works.html" class="btn-secondary">Learn How It Works</a>
+            </div>
+        </div>
+    </section>
+
+    <!-- ==========================================
+         FOOTER
+         ========================================== -->
+    <footer class="dds-footer">
+        <div class="footer-grid">
+            <div class="footer-column">
+                <div class="footer-brand">
+                    <span style="color: var(--celestial-gold);">Desmond</span>
+                    <span style="color: var(--celestial-cream);">Digital</span>
+                </div>
+                <p style="color: rgba(255, 255, 255, 0.6); margin-top: 1rem; line-height: 1.6;">
+                    Your AI Farm Hand
+                </p>
+            </div>
+
+            <div class="footer-column">
+                <h4>Pages</h4>
+                <ul>
+                    <li><a href="index.html">Home</a></li>
+                    <li><a href="how-it-works.html">How It Works</a></li>
+                    <li><a href="pricing.html">Pricing</a></li>
+                    <li><a href="success-story.html">Success Story</a></li>
+                    <li><a href="live-demo.html">Live Demo</a></li>
+                    <li><a href="contact.html">Contact</a></li>
+                </ul>
+            </div>
+
+            <div class="footer-column">
+                <h4>Connect</h4>
+                <ul>
+                    <li>Phone: (555) 123-4567</li>
+                    <li>Email: farmhand@ff-terminal.com</li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="footer-bottom">
+            <p>&copy; 2026 Desmond Digital Services. All rights reserved.</p>
+        </div>
+    </footer>
+
+    <!-- ==========================================
+         SCRIPTS
+         ========================================== -->
+    <script src="assets/js/premium-header.js"></script>
+    <script src="assets/js/parallax-hero.js"></script>
+    <script src="assets/js/terminal.js"></script>
+
+</body>
+</html>
