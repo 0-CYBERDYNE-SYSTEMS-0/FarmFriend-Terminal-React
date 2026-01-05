@@ -48,8 +48,9 @@
 - **Profile Management** - Multiple AI provider configurations
 - **Workspace Integration** - Seamless project context awareness
 - **Scheduling System** - Background task execution
-- **Tool Ecosystem** - Tavily search, Perplexity, web browsing
+- **Tool Ecosystem** - Tavily search, Perplexity, web browsing, Mail integration
 - **Secure Credential Storage** - Keychain integration
+- **Privacy-First Email** - Local PII processing with maclocal-api integration (macOS)
 
 ---
 
@@ -395,6 +396,63 @@ Individual skills can be enabled/disabled and customized:
   }
 }
 ```
+
+---
+
+## 🛠️ Built-in Tools
+
+FarmFriend Terminal includes a comprehensive set of tools for various tasks:
+
+### **Core Tools**
+- **File Operations** - read_file, write_file, edit_file, multi_edit_file
+- **Search** - grep, glob, search_code, semantic_search, ast_grep
+- **Execution** - run_command, schedule_task
+- **Web & Research** - tavily_search, perplexity_search, browse_web
+
+### **AI & Analysis**
+- **Data Analysis** - analyze_data, notebook_edit
+- **Media** - generate_image, analyze_image, analyze_video
+- **Thinking** - think, quick_update, session_summary
+- **Oracle** - ask_oracle (escalation to more powerful models)
+
+### **Workflow Automation**
+- **Skills** - skill_loader, skill_documentation, skill_import, skill_draft, skill_apply
+- **Agents** - agent_draft, agent_apply
+- **Commands** - command_draft, command_apply
+- **Templates** - list_templates, project_template
+
+### **System Integration (macOS)**
+- **macOS Control** - macos_control (GUI automation via AppleScript)
+- **Workflow** - workflow_automation (complex multi-step automations)
+- **Mail** - mail (Privacy-first email operations with local PII processing)
+
+### **📧 Mail Tool** *(macOS Only)*
+
+Interact with macOS Mail.app while keeping your data private:
+
+**Features:**
+- 🔍 **Search** - Find emails by sender, subject, mailbox, date range
+- 📖 **Read** - Access email content with optional PII redaction
+- ✉️ **Compose** - Send emails with attachments
+- 📝 **Drafts** - Create and edit draft emails
+- 🗄️ **Organize** - Archive and move emails to mailboxes
+- 🤖 **AI Analysis** - Summarize, extract action items, assess priority (requires maclocal-api)
+- 🔒 **PII Protection** - Automatic redaction using on-device LLM
+
+**Privacy-First Design:**
+- All email operations use macOS Mail.app (no cloud services)
+- Optional integration with [maclocal-api](https://github.com/scouzi1966/maclocal-api) for local AI processing
+- PII detection and redaction happens entirely on-device
+- No email content sent to remote servers
+
+**Quick Example:**
+```
+Search my inbox for emails from john@example.com with "report" in the subject
+```
+
+**Documentation:**
+- Full specification: [`docs/MAIL_TOOL_SPEC.md`](docs/MAIL_TOOL_SPEC.md)
+- Usage examples: [`docs/MAIL_TOOL_EXAMPLES.md`](docs/MAIL_TOOL_EXAMPLES.md)
 
 ---
 
