@@ -1,0 +1,307 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Autonomy Dashboard — E2E Loop vs. Ralph Wiggum Loop</title>
+  <style>
+    :root {
+      --bg: #0e1412;
+      --panel: #16201c;
+      --ink: #e8f2ed;
+      --muted: #9db2a6;
+      --accent: #7ed6a9;
+      --accent-2: #f2b07b;
+      --line: #26332d;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "IBM Plex Mono", "Fira Mono", "Menlo", monospace;
+      background: radial-gradient(1000px 700px at 15% -20%, #1a2a23, transparent), var(--bg);
+      color: var(--ink);
+      line-height: 1.55;
+    }
+    header {
+      padding: 26px 22px 16px;
+      border-bottom: 1px solid var(--line);
+      background: linear-gradient(180deg, #17221c 0%, #0e1412 100%);
+    }
+    h1 {
+      margin: 0 0 6px;
+      font-size: 24px;
+      letter-spacing: 0.6px;
+    }
+    .subtitle {
+      color: var(--muted);
+      max-width: 980px;
+      font-size: 14px;
+    }
+    main {
+      padding: 22px;
+      display: grid;
+      gap: 18px;
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 16px;
+      box-shadow: 0 6px 18px rgba(0,0,0,0.25);
+    }
+    h2 { margin: 0 0 8px; font-size: 17px; }
+    h3 { margin: 12px 0 6px; font-size: 14px; color: var(--accent); }
+    .grid-2 {
+      display: grid;
+      gap: 14px;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    }
+    .grid-3 {
+      display: grid;
+      gap: 14px;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    }
+    code, pre {
+      background: #0f1713;
+      color: var(--ink);
+      border: 1px solid #1f2b25;
+      border-radius: 8px;
+      padding: 8px;
+      display: block;
+      overflow-x: auto;
+      font-size: 12.5px;
+      white-space: pre;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+    th, td {
+      text-align: left;
+      padding: 10px;
+      border-bottom: 1px solid var(--line);
+      vertical-align: top;
+    }
+    th { color: var(--accent-2); }
+    .pill {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 11px;
+      border: 1px solid var(--line);
+      color: var(--muted);
+    }
+    .warn {
+      color: #f2c1a0;
+      background: #2a2019;
+      border: 1px solid #3b2a20;
+      padding: 10px;
+      border-radius: 10px;
+    }
+    ul { margin: 8px 0 0; padding-left: 18px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Autonomy Dashboard — E2E Loop vs. Ralph Wiggum Loop</h1>
+    <div class="subtitle">
+      Focus: long‑term autonomy, completion validation, and the trade‑off between deterministic testing
+      and extreme long‑horizon execution.
+    </div>
+  </header>
+
+  <main>
+    <section class="card">
+      <h2>Intent & Framing</h2>
+      <div class="warn">
+        This dashboard is conceptual. It does not change code and does not assume extra features beyond
+        what is known about the current E2E loop and the Ralph Wiggum loop pattern.
+      </div>
+    </section>
+
+    <section class="card grid-2">
+      <div>
+        <h2>E2E Loop (ff-terminal)</h2>
+        <div class="pill">Deterministic Runtime Harness</div>
+        <h3>Strengths for Autonomy</h3>
+        <ul>
+          <li>Uses real runtime + tool wiring</li>
+          <li>Explicit stop hooks and tool validation</li>
+          <li>Strong JSONL logging for post‑mortems</li>
+        </ul>
+        <h3>Long‑Horizon Limits</h3>
+        <ul>
+          <li>Session is per prompt loop, not perpetual</li>
+          <li>No built‑in multi‑day watchdog</li>
+          <li>Stops after a single prompt completes</li>
+        </ul>
+      </div>
+      <div>
+        <h2>Ralph Wiggum Loop</h2>
+        <div class="pill">Perpetual Iteration Pattern</div>
+        <h3>Strengths for Autonomy</h3>
+        <ul>
+          <li>Continuous loop until completion signal</li>
+          <li>File‑based “state of the world”</li>
+          <li>Heuristics for completion + rate limits</li>
+        </ul>
+        <h3>Long‑Horizon Limits</h3>
+        <ul>
+          <li>Less deterministic in testing contexts</li>
+          <li>Relies on completion promises and heuristics</li>
+          <li>Cost and drift risk without strict guardrails</li>
+        </ul>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Flow Diagram: Deterministic Test Loop</h2>
+      <pre>E2E Loop (ff-terminal)
+
+stdin prompts
+   │
+   ▼
+./scripts/e2e_loop.sh
+   │
+   ▼
+ff-terminal run --headless
+   │
+   ▼
+runAgentTurn
+   │
+   ├─ tool validation + hooks
+   ├─ stop checks (when no tools)
+   └─ session logs + run logs
+   │
+   ▼
+END (per prompt)</pre>
+    </section>
+
+    <section class="card">
+      <h2>Flow Diagram: Perpetual Autonomy Loop</h2>
+      <pre>Ralph Wiggum Loop (pattern)
+
+PROMPT.md + task files
+   │
+   ▼
+Agent run (Claude Code)
+   │
+   ├─ completion heuristics
+   ├─ rate limits / circuit breakers
+   └─ update task files
+   │
+   ▼
+If not done → repeat
+(continues for days/weeks)</pre>
+    </section>
+
+    <section class="card">
+      <h2>Completion Validation — Side‑by‑Side</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Dimension</th>
+            <th>E2E Loop</th>
+            <th>Ralph Loop</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Primary stop logic</td>
+            <td>Hook‑based stop check when no tool calls</td>
+            <td>Completion promise / heuristic stop signal</td>
+          </tr>
+          <tr>
+            <td>Evidence of completion</td>
+            <td>Hook evaluation + tool results in session logs</td>
+            <td>Textual completion promise + task files</td>
+          </tr>
+          <tr>
+            <td>Risk of premature stop</td>
+            <td>Lower (explicit hooks)</td>
+            <td>Medium (heuristic‑driven)</td>
+          </tr>
+          <tr>
+            <td>Risk of infinite loop</td>
+            <td>Lower (max iterations + stop hooks)</td>
+            <td>Higher if completion signal never appears</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="card">
+      <h2>Autonomy “Wealth Lag” View</h2>
+      <div class="grid-3">
+        <div>
+          <h3>Short‑Horizon Value</h3>
+          <p>E2E loop returns fast validation. Ralph loop is heavier for short tasks.</p>
+        </div>
+        <div>
+          <h3>Mid‑Horizon Value</h3>
+          <p>E2E loop remains reliable; Ralph loop starts to pull ahead when tasks need multiple passes.</p>
+        </div>
+        <div>
+          <h3>Long‑Horizon Value</h3>
+          <p>Ralph loop dominates if the goal is days‑long persistence with minimal human input.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Spec Proposal: “Ralph‑Mode” as an Optional Operation Mode</h2>
+      <div class="grid-2">
+        <div>
+          <h3>Goal</h3>
+          <p>Add a mode that keeps ff‑terminal running across long horizons by re‑invoking the agent until completion criteria are met, without replacing the E2E loop.</p>
+
+          <h3>Core Idea</h3>
+          <ul>
+            <li>Persist a <code>PROMPT.md</code> and <code>TASKS.md</code> in the workspace.</li>
+            <li>Define a <em>completion promise string</em> that must appear to stop.</li>
+            <li>Loop the headless run with a watchdog and explicit rate limits.</li>
+          </ul>
+        </div>
+        <div>
+          <h3>Operational Safeguards</h3>
+          <ul>
+            <li>Hard daily token budget or run count budget</li>
+            <li>Time‑boxed iterations (e.g., 20–60 min)</li>
+            <li>Mandatory “checkpoint” file updates every N loops</li>
+            <li>Abort on repeated tool failures or unchanged task files</li>
+          </ul>
+        </div>
+      </div>
+
+      <h3>Ralph‑Mode Flow (spec)</h3>
+      <pre>Ralph‑Mode (ff-terminal concept)
+
+PROMPT.md + TASKS.md
+   │
+   ▼
+ff-terminal run --headless
+   │
+   ├─ runAgentTurn
+   ├─ write/update TASKS.md
+   └─ emit completion promise
+   │
+   ▼
+Completion promise present?
+   ├─ yes → STOP
+   └─ no  → sleep/backoff → repeat</pre>
+    </section>
+
+    <section class="card">
+      <h2>Recommendation Summary</h2>
+      <ul>
+        <li>Keep E2E loop as your core, deterministic runtime validation harness.</li>
+        <li>Consider a Ralph‑style mode for extreme long‑term autonomy if you can enforce budgets and completion criteria.</li>
+        <li>If added, treat Ralph‑mode as an optional “autonomy daemon,” not a replacement for E2E.</li>
+      </ul>
+    </section>
+  </main>
+</body>
+</html>

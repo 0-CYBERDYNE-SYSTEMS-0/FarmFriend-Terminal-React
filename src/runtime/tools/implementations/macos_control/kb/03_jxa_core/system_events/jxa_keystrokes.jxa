@@ -1,0 +1,15 @@
+---
+id: jxa_keystrokes
+title: JXA Keyboard Input
+description: Sending keystrokes and key combinations to applications using JXA
+---
+// Basic System Events setup
+const systemEvents = Application('System Events');
+
+// Activate app before sending input
+function activateApp(appName) {
+  const app = Application(appName);
+  app.activate();
+  delay(0.2); // Small delay to ensure app is ready
+  return app;
+}

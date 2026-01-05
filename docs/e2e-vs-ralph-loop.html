@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>E2E Loop vs. Ralph Wiggum Loop — Developer Breakdown</title>
+  <style>
+    :root {
+      --bg: #0f1412;
+      --panel: #18201c;
+      --ink: #e6f1e9;
+      --muted: #9fb3a7;
+      --accent: #7ad3a7;
+      --accent-2: #f4b183;
+      --line: #2a3a32;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "IBM Plex Mono", "Fira Mono", "Menlo", monospace;
+      background: radial-gradient(1200px 600px at 20% -10%, #1b2a23, transparent), var(--bg);
+      color: var(--ink);
+      line-height: 1.5;
+    }
+    header {
+      padding: 32px 24px 16px;
+      border-bottom: 1px solid var(--line);
+      background: linear-gradient(180deg, #16211b 0%, #0f1412 100%);
+    }
+    h1 {
+      margin: 0 0 8px;
+      font-size: 26px;
+      letter-spacing: 0.5px;
+    }
+    .subtitle {
+      color: var(--muted);
+      max-width: 900px;
+    }
+    main {
+      padding: 24px;
+      display: grid;
+      gap: 20px;
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 18px;
+      box-shadow: 0 6px 18px rgba(0,0,0,0.25);
+    }
+    h2 { margin: 0 0 10px; font-size: 18px; }
+    h3 { margin: 14px 0 6px; font-size: 15px; color: var(--accent); }
+    code, pre {
+      background: #101813;
+      color: var(--ink);
+      border: 1px solid #1f2b24;
+      border-radius: 8px;
+      padding: 8px;
+      display: block;
+      overflow-x: auto;
+    }
+    .grid-2 {
+      display: grid;
+      gap: 16px;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    }
+    .pill {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 12px;
+      border: 1px solid var(--line);
+      color: var(--muted);
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 14px;
+    }
+    th, td {
+      text-align: left;
+      padding: 10px;
+      border-bottom: 1px solid var(--line);
+      vertical-align: top;
+    }
+    th { color: var(--accent-2); }
+    .diagram {
+      background: #101813;
+      border: 1px solid #1f2b24;
+      border-radius: 12px;
+      padding: 12px;
+      white-space: pre;
+      overflow-x: auto;
+      font-size: 13px;
+      color: #d7eadf;
+    }
+    .warn {
+      color: #f2c1a0;
+      background: #2a2019;
+      border: 1px solid #3b2a20;
+      padding: 10px;
+      border-radius: 10px;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>E2E Loop vs. Ralph Wiggum Loop</h1>
+    <div class="subtitle">
+      Developer‑focused comparison based only on local repository documentation and the user‑provided references.
+      Unknowns are explicitly marked to avoid assumptions.
+    </div>
+  </header>
+
+  <main>
+    <section class="card">
+      <h2>Scope & Source Constraints</h2>
+      <div class="warn">
+        This document is constrained to the content in <code>AGENTS.md</code> plus the existence of the external links.
+        No external README content is imported here.
+      </div>
+    </section>
+
+    <section class="card grid-2">
+      <div>
+        <h2>E2E Loop (ff-terminal)</h2>
+        <div class="pill">Runtime Test Harness</div>
+        <h3>Purpose</h3>
+        <p>Validates profiles, credentials, tool wiring, and model gateway by calling the real headless agent runtime.</p>
+        <h3>Entry Point</h3>
+        <pre><code>./scripts/e2e_loop.sh "&lt;profile-name&gt;" auto
+Hello
+Summarize this repo</code></pre>
+        <h3>Logs</h3>
+        <p><code>~/ff-terminal-workspace/logs/sessions/session_&lt;session_id&gt;.jsonl</code></p>
+      </div>
+      <div>
+        <h2>Ralph Wiggum Loop</h2>
+        <div class="pill">Loop Pattern (External)</div>
+        <h3>Purpose</h3>
+        <p>High‑level iterative loop concept (self‑prompting/iteration). Exact mechanism unspecified here.</p>
+        <h3>Entry Point</h3>
+        <p>Unknown from provided information.</p>
+        <h3>Logs</h3>
+        <p>Unknown from provided information.</p>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Core Architecture Placement</h2>
+      <div class="diagram">E2E Loop (ff-terminal)
+
+User prompts
+   │
+   ▼
+./scripts/e2e_loop.sh
+   │
+   ▼
+ dist/bin/ff-terminal.js run --headless
+   │
+   ▼
+ Real runtime + tools + provider
+   │
+   ▼
+ JSONL session logs</div>
+
+      <div class="diagram" style="margin-top: 14px;">Ralph Wiggum Loop (External)
+
+Loop pattern / iterative strategy
+   │
+   ├─ Exact runtime entry point: unknown
+   ├─ Tool wiring: unknown
+   └─ Logging/trace: unknown</div>
+    </section>
+
+    <section class="card">
+      <h2>Similarity vs Difference (Core Level)</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Dimension</th>
+            <th>E2E Loop (ff-terminal)</th>
+            <th>Ralph Wiggum Loop</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Role</td>
+            <td>Runtime verification harness</td>
+            <td>Iterative reasoning / loop pattern</td>
+          </tr>
+          <tr>
+            <td>Entry point</td>
+            <td>Concrete script and CLI invocation</td>
+            <td>Unknown here</td>
+          </tr>
+          <tr>
+            <td>Uses real runtime</td>
+            <td>Yes</td>
+            <td>Unknown</td>
+          </tr>
+          <tr>
+            <td>Bypasses UI</td>
+            <td>Yes</td>
+            <td>Unknown</td>
+          </tr>
+          <tr>
+            <td>Logging</td>
+            <td>JSONL session logs</td>
+            <td>Unknown</td>
+          </tr>
+          <tr>
+            <td>Determinism</td>
+            <td>High (controlled harness)</td>
+            <td>Unknown</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="card">
+      <h2>Decision Guidance</h2>
+      <p>
+        The E2E loop is a system‑level test harness already integrated with ff‑terminal. The Ralph Wiggum loop, as
+        referenced, appears to be a conceptual iteration pattern rather than a direct runtime harness. If you want
+        Ralph Wiggum‑style behavior, implement the loop **within** ff‑terminal’s agent strategy and validate it with
+        your existing E2E loop.
+      </p>
+    </section>
+
+    <section class="card">
+      <h2>What’s Missing for a Deeper Comparison</h2>
+      <ul>
+        <li>The Ralph Wiggum loop’s explicit spec or README content.</li>
+        <li>Its runtime or tool invocation model.</li>
+        <li>Logging / session tracing mechanics.</li>
+      </ul>
+    </section>
+  </main>
+</body>
+</html>

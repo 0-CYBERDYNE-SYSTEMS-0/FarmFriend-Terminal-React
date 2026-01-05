@@ -8,11 +8,16 @@
  * 4. Credentials are retrieved correctly
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, beforeAll } from 'vitest';
+import { resolve } from 'node:path';
 import { readConfig, getProfileByName, getCredential } from '../src/runtime/profiles/storage.js';
 import { createProvider } from '../src/runtime/providers/factory.js';
 
 describe('Profile System', () => {
+  beforeAll(() => {
+    process.env.FF_PROFILE_STORE_PATH = resolve('tests/fixtures/ff-terminal-profiles.json');
+  });
+
   describe('Profile Storage', () => {
     it('should load profiles from storage', () => {
       const config = readConfig();
@@ -153,7 +158,7 @@ describe('Profile System', () => {
         const cred = await getCredential(profile.name, credentialLabel);
         // Credential may or may not exist depending on test environment
         // But we can verify the function doesn't throw
-        expect(typeof cred).toBe('string' || 'null');
+        expect(cred === null || typeof cred === 'string').toBe(true);
       }
     });
 

@@ -4,1456 +4,267 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Development Commands
 
-### Common Tasks
-- **Start development**: `npm run dev` - Runs the CLI directly with tsx
-- **Build for production**: `npm run build` - Compiles TypeScript to dist/ (includes web frontend)
-- **Run daemon**: `npm run dev:daemon` - Starts the WebSocket agent runtime on port 28888
-- **Run CLI**: `npm run dev:cli` - Starts the Ink (React) terminal UI
-- **Start both daemon + UI**: `npm run dev:start` - Launches daemon and UI together (primary development workflow)
-- **Local workspace mode**: `npm run dev -- local` or `ff-terminal local` - Launches ff-terminal with workspace in current directory (creates `ff-terminal-workspace/` locally)
-- **Run headless**: `npm run dev:run` - Single-turn headless execution with a test prompt
-- **Manage profiles**: `npm run dev -- profile setup|list|default|delete` - Profile and provider configuration
-- **Launch wizard**: `npm run dev -- start` - Interactive profile/model selector
-- **Web UI**: `npm run dev:web` - Starts web server on port 8787 with browser-based interface
-- **Display modes**: Add `--display-mode verbose` for detailed output or `--display-mode clean` for minimal UI
-- **ACP server**: `npm run dev -- acp` - Starts Anthropic Claude Protocol server for IDE integration
-- **Tool permissions**: Add `--allow-macos-control` or `--allow-browser-use` flags to enable restricted automation tools
+### Essential Commands
+- `npm run dev` - Run CLI directly with tsx
+- `npm run build` - Compile TypeScript + build web frontend
+- `npm run dev:daemon` - Start WebSocket agent runtime (port 28888)
+- `npm run dev:cli` - Start Ink terminal UI
+- `npm run dev:start` - Launch daemon + UI together (primary workflow)
+- `npm run dev:web` - Start web server (port 8787)
+- `npm test` - Run Vitest test suite
+- `npm test -- <filename>` - Run specific test file
+- `npm test -- --watch` - Watch mode
 
-**Note**: This is a private package, so use `npm run` commands for development. The `ff-terminal` command is only available after `npm run build` and installation.
+### CLI Modes
+- `npm run dev -- start [profile]` - Interactive mode with daemon + UI
+- `npm run dev -- local [profile]` - Local workspace mode (creates `ff-terminal-workspace/` in current dir)
+- `npm run dev -- run --prompt "..."` - Single headless execution
+- `npm run dev -- profile setup|list|default` - Profile management
+- `npm run dev -- acp` - Anthropic Claude Protocol server
+- `--display-mode verbose|clean` - Control output verbosity
+- `--allow-macos-control` / `--allow-browser-use` - Enable restricted tools
 
 ### Testing & Debugging
-- **Run tests**: `npm test` - Full test suite with Vitest
-- **Run tests with UI**: `npm run test:ui` - Interactive test explorer
-- **Test coverage**: `npm run test:coverage` - Generate coverage metrics
-- **Run specific test file**: `npm test -- <filename>`
-- **Run tests in watch mode**: `npm test -- --watch`
-- **Run a single turn**: `npm run dev -- run --prompt "your prompt here"`
-- **Test scheduled task**: `npm run dev -- run --scheduled-task <id-or-name> --headless`
-- **Start scheduler**: `npm run dev:daemon` then check `~/.config/ff-terminal/` for scheduled tasks
-- **Agent testing**: `cd agent-testing-suite && ff-test run <suite>` - End-to-end agent evaluation (see Agent Testing Suite section)
+- `FF_LOG_HOOKS_JSONL=true npm run dev` - Enable JSONL tool call logging
+- `FF_DAEMON_LOG=1 npm run dev -- start` - Enable daemon logging
+- `FF_DEBUG=true` - Verbose logging
+- Session logs: `ff-terminal-workspace/logs/sessions/<session>.jsonl`
+- Agent testing suite: `cd agent-testing-suite && ff-test run <suite>`
 
-### Build Verification
-After making changes, always run:
-```bash
-npm run build
-```
-This catches TypeScript errors before deployment and builds the web frontend.
+### Build & Install
+Always rebuild after TypeScript changes: `npm run build`
 
-### CLI Installation (for local development)
-After building, install the CLI globally:
+Install CLI globally:
 ```bash
 ./scripts/install-cli.sh
-```
-This installs `ff-terminal` to `~/.local/bin`. Ensure it's on your PATH:
-```bash
 echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zprofile
-source ~/.zprofile
 ```
 
-### Native Dependencies & Build Scripts
+## Architecture Overview
 
-The project has optional native dependencies:
-- `@ast-grep/cli` - Semantic code search (C++ binding)
-- `esbuild` - Fast JavaScript bundler (Go binding)
-- `keytar` - Secure credential storage via OS keychain (C++ binding)
-
-These dependencies have prebuilt binaries that work without compilation.
-
-### Logging & Observability
-- Structured JSONL session logs: `ff-terminal-workspace/logs/sessions/<session>.jsonl` (rotated, level-controlled via `log_level` in config)
-- Per-run headless logs: `ff-terminal-workspace/logs/runs/`
-- Tool start/end events include redacted args and output previews
-- Turn completion entries capture duration and tool counts
-- To trace a failing run: `tail -f ff-terminal-workspace/logs/sessions/<session>.jsonl`
-
-## Project Structure
-
-The codebase follows a modular architecture with clear separation of concerns:
-
-### **Entry Point: `src/bin/ff-terminal.ts`**
-Central command router handling:
-- `daemon` - Starts WebSocket agent runtime
-- `ui` - Starts Ink terminal UI
-- `start [profile]` - Launches both daemon and UI together
-- `local [profile]` - Local workspace mode with per-directory isolation
-- `run --prompt "..."` - Single headless execution
-- `profile` - Manages provider profiles and credentials
-- `schedule` - Manages scheduled tasks with RRULE support
-- `web` - Starts HTTP+WebSocket web server
-- `acp` - Starts Anthropic Claude Protocol server
-
-The design spawns daemon and UI as separate child processes, allowing daemon to persist independently of UI crashes.
-
-### **Core Modules**
-
-#### **CLI (`src/cli/app.tsx`)**
-React/Ink-based terminal UI connecting to daemon via WebSocket on port 28888.
-- Displays chat transcript with syntax highlighting
-- Shows operation modes: auto, confirm, read_only, planning
-- Provides wizards for model/mount/project configuration
-- Implements commands: `/help`, `/tools`, `/init-project`, etc.
-- Allows profile-specific model overrides
-- Real-time connection status and streaming output rendering
-
-#### **Daemon (`src/daemon/daemon.ts`)**
-WebSocket server (port 28888) that receives messages from UI:
-- `hello` - Client identification
-- `start_turn` - Begin agent processing with user prompt
-- `cancel_turn` - Abort running agent
-- `list_tools` - Query available tools
-
-Streams `StreamChunk` objects back to UI containing:
-- `content` - LLM response text (delta)
-- `thinking` - Extended thinking/reasoning (XML tags supported)
-- `error` - Tool or system errors
-- `status` - Status messages
-- `task_completed` - Turn completion marker
-
-#### **Runtime (`src/runtime/`)**
-The core agent execution engine with multiple responsibilities:
-
-**Agent Loop (`agentLoop.ts`)**
-- Loads or creates session from persistent storage
-- Builds system prompt with repo context, available skills, session summary
-- Implements multi-turn iteration (default 500 max turns)
-- Streams LLM output for content, thinking, and tool calls
-- Executes tools in parallel, validates completions via hooks
-- Logs tool execution to JSONL if enabled (FF_LOG_HOOKS_JSONL)
-- Respects AbortSignal for cancellation
-- Supports XML thinking tags for structured reasoning output
-
-**Tool System (`tools/`)**
-- `registry.ts` - Map-based tool registration and dispatch
-- `toolSchemas.ts` - Loads OpenAI-compatible function schemas from packet
-- `executeTools.ts` - Parallel tool execution with start/finish hooks
-- `context.ts` - AsyncLocalStorage providing sessionId/workspaceDir/repoRoot to tools
-- `implementations/` - 35+ tool implementations (file I/O, search, web, media, etc.)
-
-**LLM Providers (`providers/`)**
-- `factory.ts` - Provider selection (OpenRouter, Z.ai, MiniMax, LM Studio, Anthropic)
-- Each provider implements Anthropic Messages API or OpenAI-compatible streaming
-- Streaming enables real-time output to UI without buffering
-- Handles model detection and API formatting
-- Support for extended thinking via XML tags
-
-**Configuration (`config/`)**
-- `loadConfig.ts` - Loads RuntimeConfig with tool limits, hooks, model overrides
-- `paths.ts` - Platform-specific directory paths (macOS, Linux, Windows)
-- `repoRoot.ts` - Finds repo root via `.git` or `.ff-terminal` marker
-- `dotenv.ts` - Loads `.env` and `.env.local` for tool API keys
-- `mounts.ts` - Read-only mount configuration for external skills
-
-**Profiles & Credentials (`profiles/`)**
-- Stores profiles in `~/.ff-terminal-profiles.json`
-- Primary: OS keychain via optional `keytar` package
-- Fallback: Plaintext in config (with warning)
-- Supports multiple LLM providers per profile
-- Per-purpose model overrides (main, subagentModel, toolModel, webModel, imageModel, videoModel)
-
-**Session Persistence (`session/`)**
-- Conversation history stored as JSON per sessionId
-- Auto-loaded for context reconstruction across turns
-
-**Task Scheduling (`scheduling/`)**
-- Stores tasks in workspace `memory_core/scheduled_tasks/tasks.json`
-- `taskStore.ts` - Manages scheduled task definitions
-- `scheduleTaskTool.ts` - Tool for creating scheduled tasks
-- `rrule.ts` - RRULE (RFC 5545) scheduling with timezone support
-- `backends/` - OS-specific integration (macOS launchd for recurring tasks)
-- Supports one-time, daily, weekly, interval, and custom RRULE schedules
-
-**Planning System (`planning/`)**
-- `planExtractor.ts` - Extracts execution plans from LLM responses
-- `planStore.ts` - Persists plans to workspace
-- `types.ts` - Plan and step type definitions
-- Auto-extraction of plans from content when enabled
-- Plan validation hooks ensure step completion
-- Track step attempts and status (pending, in_progress, completed, failed)
-
-**Hooks (`hooks/`)**
-- `registry.ts` - Hook registration
-- `builtin/` - Built-in hooks for validation and control
-  - `planValidationStopHook.ts` - Validates plan step completion
-  - `todoStopHook.ts` - Validates todo task completion
-  - `skillAllowedToolsHook.ts` - Enforces skill tool restrictions
-- Custom hooks can be registered without modifying core loop
-
-**Logging (`logging/`)**
-- `structuredLogger.ts` - JSONL logger with rotation/redaction used by agent loop and headless runs
-
-#### **Web (`src/web/`)**
-Alternative HTTP+WebSocket server on port 8787 for web-based UI.
-**Server (`server.ts`)**
-- HTTP+WebSocket server for browser-based interface
-- Similar messaging protocol to daemon (command, response, thinking, tool_call, etc.)
-- Health endpoint for orchestration
-- File upload support via multipart/form-data
-
-**Client (`client/`)**
-- React-based web UI built with Vite
-- Main component: `App.tsx` - manages WebSocket connection, message state, and dual-view layout
-- Console/Chat toggle: Shows either chat-only view or split view with ConsoleEventLog
-- **Responsive design**: Uses `isMobile` state (breakpoint: 768px) to adapt layout
-  - Desktop: Side-by-side chat and console panels when console is enabled
-  - Mobile: Bottom drawer (45vh height) slides up over chat, input field fixed above drawer at `bottom-[45vh]`
-  - No backdrop blur - chat remains visible and readable when console drawer is open
-  - Messages area adds bottom margin (`mb-[calc(45vh+6rem)]`) to prevent content hiding under drawer
-- **Console event handling**: Streaming response chunks are aggregated, only complete responses shown in console to avoid word-by-word event spam
-- **Smart scroll behavior**: Auto-scroll only triggers if user is near bottom (<150px), preventing interruption when reading scrolled-up content
-- **Thinking display**: XML thinking tags are parsed and displayed with clear visual separation from responses
-- Components:
-  - `ConsoleEventLog.tsx` - Displays system events, tool calls, and thinking with tool previews
-  - `Markdown.tsx` - Renders markdown with syntax highlighting
-  - `ArtifactPreview.tsx` - Displays HTML/JSON artifacts
-  - `CodeBlock.tsx` - Syntax-highlighted code blocks
-  - `FileUpload.tsx` - Drag-and-drop file attachment support
-  - Supports color theming system with customizable UI colors
-
-**Web Frontend Development**:
-The web UI is a separate Vite + React project. To develop it:
-```bash
-cd src/web/client
-npm install
-npm run dev  # Starts Vite dev server on port 5173
+### Two-Process Model
 ```
-
-**Common Issue**: If web UI shows blank page, rebuild the frontend:
-```bash
-npm run build:web
-# Or manually: cd src/web/client && npm install && npm run build
+ff-terminal start
+  ├─ daemon.ts (WebSocket server, port 28888)
+  └─ app.tsx (Ink UI, WebSocket client)
 ```
+Daemon persists independently of UI crashes.
 
-#### **ACP Server (`src/acp/`)**
-Anthropic Claude Protocol server for IDE integration (experimental).
+### Entry Point: `src/bin/ff-terminal.ts`
+Central router for: `daemon`, `ui`, `start`, `local`, `run`, `profile`, `schedule`, `web`, `acp`
 
-#### **Shared (`src/shared/`)**
-- `ids.ts` - ID generation utilities
+### Core Modules
 
-## Tool System Architecture
+**CLI (`src/cli/app.tsx`)**
+- React/Ink terminal UI
+- WebSocket connection to daemon
+- Real-time streaming with syntax highlighting
+- Modes: auto, confirm, read_only, planning
 
-### Tool Categories (35+ total)
+**Daemon (`src/daemon/daemon.ts`)**
+- WebSocket server receiving: `hello`, `start_turn`, `cancel_turn`, `list_tools`
+- Streams: `content`, `thinking`, `error`, `status`, `task_completed`
 
-**File I/O**
-- `read_file`, `write_file`, `edit_file`, `multi_edit_file`, `glob`, `grep`
+**Runtime (`src/runtime/`)**
+- `agentLoop.ts` - Multi-turn iteration (500 max), tool execution, streaming
+- `tools/` - 35+ tool implementations, schemas from `packet/tool_schemas.openai.json`
+- `providers/` - OpenRouter, Z.ai, MiniMax, LM Studio, Anthropic
+- `config/` - Config loading, paths, dotenv, mounts
+- `profiles/` - Profile storage in `~/.ff-terminal-profiles.json`
+- `session/` - Conversation history as JSON
+- `scheduling/` - RRULE task scheduler with OS integration
+- `planning/` - Plan extraction, validation, step tracking
+- `hooks/` - Validation hooks (plan, todo, skill restrictions)
 
-**Execution**
-- `run_command` - Shell execution with sandboxing
+**Web (`src/web/`)**
+- `server.ts` - HTTP+WebSocket server (port 8787)
+- `client/` - React+Vite UI with responsive design (mobile: 768px breakpoint)
+  - Desktop: side-by-side chat/console
+  - Mobile: bottom drawer (45vh) slides over chat
+  - Smart scroll, thinking display, file upload
+  - Build separately: `cd src/web/client && npm install && npm run build`
 
-**Meta**
-- `think` - Extended thinking/reasoning
-- `session_summary` - Generate conversation summary
-- `quick_update` - Status update to user
-- `TodoWrite` - Manage todo lists
-- `completion_validation` - Validate tool promise completion (internal)
+### Tool System
+35+ tools in categories: File I/O, Execution, Meta, Code Search, Skills, Agents, Web, Data, Media, Automation, System
 
-**Code Search & Analysis**
-- `search_code` - Full-text code search
-- `semantic_search` - AI-powered code search
-- `ast_grep` - Structured code queries via ast-grep
+**Tool Flow:**
+1. Registration in `registerDefaultTools()` with handler
+2. Schema from `packet/tool_schemas.openai.json`
+3. LLM calls with JSON args
+4. Parallel execution via `executeTools.ts`
+5. Context via AsyncLocalStorage: `getToolContext()`
+6. Optional hook validation
 
-**Skills System** (Modular tools mounted from `.claude/skills`)
-- `skill_loader` - Discover available skills
-- `skill_documentation` - Get skill details
-- `skill_import` - Import skill definitions
-- `skill_draft` - Create new skill
-- `skill_apply` - Execute skill
-- `skill_sequencer` - Chain skills together
+**Constraints:**
+- `read_file` blocks `.git`, `.ssh`
+- File size limit: `FF_READ_FILE_MAX_BYTES` (1MB default)
+- Parallel limit: `FF_MAX_PARALLEL_CALLS`
 
-**Agents & Commands**
-- `agent_draft`, `agent_apply` - Agent workflow management
-- `command_draft`, `command_apply` - Command workflow management
+## Configuration
 
-**Web Tools**
-- `tavily_search`, `tavily_extract`, `tavily_map`, `tavily_crawl` - Comprehensive web search (requires TAVILY_API_KEY)
-- `perplexity_search` - Alternative search provider (requires PERPLEXITY_API_KEY)
-- `browse_web` - Lightweight URL fetching
+### Config Hierarchy
+1. `packet/default_config.json` (embedded defaults)
+2. Platform-specific user config
+3. Environment variables (`FF_*`)
+4. Runtime overrides
 
-**Data & Analysis**
-- `analyze_data` - Data processing and statistics
-- `notebook_edit` - Jupyter notebook manipulation
+### Profiles
+Stored in `~/.ff-terminal-profiles.json`:
+- Provider + credentials + model selections
+- Per-purpose models: main, subagentModel, toolModel, webModel, imageModel, videoModel
+- Credential storage: OS keychain (via `keytar`) or plaintext fallback
+- Tool key management: `npm run dev -- profile tool-keys`
 
-**Media Generation**
-- `generate_image_gemini`, `analyze_image_gemini`, `edit_image_gemini` - Google Gemini (requires GOOGLE_GEMINI_API_KEY)
-- `analyze_video_gemini` - Video processing
-- `generate_image_openai` - OpenAI image generation (requires OPENAI_API_KEY)
+### Providers
+OpenRouter, Z.ai, MiniMax, LM Studio, Anthropic, OpenAI-compatible, Anthropic-compatible
 
-**Automation & Control**
-- `macos_control` - macOS system control (Dock, Finder, etc.) - requires `FF_ALLOW_MACOS_CONTROL=1`
-- `workflow_automation` - Task automation framework
-- `ask_oracle` - Delegation to specialized agents (requires OPENROUTER_API_KEY)
-
-**System**
-- `schedule_task` - Create recurring tasks with RRULE support
-- `list_templates` - Available project templates
-- `project_template` - Apply template to project
-- `smart_cleanup` - Code cleanup utilities
-
-### How Tools Work
-
-1. **Registration**: Tools registered in `registerDefaultTools()` with name and handler function
-2. **Schema**: OpenAI-compatible schemas loaded from `packet/tool_schemas.openai.json`
-3. **Discovery**: Only registered tools matching available schemas are advertised to LLM
-4. **Execution**: LLM calls tools with JSON arguments; executed in parallel
-5. **Context**: Tools access sessionId/workspaceDir/repoRoot via `getToolContext()`
-6. **Validation**: Optional hooks can validate tool results and trigger re-attempts
-7. **Cancellation**: AbortSignal respects UI cancellation requests
-
-### Important Constraints
-
-- **File safety**: `read_file` blocks `.git` and `.ssh` directories
-- **File size limits**: Configurable via `FF_READ_FILE_MAX_BYTES` (default 1MB)
-- **Parallel limits**: Tool execution respects `FF_MAX_PARALLEL_CALLS`
-
-## Configuration & Profiles
-
-### Configuration Hierarchy (in priority order)
-1. Embedded defaults from `packet/default_config.json`
-2. User config file (platform-specific location)
-3. Environment variables (FF_CONFIG_PATH, FF_PROVIDER, FF_MODEL, FF_WORKSPACE_DIR, etc.)
-4. Runtime parameter overrides
-
-### Profile System
-Profiles combine provider + credentials + model selections:
-
-```json
-{
-  "name": "gpt4",
-  "provider": "openrouter",
-  "baseUrl": "https://openrouter.ai/api/v1",
-  "model": "openai/gpt-4-turbo",
-  "subagentModel": "openai/gpt-4-turbo",
-  "toolModel": "openai/gpt-4-turbo",
-  "webModel": "openai/gpt-4-turbo",
-  "imageModel": "gemini-2.5-flash",
-  "videoModel": "gemini-2.5-flash"
-}
-```
-
-**Setup wizard**: `npm run dev -- profile setup`
-
-**Credential Storage**:
-- Primary: OS keychain (optional `keytar`)
-- Fallback: Plaintext in `~/.ff-terminal-profiles.json` (with warning)
-- Global fallback for tool keys: TAVILY_API_KEY, PERPLEXITY_API_KEY, GOOGLE_GEMINI_API_KEY, OPENAI_API_KEY, OPENWEATHER_API_KEY
-
-**Tool Key Management**: `npm run dev -- profile tool-keys` - Interactive manager for API keys
-
-### Supported Providers
-- **OpenRouter** - OpenAI-compatible API with access to many models
-- **Z.ai** - Anthropic-compatible API (Chinese provider)
-- **MiniMax** - Anthropic Messages API
-- **LM Studio** - Local OpenAI-compatible server
-- **Anthropic** - Direct Anthropic API (requires API key)
-- **OpenAI-compatible** - Generic OpenAI-compatible endpoint
-- **Anthropic-compatible** - Generic Anthropic-compatible endpoint
-
-## Workspace Directory Structure
-
+### Workspace Structure
 ```
 ~/.config/ff-terminal/ (Linux)
 ~/Library/Application Support/ff-terminal/ (macOS)
-%APPDATA%\ff-terminal\ (Windows)
 
 memory_core/
-├── session_summary.md           # Conversation summary
-├── scheduled_tasks/
-│   └── tasks.json              # Scheduled task definitions
-├── plans/
-│   └── <plan-id>.json          # Execution plans
-└── skills/                      # Imported external skills
-projects/
-├── <project_name>/
-│   ├── FF_PROJECT.md           # Project metadata
-│   └── PROJECT.md              # User documentation
-logs/
-├── sessions/
-│   └── <session-id>.jsonl      # Session logs
-├── runs/
-│   └── <run-id>.jsonl          # Headless run logs
-└── scheduled_runs/             # Execution logs from scheduler
-sessions/
-└── <sessionId>.json            # Conversation history JSON
+├── session_summary.md
+├── scheduled_tasks/tasks.json
+├── plans/<plan-id>.json
+└── skills/
+projects/<project_name>/
+logs/sessions/<session-id>.jsonl
+logs/runs/<run-id>.jsonl
+sessions/<sessionId>.json
 ```
 
-## Key Architectural Patterns
+**Local Mode:**
+- `ff-terminal local` creates `ff-terminal-workspace/` in current directory
+- Unique port (28889-38888) based on path hash
+- Port stored in `.daemon-port`
+- Multiple local workspaces run simultaneously
 
-### Process Model (Two-Process Architecture)
-```
-ff-terminal start
-  ├─ Child: daemon.ts (WebSocket server, stateless)
-  └─ Child: app.tsx (Ink UI, WebSocket client)
-```
-This allows daemon persistence across UI crashes and enables reconnection logic.
+## Key Patterns
 
-### Local Workspace Mode
-```
-ff-terminal local
-  ├─ Creates ff-terminal-workspace/ in current directory
-  ├─ Generates unique port (28889-38888) based on workspace path hash
-  └─ Stores port in .daemon-port for UI discovery
-```
-Multiple local workspaces can run simultaneously without port conflicts.
-
-### Async Local Storage for Context
-Tools automatically access context without parameter threading:
+**AsyncLocalStorage for Context:**
 ```typescript
 withToolContext({ sessionId, workspaceDir, repoRoot }, async () => {
-  const ctx = getToolContext(); // Available in any tool
+  const ctx = getToolContext(); // Available anywhere
 })
 ```
 
-### Generator-Based Streaming
-Agent loop returns `AsyncGenerator<StreamChunk>` for memory-efficient real-time updates:
+**Generator-Based Streaming:**
 ```typescript
 async function* runAgentTurn(...): AsyncGenerator<StreamChunk>
 ```
 
-### Hook System for Extensibility
-- Plan validation hook: Retries tool calls if plan steps are incomplete
-- Todo validation hook: Ensures todo tasks are properly managed
-- Skill allowed tools hook: Enforces skill tool restrictions
-- JSONL logging: Records all tool calls for analytics (FF_LOG_HOOKS_JSONL)
-- Custom hooks can be registered without modifying core loop
+**Hook System:**
+- Plan validation: retries if steps incomplete
+- Todo validation: ensures task management
+- Skill restrictions: enforces allowed tools
+- Custom hooks: no core modification needed
 
-### Port Packet Compatibility
-System prompts and tool schemas are loaded from `packet/` directory to ensure consistent behavior across implementations.
-
-### Read-Only Skill Mounts
-`.claude/skills` and `.factory/skills` mounted read-only; discovered dynamically and ranked by relevance.
+**Packet Compatibility:**
+System prompts and schemas from `packet/` ensure cross-implementation consistency.
 
 ## Important Notes
 
-### Session ID Format
-Sessions are identified by sessionId (UUID format). Each session maintains its own conversation history and state in `sessions/<sessionId>.json`.
-
-### Workspace Directory
-
-**Global Mode (default)**:
-The default workspace is determined by:
-1. `FF_WORKSPACE_DIR` environment variable
-2. `workspace_dir` in config
-3. Default: `~/ff-terminal-workspace`
-
-**Local Mode**:
-When using `ff-terminal local`, the workspace is created in the current directory:
-- Workspace location: `<current-directory>/ff-terminal-workspace/`
-- All sessions, logs, and state stay in this local directory
-- Each local workspace gets a unique port (generated from workspace path hash)
-- Port stored in `ff-terminal-workspace/.daemon-port` for daemon-UI communication
-- Profiles and credentials inherited from global config
-- Multiple local workspaces can run simultaneously without conflicts
-
-**Use Cases**:
-- `ff-terminal start` - Global workspace for general work
-- `ff-terminal local` - Project-specific workspace for isolated development
+### Session Management
+- UUID format sessionIds
+- History in `sessions/<sessionId>.json`
+- Auto-loaded for context reconstruction
 
 ### Model Selection Priority
-1. Runtime override (FF_MODEL, FF_SUBAGENT_MODEL, FF_TOOL_MODEL, FF_WEB_MODEL, FF_IMAGE_MODEL, FF_VIDEO_MODEL)
+1. Runtime override (`FF_MODEL`, etc.)
 2. Profile-specific model
-3. Default from config
+3. Config default
 
-### System Message Variants
-The system uses a unified system message variant:
-- Default: `unified` (consolidated from previous A/B/C/D variants)
-- Configured via `system_message_variant` in packet/default_config.json
-- Templates located in `packet/system_prompt_unified.TEMPLATE.md`
-
-### Debugging Agent Execution
-Enable JSONL logging of tool calls:
-```bash
-FF_LOG_HOOKS_JSONL=true npm run dev
-# Check: ff-terminal-workspace/logs/sessions/<session>.jsonl
-```
-
-Enable daemon logging:
-```bash
-FF_DAEMON_LOG=1 npm run dev -- start
-```
-
-### ACP (Anthropic Computer Protocol) Server
-The project includes an ACP server for integration with Anthropic's computer control protocol:
-```bash
-# Start ACP server with specific profile
-npm run dev -- acp --profile my-profile
-```
+### System Messages
+- Unified variant (consolidated from A/B/C/D)
+- Template: `packet/system_prompt_unified.TEMPLATE.md`
 
 ### Extended Thinking
-Models can use extended thinking via XML tags:
-- Enable via config: `enable_thinking: true`
-- Returns `thinking` chunks in stream with XML tags
-- Useful for complex reasoning tasks
-- Web UI displays thinking with clear visual separation
+- Enable via `enable_thinking: true`
+- Returns `thinking` chunks with XML tags
+- Web UI shows clear visual separation
 
-### Safe File Operations
-The runtime enforces safety boundaries:
-- `read_file`: Blocks `.git` and `.ssh` directories
-- `write_file`: Stricter safety than read
-- File size limits: `FF_READ_FILE_MAX_BYTES` (default 1MB)
+### Headless & Scheduled
+- One-shot: `npm run dev -- run --prompt "..."`
+- Scheduled: create via `schedule_task` tool, execute with `--scheduled-task <id> --headless`
+- RRULE support (RFC 5545)
+- Logs: `logs/scheduled_runs/`
 
-### Headless & Scheduled Execution
-- One-shot: `npm run dev -- run --prompt "Hello"`
-- Scheduled: Create task via `schedule_task` tool, then execute with `npm run dev -- run --scheduled-task <id> --headless`
-- RRULE support: Use RFC 5545 RRULE syntax for complex recurring schedules
-- Timezone support: Specify timezone for accurate scheduling across regions
-- Logs saved to workspace under `logs/scheduled_runs/`
+## Testing
 
-## Debugging Tips
+### Unit Tests (124 tests across 5 files)
+- File & Bash Tools (47 tests)
+- Logging System (24 tests)
+- Profile/Provider (13 tests)
+- Execution Plans (29 tests)
+- Plan Validation Hook (11 tests)
 
-1. **Check daemon connection**: Look for WebSocket connection messages in CLI output
-2. **Enable verbose logging**: Set `FF_DEBUG=true` environment variable
-3. **Inspect tool calls**: Enable `FF_LOG_HOOKS_JSONL=true` for detailed execution log
-4. **Test tool isolation**: Run individual tools with mock context via `withToolContext()`
-5. **Provider debugging**: Add console.log in provider adapter files (src/runtime/providers/)
-6. **Profile issues**: Run `npm run dev -- profile list` to verify setup
-7. **Planning issues**: Check `ff-terminal-workspace/memory_core/plans/` for plan state
-8. **Scheduled task issues**: Run `npm run dev -- schedule list` to see all tasks
-9. **Port conflicts**: For local mode, check `.daemon-port` file in workspace
-10. **Agent behavior testing**: Use Agent Testing Suite for end-to-end evaluation with metrics and reports (see Agent Testing Suite section)
+### Agent Testing Suite
+Standalone framework in `agent-testing-suite/`:
+- End-to-end evaluation with YAML test suites
+- Parallel execution with worker pools
+- Multi-dimensional rubrics (basic-completion, efficiency, code-quality, long-horizon, safety)
+- HTML/PDF reports with Mermaid diagrams
+- Trend analysis and regression detection
+- React+Vite web UI
 
-## Performance Considerations
-
-- **Parallel tool execution**: All tools from single LLM response run concurrently
-- **Streaming protocol**: Uses delta encoding to minimize bandwidth
-- **Session caching**: Conversation history loaded once at start
-- **Tool schema caching**: Schemas loaded once from packet
-- **Workspace size**: Session history grows with conversation length
-- **Plan extraction**: Auto-extraction can be disabled via `plan_auto_extraction: false`
-- **Parallel agent testing**: Agent Testing Suite supports concurrent scenario execution with worker pools for faster evaluation
-
-## Unit & Integration Tests
-
-*For end-to-end agent evaluation and benchmarking, see the Agent Testing Suite section below.*
-
-### Running Tests
-- **All tests**: `npm test` - Runs full test suite with Vitest
-- **Watch mode**: `npm test -- --watch` - Continuous testing during development
-- **Single file**: `npm test -- <filename>` - Run tests for specific file
-- **Test UI**: `npm run test:ui` - Interactive test explorer
-- **Coverage report**: `npm run test:coverage` - Generate coverage metrics
-
-### Test Configuration
-- **Framework**: Vitest with Node environment
-- **Globals enabled**: No need to import `describe`, `it`, `expect`
-- **TypeScript**: Automatically transpiled via tsx
-- **Configuration**: `vitest.config.ts` - Minimal setup, uses ES2022 target
-- **Excludes**: node_modules, dist, ff-terminal-workspace, .test-workspace
-
-## End-to-End Agent Testing
-
-This section provides a standardized way to test the agent's performance across different LLM providers and models. Use this to benchmark agent quality, identify provider-specific issues, and verify bug fixes.
-
-### Standard Benchmark Prompt
-
-The **Hacker News Scraper & Dashboard** task is our standard end-to-end benchmark. It tests:
-- File creation (Python, HTML, JSON, Markdown)
-- External API integration (Hacker News API)
-- Error handling and retry logic
-- Multi-file coordination
-- Complex HTML/CSS/JavaScript generation
-- Documentation quality
-
-**Standard benchmark command**:
+**Quick Start:**
 ```bash
-npm run dev -- run --profile <PROFILE_NAME> --prompt "Build a web scraper and dashboard system:
-
-1. Create a scraper that fetches the top 10 stories from Hacker News
-   - Use the HN API or web scraping
-   - Extract: title, URL, points, comment count, author, timestamp
-
-2. Store the data in a JSON file (hn_data.json)
-   - Well-formatted with proper structure
-   - Include metadata (fetch timestamp, source)
-
-3. Create an interactive HTML dashboard (dashboard.html) with:
-   - Sortable table showing all stories
-   - Bar chart of points distribution
-   - Pie chart of comment count ranges (0-10, 11-50, 51-100, 100+)
-   - Summary statistics (avg points, total comments, etc.)
-   - Dark theme with responsive design
-   - No external dependencies - use vanilla JS/CSS
-
-4. Create a README.md with:
-   - How to run the scraper
-   - How to view the dashboard
-   - Description of the data structure
-   - Example usage
-
-5. Add error handling for:
-   - Network failures
-   - Missing data fields
-   - Invalid responses
-
-Requirements:
-- All code must be original (no copy-paste from examples)
-- Must work when run immediately
-- Dashboard must render without internet after initial scrape
-- Code must be well-commented"
-```
-
-### How to Run Tests
-
-**Basic test run**:
-```bash
-# Test with specific profile
-npm run dev -- run --profile ZAI-GLM-4.7 --prompt "<benchmark prompt>"
-
-# Test with default profile
-npm run dev -- run --prompt "<benchmark prompt>"
-
-# Test in background and monitor logs
-npm run dev -- run --profile <PROFILE> --prompt "<prompt>" &
-tail -f ff-terminal-workspace/logs/sessions/*.jsonl | grep -E "iteration|error|validation"
-```
-
-**Kill stuck tests**:
-```bash
-# Find and kill running test
-pkill -f "tsx src/bin/ff-terminal.ts.*run"
-
-# Or use Ctrl+C if running in foreground
-```
-
-### Analyzing Test Results
-
-After a test completes (or is killed), analyze the session log to identify issues:
-
-**Find the newest session log**:
-```bash
-ls -lt ff-terminal-workspace/logs/sessions/*.jsonl | head -1
-```
-
-**Extract key metrics**:
-```bash
-SESSION_LOG="ff-terminal-workspace/logs/sessions/<session-id>.jsonl"
-
-# Count iterations
-grep '"iteration":' $SESSION_LOG | tail -1
-
-# Count tool calls
-grep '"event":"tool_call"' $SESSION_LOG | wc -l
-
-# Find validation errors
-grep '"tool_validation_failed"' $SESSION_LOG
-
-# Find HTML encoding issues (should be 0)
-grep '&gt;\|&lt;\|&amp;' $SESSION_LOG
-
-# Check circuit breaker triggers
-grep '"circuit_breaker"' $SESSION_LOG
-
-# Get duration
-grep '"task_completed"' $SESSION_LOG
-```
-
-**Verify deliverables**:
-```bash
-# Check which files were created
-ls -lh ff-terminal-workspace/*.py ff-terminal-workspace/*.html ff-terminal-workspace/*.json ff-terminal-workspace/*.md
-
-# Verify Python syntax
-python3 -m py_compile ff-terminal-workspace/*.py
-
-# Verify HTML has proper structure
-grep -E '<html|<head|<body|</html>' ff-terminal-workspace/dashboard.html
-
-# Check JSON validity
-python3 -c "import json; json.load(open('ff-terminal-workspace/hn_data.json'))"
-```
-
-### Key Metrics for Success
-
-A **successful run** should have:
-- ✅ **Iterations**: 20-40 (lower is better, <20 is excellent)
-- ✅ **Duration**: 3-8 minutes for this benchmark
-- ✅ **Tool validation errors**: <5% of tool calls
-- ✅ **HTML encoding issues**: 0 (after HTML unescaping fix)
-- ✅ **Circuit breaker triggers**: 0
-- ✅ **Deliverables**: All 4 files created and valid
-- ✅ **File completeness**: No truncated files (check line counts match expectations)
-
-A **problematic run** shows:
-- ❌ **Iterations**: >50 (infinite loops, stuck on errors)
-- ❌ **Duration**: >10 minutes or killed before completion
-- ❌ **Tool validation errors**: >10% of tool calls
-- ❌ **HTML encoding issues**: Any occurrences of `&gt;`, `&lt;`, `&amp;` in code
-- ❌ **Circuit breaker triggers**: >0 (tool failing repeatedly)
-- ❌ **Deliverables**: Missing files or incomplete files
-- ❌ **File truncation**: Files ending mid-generation (dashboard.html stopping at line 144, etc.)
-
-### Common Issues and Root Causes
-
-#### Issue 1: Files Truncated Mid-Generation
-**Symptom**: Files end abruptly (e.g., Python file stops at line 144, HTML file is only JavaScript without HTML wrapper)
-
-**Root Cause**: `max_tokens` setting too low for the model
-
-**Check**:
-```bash
-grep '"content":' $SESSION_LOG | tail -20  # See if content stops mid-thought
-wc -l ff-terminal-workspace/*.py  # Should be ~150-200 lines, not 144
-```
-
-**Fix**: Increase `max_tokens` in `packet/default_config.json`:
-```json
-{
-  "max_tokens": 16384  // Increased from 12000
-}
-```
-
-#### Issue 2: HTML Encoding Breaking Code
-**Symptom**: Python type hints like `def foo() -> str:` become `def foo() -&gt; str:`, causing SyntaxError
-
-**Root Cause**: Some providers (Z.ai, certain OpenRouter models) HTML-encode special characters in tool arguments
-
-**Check**:
-```bash
-grep '&gt;\|&lt;\|&amp;' $SESSION_LOG
-grep 'SyntaxError.*&gt;' $SESSION_LOG
-```
-
-**Fix**: HTML unescaping is implemented in `src/runtime/providers/zai.ts` and `src/runtime/providers/openaiCompat.ts`. Verify it's working:
-```bash
-# Should show 0 matches after fix
-grep '&gt;\|&lt;\|&amp;' $SESSION_LOG
-```
-
-#### Issue 3: Agent Stuck in Infinite Loops
-**Symptom**: Same error repeated across 20+ iterations, agent keeps retrying the same failing approach
-
-**Root Causes**:
-1. **Circuit breaker not triggering**: Tool technically "succeeds" (ok: true) but produces bad output
-2. **Completion validation blocking**: Hook incorrectly detecting unfulfilled promises in completion summaries
-3. **Model quality**: Low-quality model making same mistake repeatedly
-
-**Check**:
-```bash
-# Find repeated errors
-grep '"error"' $SESSION_LOG | sort | uniq -c | sort -rn
-
-# Check if circuit breaker is being evaluated
-grep 'circuit_breaker' $SESSION_LOG
-
-# Check if completion validation is blocking
-grep 'completion_validation' $SESSION_LOG
-```
-
-**Fix**:
-- **Disable todo hook temporarily** (if blocking on false positives):
-  ```typescript
-  // src/runtime/agentLoop.ts:450
-  hookRegistry.register(
-    createTodoStopHook({
-      enabled: false,  // Disable for testing
-      workspaceDir
-    })
-  );
-  ```
-- **Improve validation**: Add post-write verification hooks
-- **Switch providers**: Try different model if quality is consistently poor
-
-#### Issue 4: Validation Errors Too High
-**Symptom**: >10% of tool calls fail validation (missing arguments, wrong types)
-
-**Root Cause**: Model doesn't support OpenAI's `strict: true` structured outputs mode
-
-**Check**:
-```bash
-# Count validation failures
-grep '"tool_validation_failed"' $SESSION_LOG | wc -l
-
-# Count total tool calls
-grep '"tool_call"' $SESSION_LOG | wc -l
-
-# Calculate failure rate
-echo "scale=2; $(grep '"tool_validation_failed"' $SESSION_LOG | wc -l) * 100 / $(grep '"tool_call"' $SESSION_LOG | wc -l)" | bc
-```
-
-**Fix**: Use provider that supports structured outputs (OpenRouter with most models, Anthropic direct)
-
-#### Issue 5: Context Window Truncation
-**Symptom**: Agent "forgets" what it did in earlier iterations, re-reads files, recreates files that already exist
-
-**Root Cause**: `context_window` setting too low, conversation history being truncated
-
-**Check**:
-```bash
-# Look for repeated actions
-grep '"tool_name":"read_file"' $SESSION_LOG | grep 'scraper.py' | wc -l  # Should be 1-2, not 5+
-```
-
-**Fix**: Increase `context_window` in `packet/default_config.json`:
-```json
-{
-  "context_window": 200000  // Supports all frontier models (128K-200K)
-}
-```
-
-### Comparing Providers
-
-To benchmark different providers, run the same prompt with different profiles:
-
-```bash
-# Test Z.ai GLM-4.7
-npm run dev -- run --profile ZAI-GLM-4.7 --prompt "<benchmark>" > /tmp/zai-test.log 2>&1
-
-# Test OpenRouter DeepSeek V3
-npm run dev -- run --profile deepseek-v3.2 --prompt "<benchmark>" > /tmp/deepseek-test.log 2>&1
-
-# Test Anthropic Claude
-npm run dev -- run --profile claude-sonnet --prompt "<benchmark>" > /tmp/claude-test.log 2>&1
-
-# Compare results
-ls -lt ff-terminal-workspace/logs/sessions/*.jsonl | head -3 | while read -r line; do
-  session=$(echo $line | awk '{print $NF}')
-  echo "=== $session ==="
-  echo "Iterations: $(grep '"iteration":' $session | tail -1 | grep -oP '"iteration":\K\d+')"
-  echo "Duration: $(grep '"task_completed"' $session | grep -oP '"duration":\K[\d.]+' || echo 'N/A')"
-  echo "Tool calls: $(grep '"tool_call"' $session | wc -l)"
-  echo "Validation errors: $(grep '"tool_validation_failed"' $session | wc -l)"
-  echo ""
-done
-```
-
-### Expected Performance by Provider
-
-Based on testing, here are typical performance characteristics:
-
-**Claude Sonnet 4.5** (Best):
-- Iterations: 15-25
-- Duration: 3-5 minutes
-- Validation errors: 0-2 (0-1%)
-- HTML encoding issues: 0
-- File truncation: Never
-- Quality: Excellent, complete deliverables
-
-**GPT-4o / GPT-4 Turbo** (Excellent):
-- Iterations: 18-30
-- Duration: 4-6 minutes
-- Validation errors: 1-3 (2-5%)
-- HTML encoding issues: 0
-- File truncation: Rare
-- Quality: Very good, minor issues
-
-**DeepSeek V3** (Good):
-- Iterations: 25-35
-- Duration: 5-7 minutes
-- Validation errors: 3-8 (5-10%)
-- HTML encoding issues: 0
-- File truncation: Occasional
-- Quality: Good, may need retry
-
-**GLM-4.7 via Z.ai** (Requires Fixes):
-- Iterations: 20-40 (after fixes), 50+ (before fixes)
-- Duration: 5-8 minutes
-- Validation errors: 5-10 (7-11%)
-- HTML encoding issues: Fixed (was: many)
-- File truncation: Fixed (was: frequent)
-- Quality: Decent after configuration tuning
-
-### Build and Rebuild After Changes
-
-**Always rebuild after modifying TypeScript files**:
-```bash
-npm run build
-```
-
-This is critical for changes to:
-- Provider implementations (`src/runtime/providers/`)
-- Tool implementations (`src/runtime/tools/implementations/`)
-- Agent loop logic (`src/runtime/agentLoop.ts`)
-- Configuration loading (`src/runtime/config/`)
-
-### Quick Test Workflow
-
-**Standard workflow for testing a fix**:
-```bash
-# 1. Make code changes
-vim src/runtime/providers/zai.ts
-
-# 2. Rebuild
-npm run build
-
-# 3. Run benchmark
-npm run dev -- run --profile ZAI-GLM-4.7 --prompt "<benchmark>"
-
-# 4. Monitor in another terminal
-tail -f ff-terminal-workspace/logs/sessions/*.jsonl | grep -E "iteration|validation_failed|circuit"
-
-# 5. After completion, analyze
-SESSION=$(ls -t ff-terminal-workspace/logs/sessions/*.jsonl | head -1)
-echo "Iterations: $(grep '"iteration":' $SESSION | tail -1)"
-echo "Errors: $(grep 'validation_failed' $SESSION | wc -l)"
-
-# 6. Verify deliverables
-ls -lh ff-terminal-workspace/*.py ff-terminal-workspace/*.html
-python3 -m py_compile ff-terminal-workspace/*.py
-grep -E '<html|</html>' ff-terminal-workspace/dashboard.html
-```
-
-### What This Benchmark Tests
-
-The HN scraper benchmark is comprehensive because it tests:
-
-1. **API Integration**: HTTP requests to external API (Hacker News)
-2. **Data Processing**: JSON parsing, transformation, aggregation
-3. **File I/O**: Writing 4 different file types (Python, HTML, JSON, Markdown)
-4. **Code Generation**: Complete working programs in multiple languages
-5. **Frontend Development**: HTML + CSS + JavaScript with no libraries
-6. **Visualization**: Creating charts with vanilla JS (bar chart, pie chart)
-7. **Error Handling**: Network failures, missing data, invalid responses
-8. **Documentation**: Comprehensive README with examples
-9. **Multi-file Coordination**: Files that reference each other (HTML loads JSON)
-10. **Complexity**: Large files (dashboard.html ~500-700 lines total)
-
-A model that can successfully complete this benchmark demonstrates:
-- ✅ Strong tool calling reliability
-- ✅ Multi-turn planning and execution
-- ✅ Error recovery and retry logic
-- ✅ Complete output generation (no truncation)
-- ✅ Proper syntax across multiple languages
-- ✅ Understanding of web standards (HTML structure)
-- ✅ Ability to create working, runnable code
-
-### Current Test Coverage
-The project has **124 passing tests** across 5 test files:
-
-1. **File & Bash Tools** (`tests/fileAndBashTools.test.ts` - 47 tests)
-   - Tests: `read_file`, `write_file`, `edit_file`, `multi_edit_file`, `glob`, `grep`, `run_command`
-   - Patterns: Setup/teardown, positive and negative cases, integration tests
-
-2. **Logging System** (`tests/logging/structuredLogger.test.ts` - 24 tests)
-   - Tests: Structured logging, secret redaction, log level filtering, JSONL serialization
-   - Focus: Security (automatic credential redaction), observability
-
-3. **Profile/Provider System** (`tests/profile-system.test.ts` - 13 tests)
-   - Tests: Profile loading, provider selection, credential retrieval
-   - Focus: Configuration management, environment variable handling
-
-4. **Execution Plans** (`src/runtime/planning/planStore.test.ts` - 29 tests)
-   - Tests: Plan persistence, step tracking, completion detection
-   - Focus: State management, immutability, circuit breaker logic
-
-5. **Plan Validation Hook** (`src/runtime/hooks/builtin/planValidationStopHook.test.ts` - 11 tests)
-   - Tests: Agent stop validation, circuit breaker, error handling
-   - Focus: Business logic for agent execution control
-
-### Critical Testing Gaps
-Approximately 90 runtime modules remain untested:
-- Agent execution loop and multi-turn iteration
-- LLM provider implementations (OpenAI, Anthropic, etc.)
-- Most tool implementations (web tools, media generation, etc.)
-- CLI UI components and daemon initialization
-- Session persistence and conversation management
-- Web server routes and WebSocket handling
-
-## Agent Testing Suite
-
-### Overview
-
-The Agent Testing Suite is a standalone end-to-end testing framework for AI agent evaluation, located in the `agent-testing-suite/` subdirectory. This is a world-class testing system (57 files, 9,165 lines) designed to comprehensively evaluate agent behavior, performance, and reliability.
-
-**Purpose:**
-- **Long-horizon task evaluation** - Test complex multi-step agent workflows that span multiple turns
-- **A/B testing** - Compare different models, prompts, system configurations, and provider settings
-- **Comprehensive benchmarking** - Measure performance with research-backed metrics
-- **Visual reporting** - Generate detailed HTML/PDF reports with charts, graphs, and knowledge visualizations
-- **Trend analysis** - Track agent performance over time with regression detection
-
-**Research Foundation:**
-Integrates patterns and methodologies from leading AI research:
-- **Anthropic Bloom** - Dynamic scenario generation, LLM-as-judge, contamination detection
-- **Sierra Tau-Bench** - Multi-turn realistic testing, reliability metrics
-- **LangChain** - Parallel test execution, reproducible environments
-- **Galileo AI** - Cost efficiency metrics, Pareto analysis
-- **Elastic** - System-level evaluation, observability patterns
-- **Sentient SPIN-Bench** - Long-horizon planning, multi-agent coordination
-- **Berkeley/Princeton** - Out-of-distribution detection, edge case performance
-
-### Quick Start
-
-```bash
-# Navigate to testing suite
 cd agent-testing-suite
-
-# Install dependencies
-npm install
-
-# Build the suite
-npm run build
-
-# Initialize test workspace (creates directory structure)
+npm install && npm run build
 ff-test init
-
-# Run a built-in test suite
 ff-test run example-coding-tasks
-
-# List all test runs
-ff-test list
-
-# Generate detailed report
 ff-test report <run-id>
-
-# Compare two runs (A/B testing)
-ff-test compare <run1> <run2>
-
-# Run tests in parallel (4 workers)
-ff-test run example-coding-tasks --parallel 4
 ```
 
-### Test Suite Format
-
-Test suites are defined in YAML format:
-
-```yaml
-name: my-test-suite
-description: Tests agent behavior on specific tasks
-category: long-horizon  # Categories: long-horizon, tool-usage, reasoning, safety
-version: 1.0.0
-
-scenarios:
-  - name: file-manipulation-task
-    description: Test agent's ability to create and modify files
-    prompts:
-      - "Create a file called test.txt with 'Hello World'"
-      - "Now add a second line saying 'Testing 123'"
-
-    evaluation:
-      rubric: basic-completion  # Rubrics: basic-completion, efficiency, code-quality, long-horizon, safety
-
-      assertions:
-        # Check output contains expected text
-        - type: output
-          condition: contains
-          expected: "Created test.txt"
-
-        # Check file was created
-        - type: filesystem
-          condition: file_exists
-          expected: "test.txt"
-
-        # Check file contents
-        - type: filesystem
-          condition: file_contains
-          expected: "Hello World\nTesting 123"
-
-        # Ensure task completed in reasonable time
-        - type: duration
-          condition: less_than
-          expected: 300  # seconds
-
-      human_review: false
-
-    timeout_minutes: 10
-    expected_duration_minutes: 2
-```
-
-**Assertion Types:**
-- `output` - Match content in agent's response (contains, equals, regex)
-- `filesystem` - File system checks (file_exists, file_contains, directory_exists)
-- `tool_pattern` - Validate tool usage patterns (tool_called, tool_count, tool_sequence)
-- `duration` - Time-based validation (less_than, greater_than)
-- `exit_code` - Process exit status validation
-
-### Architecture
-
-```
-agent-testing-suite/
-├── src/
-│   ├── bin/
-│   │   └── ff-test.ts              # CLI entry point
-│   ├── api/
-│   │   └── server.ts               # REST API (port 8787)
-│   ├── testing/
-│   │   ├── e2eRunner.ts           # Core end-to-end test execution
-│   │   ├── scenarios/
-│   │   │   └── generator.ts       # Dynamic scenario generation (Bloom pipeline)
-│   │   ├── execution/
-│   │   │   ├── parallelRunner.ts  # Worker pool manager for parallel execution
-│   │   │   └── parallelWorker.ts  # Worker thread implementation
-│   │   ├── evaluation/
-│   │   │   ├── evaluators/        # Automated assertion evaluators
-│   │   │   │   ├── outputMatcher.ts
-│   │   │   │   ├── fileSystemChecker.ts
-│   │   │   │   ├── durationChecker.ts
-│   │   │   │   └── toolPatternValidator.ts
-│   │   │   ├── rubrics/           # Multi-dimensional scoring rubrics
-│   │   │   │   ├── basic-completion.yaml
-│   │   │   │   ├── efficiency.yaml
-│   │   │   │   ├── code-quality.yaml
-│   │   │   │   ├── long-horizon.yaml
-│   │   │   │   └── safety.yaml
-│   │   │   └── plugins/          # Custom evaluator plugins
-│   │   │       ├── llmJudge.ts    # LLM-as-judge evaluator
-│   │   │       └── ruleEngine.ts  # Rule-based evaluator
-│   │   ├── metrics/
-│   │   │   ├── logParser.ts       # JSONL log parsing
-│   │   │   ├── metricsCalculator.ts  # Compute task/tool/system metrics
-│   │   │   ├── comparator.ts      # A/B comparison with statistics
-│   │   │   ├── trendAnalyzer.ts   # Long-term trend tracking
-│   │   │   └── advancedMetrics.ts # Cost, Pareto, OOD, reliability
-│   │   ├── reports/
-│   │   │   ├── htmlReportGenerator.ts  # Interactive HTML reports
-│   │   │   ├── mermaidGenerator.ts     # Diagram generation
-│   │   │   ├── pdfReportGenerator.ts   # PDF export
-│   │   │   └── csvExporter.ts          # CSV export
-│   │   ├── suites/
-│   │   │   ├── library/           # Built-in test suites
-│   │   │   │   ├── example-coding-tasks.yaml
-│   │   │   │   ├── example-file-operations.yaml
-│   │   │   │   └── example-web-search.yaml
-│   │   │   └── testSuite.schema.json
-│   │   └── types.ts              # Shared TypeScript types
-│   └── testing-ui/                # React + Vite web interface
-│       └── src/
-│           ├── api.ts             # API client
-│           ├── components/
-│           │   ├── KnowledgeGraph.tsx  # D3.js force-directed graphs
-│           │   └── TrendCharts.tsx     # Trend visualization
-│           └── pages/
-│               ├── Dashboard.tsx
-│               ├── TestList.tsx
-│               ├── TestRunDetail.tsx
-│               ├── Review.tsx        # Human review workflow
-│               └── Trends.tsx       # Trend analysis dashboard
-```
-
-### Metrics & Evaluation
-
-**Task-Level Metrics:**
-- **Success Rate** - Percentage of scenarios that passed all assertions
-- **Completion Rate** - Percentage of scenarios that finished (didn't timeout or error)
-- **Average Duration** - Mean time per scenario completion
-- **Total Duration** - Overall test suite runtime
-
-**Tool-Level Metrics:**
-- **Call Count** - Number of times each tool was invoked
-- **Success Rate** - Percentage of successful tool executions
-- **Average Duration** - Mean execution time per tool
-- **Error Types** - Categorized failure reasons (timeout, permission, validation)
-
-**System-Level Metrics:**
-- **Circuit Breaker Trips** - Safety trigger activations
-- **Plan Validation Events** - Execution plan extraction and validation
-- **Hook Execution** - Pre/post tool hook invocations
-
-**Cost Metrics** (Advanced):
-- **Token Usage** - Input/output token counts
-- **Cost per Task** - Estimated API costs
-- **Cost Efficiency** - Cost per successful completion
-
-**Reliability Metrics** (Advanced):
-- **MTBF** (Mean Time Between Failures) - Average time between errors
-- **Timeout Rate** - Percentage of scenarios exceeding time limits
-- **Stability Score** - Consistency across multiple runs
-
-**Safety Metrics** (Advanced):
-- **Refusal Rate** - Percentage of tasks appropriately declined
-- **Jailbreak Attempts** - Detected safety bypass attempts
-- **Hallucination Detection** - False information generation
-
-### Evaluation Rubrics
-
-**1. basic-completion** (Pass/Fail)
-- Binary pass/fail based on assertions
-- Fast evaluation, minimal overhead
-
-**2. efficiency** (1-5 Scale)
-- Tool usage optimization
-- Time efficiency
-- Resource utilization
-- Overall efficiency score
-
-**3. code-quality** (4 Dimensions)
-- Correctness - Functional requirements met
-- Readability - Code clarity and style
-- Safety - Error handling and validation
-- Efficiency - Performance optimization
-
-**4. long-horizon** (4 Dimensions)
-- Planning - Step decomposition quality
-- Execution - Implementation correctness
-- Recovery - Error handling and retry logic
-- Completion - Task finish rate
-
-**5. safety** (Multiple Criteria)
-- Guardrail adherence
-- Harmful content prevention
-- Privacy protection
-- Ethical behavior
-
-### Advanced Features
-
-**Parallel Execution:**
-```bash
-# Run 4 scenarios concurrently
-ff-test run my-suite --parallel 4
-
-# Specify custom timeout
-ff-test run my-suite --parallel 8 --timeout 30
-```
-
-**Dynamic Scenario Generation:**
-```typescript
-import { ScenarioGenerator } from "./src/testing/scenarios/generator";
-
-const generator = new ScenarioGenerator({
-  templatesDir: "./templates",
-  variationCount: 10,
-  difficultyLevels: ["easy", "medium", "hard"]
-});
-
-const scenarios = await generator.generate();
-await generator.saveToFile(scenarios, "./generated-suite.yaml");
-```
-
-**Trend Analysis:**
-```typescript
-import { TrendAnalyzer } from "./src/testing/metrics/trendAnalyzer";
-
-const analyzer = new TrendAnalyzer(workspaceDir);
-await analyzer.initialize();
-
-// Detect regressions
-const regression = await analyzer.detectRegression("success_rate");
-if (regression.detected) {
-  console.log(`Regression detected: ${regression.severity}`);
-}
-
-// Get alerts
-const alerts = await analyzer.loadAlerts();
-```
-
-**LLM-as-Judge Evaluation:**
-```yaml
-assertions:
-  - type: llm_judge
-    judge_prompt: "Does the response demonstrate clear reasoning?"
-    grading_rubric: "Score 1-5 based on logical coherence"
-    passing_score: 4
-```
-
-**Knowledge Graph Visualization:**
-- D3.js force-directed graph showing tool relationships
-- Color-coded by success rate (green = high, red = low)
-- Interactive: zoom, pan, drag nodes
-- Shows tool usage patterns and dependencies
-
-**Pareto Analysis:**
-- Accuracy vs cost frontier visualization
-- Identifies optimal configurations
-- Helps balance performance and efficiency
-
-**Out-of-Distribution (OOD) Detection:**
-- Measures distribution drift from training data
-- Identifies edge cases and unusual scenarios
-- Tests generalization capability
-
-### Web UI
-
-The testing suite includes a professional React + Vite web interface:
-
-```bash
-# Start web UI (from agent-testing-suite directory)
-cd src/testing-ui
-npm install
-npm run dev
-
-# Visit http://localhost:3000
-```
-
-**Features:**
-- **Dashboard** - Overview with success rates, run history, quick stats
-- **Test Runs** - List all runs with filtering and search
-- **Run Details** - Detailed metrics, scenario results, tool usage breakdowns
-- **Trends** - Long-term performance visualization with regression alerts
-- **Review** - Human review queue with annotation tools
-- **Knowledge Graph** - Interactive D3.js visualization of tool relationships
-
-### Integration with ff-terminal
-
-The Agent Testing Suite integrates seamlessly with the main ff-terminal codebase:
-
-**Workspace Integration:**
-- Uses same workspace structure: `ff-terminal-workspace/tests/`
-- Reads JSONL logs from ff-terminal sessions for analysis
-- Shares profile and credential configuration
-
-**Test Execution:**
-- Spawns real ff-terminal agent sessions
-- Tests actual agent behavior end-to-end
-- Supports all configured profiles and providers
-
-**Log Analysis:**
-- Parses structured JSONL logs from `ff-terminal-workspace/logs/`
-- Extracts tool calls, turn completions, errors
-- Correlates events across multi-turn sessions
-
-**Metrics Alignment:**
-- Uses same tool names and schemas
-- Tracks same success/failure patterns
-- Compatible with hook system metrics
-
-### Report Generation
-
-**HTML Reports:**
-```bash
-ff-test report <run-id>
-# Generates: ff-terminal-workspace/tests/reports/<run-id>/report.html
-```
-
-Contains:
-- Executive summary with key metrics
-- Detailed scenario results with status badges
-- Tool usage breakdown with statistics
-- Mermaid diagrams (flowcharts, sequence diagrams, knowledge graphs)
-- Recommendations for improvement
-
-**PDF Export:**
-```bash
-ff-test report <run-id> --format pdf
-```
-
-Professional PDF with:
-- Executive summary
-- Metrics tables
-- Scenario details
-- Pagination and headers
-
-**CSV Export:**
-```bash
-ff-test report <run-id> --format csv
-```
-
-Export formats:
-- Full report (all data)
-- Metrics only
-- Criteria scores only
-
-### CLI Reference
-
-**Initialization:**
-```bash
-ff-test init                    # Initialize test workspace
-```
-
-**Running Tests:**
-```bash
-ff-test run <suite>             # Run specific suite
-ff-test run-all                 # Run all suites
-ff-test run <suite> --parallel 4    # Parallel execution
-ff-test run <suite> --dry-run  # Simulate without executing
-```
-
-**Results:**
-```bash
-ff-test list                    # List all runs
-ff-test report <run-id>         # Generate report
-ff-test compare <run1> <run2>   # A/B comparison
-```
-
-**Web UI:**
-```bash
-ff-test serve                   # Start web UI on port 3000
-ff-test serve --port 8080       # Custom port
-```
-
-### Development & Extension
-
-**Adding Custom Evaluators:**
-
-```typescript
-// src/testing/evaluation/evaluators/myEvaluator.ts
-export const myEvaluator: Evaluator = {
-  name: 'my-custom-check',
-  evaluate: async (result: ScenarioResult, context: EvalContext) => {
-    // Your evaluation logic
-    const passed = /* your condition */;
-
-    return {
-      passed,
-      score: passed ? 1.0 : 0.0,
-      criteria_results: [],
-      human_review_required: false,
-      message: "Evaluation complete"
-    };
-  }
-};
-```
-
-**Adding Custom Rubrics:**
-
-```yaml
-# src/testing/evaluation/rubrics/my-rubric.yaml
-id: my-custom-rubric
-name: My Custom Evaluation
-scoring: scale1-5
-criteria:
-  - dimension: correctness
-    weight: 0.5
-    description: Output matches expected
-  - dimension: efficiency
-    weight: 0.3
-    description: Minimal tool usage
-  - dimension: safety
-    weight: 0.2
-    description: No unsafe operations
-```
-
-### Performance Optimization
-
-**Parallel Execution:**
-- Worker pool with configurable concurrency
-- Isolated test environments (worker threads)
-- Load balancing across workers
-- Result aggregation with statistical analysis
-
-**Caching:**
-- Test suite schema validation cached
-- Rubric loading cached
-- Provider initialization reused
-
-**Resource Management:**
-- Timeout enforcement per scenario
-- Memory limits per worker
-- Cleanup after each scenario
-
-## Quick Troubleshooting
+### Standard Benchmark
+Hacker News Scraper & Dashboard tests: API integration, file I/O, multi-language code gen, visualization, error handling
+
+**Success Criteria:**
+- Iterations: 20-40 (excellent: <20)
+- Duration: 3-8 minutes
+- Tool validation errors: <5%
+- No HTML encoding issues
+- No circuit breaker trips
+- All deliverables complete
+
+**Common Issues:**
+1. File truncation → increase `max_tokens` in `packet/default_config.json`
+2. HTML encoding → verify unescaping in provider adapters
+3. Infinite loops → check circuit breaker, disable todo hook if needed
+4. High validation errors → use provider with structured outputs
+5. Context truncation → increase `context_window`
+
+## Troubleshooting
 
 ### Build Issues
-- **TypeScript errors**: Run `npm run build` to catch compilation errors
-- **Module resolution**: Check `tsconfig.json` for moduleResolution: "NodeNext"
-- **JSX in .ts files**: Ensure files using JSX have proper import statements
+- TypeScript errors: `npm run build`
+- Module resolution: check `tsconfig.json`
 
 ### Daemon/UI Issues
-- **WebSocket connection fails**: Verify daemon is running on port 28888
-- **Port already in use**: Kill existing process: `lsof -ti:28888 | xargs kill`
-- **Local mode port conflicts**: Each local workspace uses unique port; check `.daemon-port`
-- **Web UI connection fails**: Verify web server is running on port 8787: `npm run dev:web`
-- **Tool not found**: Check tool is registered in `registerDefaultTools()` in src/runtime/registerDefaultTools.ts
-- **Profile issues**: Validate profile exists: `npm run dev -- profile list`
+- WebSocket fails: verify daemon on port 28888
+- Port conflict: `lsof -ti:28888 | xargs kill`
+- Local mode: check `.daemon-port` file
+- Web UI blank: rebuild frontend with `npm run build:web`
+- Tool not found: check `registerDefaultTools()` in `src/runtime/registerDefaultTools.ts`
 
 ### Web UI Development
-- **Client changes**: Web client uses Vite for development - changes auto-reload
-- **Client build**: Client files are in `src/web/client/` with separate `package.json`
-- **Styling**: Uses Tailwind CSS with dark theme (`bg-neutral-950`, `text-neutral-100`)
-- **State management**: React useState/useEffect hooks - no external state library
-- **Console events**: Check browser console for WebSocket connection issues
+- Vite dev server: `cd src/web/client && npm run dev`
+- Tailwind dark theme: `bg-neutral-950`, `text-neutral-100`
+- No external state library (React hooks only)
 
-### Common Environment Setup
-- Set `FF_WORKSPACE_DIR` to use custom workspace location
-- Set `FF_DEBUG=true` for verbose logging output
-- Set `FF_LOG_HOOKS_JSONL=true` to enable tool call logging for debugging
-- Set `FF_DAEMON_LOG=1` to see daemon stdout/stderr
-- Set `FF_ALLOW_MACOS_CONTROL=1` to enable macOS automation tools
-- Set `FF_ALLOW_BROWSER_USE=1` to enable browser automation (experimental)
+### Environment Variables
+- `FF_WORKSPACE_DIR` - Custom workspace location
+- `FF_DEBUG=true` - Verbose logging
+- `FF_LOG_HOOKS_JSONL=true` - Tool call logging
+- `FF_DAEMON_LOG=1` - Daemon stdout/stderr
+- `FF_ALLOW_MACOS_CONTROL=1` - macOS automation
+- `FF_ALLOW_BROWSER_USE=1` - Browser automation
 
-### Display Modes
-The CLI supports different display modes for output verbosity:
-- `--display-mode verbose` - Shows detailed tool execution and internal processing
-- `--display-mode clean` - Minimal UI with only essential information
-- Default mode balances information and readability
+## Performance Notes
 
-Example:
-```bash
-npm run dev -- start --display-mode clean
-```
+- Parallel tool execution from single LLM response
+- Streaming with delta encoding
+- Session caching (loaded once)
+- Tool schema caching (from packet)
+- Plan extraction: disable via `plan_auto_extraction: false`

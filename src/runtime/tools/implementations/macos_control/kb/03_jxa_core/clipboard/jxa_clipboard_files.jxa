@@ -1,0 +1,11 @@
+---
+id: jxa_clipboard_files
+title: JXA Clipboard File Path Operations
+description: Working with file paths in the clipboard using JavaScript for Automation
+---
+// Get the current application and include standard additions
+const app = Application.currentApplication();
+app.includeStandardAdditions = true;
+
+// Import required frameworks
+ObjC.import('AppKit');

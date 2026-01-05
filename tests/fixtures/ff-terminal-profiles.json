@@ -1,0 +1,35 @@
+{
+  "config": {
+    "defaultProfile": "GLM-4.7",
+    "profiles": [
+      {
+        "name": "GLM-4.7",
+        "provider": "zai",
+        "model": "GLM-4.7",
+        "baseUrl": "https://api.z.ai/v1"
+      },
+      {
+        "name": "MiniMax-M2.1",
+        "provider": "minimax",
+        "model": "MiniMax-M2.1",
+        "baseUrl": "https://api.minimax.io/anthropic"
+      },
+      {
+        "name": "OR Grok",
+        "provider": "openrouter",
+        "model": "x-ai/grok-4.1-fast"
+      }
+    ]
+  },
+  "credentials": {
+    "GLM-4.7": {
+      "ANTHROPIC_AUTH_TOKEN": "test-zai-token"
+    },
+    "MiniMax-M2.1": {
+      "MINIMAX_API_KEY": "test-minimax-key"
+    },
+    "OR Grok": {
+      "OPENROUTER_API_KEY": "test-openrouter-key"
+    }
+  }
+}

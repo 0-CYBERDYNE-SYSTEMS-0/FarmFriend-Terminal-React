@@ -1,0 +1,16 @@
+---
+id: jxa_system_events_ui_control
+title: JXA: System Events and UI Control
+description: >-
+  Demonstrates how to control UI elements, send keystrokes, and interact with
+  menu items using JXA and System Events.
+---
+const systemEvents = Application('System Events');
+
+// Helper function to activate an app before sending input
+function activateApp(appName) {
+  const app = Application(appName);
+  app.activate();
+  delay(0.2); // Small delay to ensure app is ready
+  return app;
+}

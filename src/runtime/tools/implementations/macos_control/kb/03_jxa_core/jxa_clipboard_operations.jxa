@@ -1,0 +1,8 @@
+---
+id: jxa_clipboard_operations
+title: Clipboard Operations with JXA
+description: Overview of clipboard management capabilities using JavaScript for Automation
+---
+// Get the current application and include standard additions
+const app = Application.currentApplication();
+app.includeStandardAdditions = true;

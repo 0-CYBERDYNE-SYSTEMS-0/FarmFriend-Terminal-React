@@ -1,0 +1,10 @@
+---
+id: jxa_clipboard_rich_text
+title: JXA Clipboard Rich Text Operations
+description: Working with styled text in the clipboard using JavaScript for Automation
+---
+const app = Application.currentApplication();
+app.includeStandardAdditions = true;
+
+// Use Objective-C bridge
+ObjC.import('AppKit');

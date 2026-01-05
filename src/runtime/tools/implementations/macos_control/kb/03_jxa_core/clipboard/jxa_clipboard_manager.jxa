@@ -1,0 +1,8 @@
+---
+id: jxa_clipboard_manager
+title: JXA Clipboard Manager
+description: A simple clipboard history manager using JavaScript for Automation
+---
+// Get the current application and include standard additions
+const app = Application.currentApplication();
+app.includeStandardAdditions = true;

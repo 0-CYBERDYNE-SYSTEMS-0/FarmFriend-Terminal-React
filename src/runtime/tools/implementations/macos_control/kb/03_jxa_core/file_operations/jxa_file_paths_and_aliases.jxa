@@ -1,0 +1,10 @@
+---
+id: jxa_file_paths_and_aliases
+title: JXA File Paths and Aliases
+description: Working with different path formats and file references in JXA
+---
+const app = Application.currentApplication();
+app.includeStandardAdditions = true;
+
+// Import Foundation framework for URL operations
+ObjC.import('Foundation');

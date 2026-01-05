@@ -68,7 +68,7 @@
     "width": 800,
     "height": 900
   },
-  "browser_headless": false,
+  "browser_headless": true,
   "browser_disable_security": true,
   "browser_keep_alive": true,
   "browse_web_enabled": false,
