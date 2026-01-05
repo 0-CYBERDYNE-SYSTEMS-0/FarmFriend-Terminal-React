@@ -1,0 +1,14 @@
+---
+id: system/get_battery_status
+title: Get Battery Status
+description: Returns battery level and charging status (requires ioreg)
+---
+const app = Application.currentApplication();
+app.includeStandardAdditions = true;
+
+try {
+	const result = app.doShellScript('pmset -g batt');
+	result;
+} catch (e) {
+	"Error getting battery status: " + e.message;
+}

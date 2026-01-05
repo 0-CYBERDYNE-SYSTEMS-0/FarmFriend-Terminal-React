@@ -1,0 +1,10 @@
+---
+id: jxa_unicode_file_operations
+title: JXA Unicode File Operations
+description: Working with Unicode text in files using the Objective-C bridge in JXA
+---
+const app = Application.currentApplication();
+app.includeStandardAdditions = true;
+
+// Import Foundation framework for NSString operations
+ObjC.import('Foundation');

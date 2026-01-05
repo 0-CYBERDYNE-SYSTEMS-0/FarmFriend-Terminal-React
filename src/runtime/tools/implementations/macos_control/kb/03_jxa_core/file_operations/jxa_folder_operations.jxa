@@ -1,0 +1,10 @@
+---
+id: jxa_folder_operations
+title: JXA Folder Operations
+description: Creating, managing, and listing folder contents using JXA
+---
+const app = Application.currentApplication();
+app.includeStandardAdditions = true;
+
+// Import Foundation framework for advanced operations
+ObjC.import('Foundation');

@@ -1,6 +1,16 @@
 import { spawn } from "node:child_process";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
+import { getScript, substituteParams, validateParams, listScripts } from "./macos_control/scriptLoader.js";
 
-type Args = { action?: string; target?: string; wait_time?: number };
+type Args = {
+  action?: string;
+  target?: string;
+  wait_time?: number;
+  language?: "applescript" | "jxa";
+  kb_script_id?: string;
+  params?: Record<string, string>;
+};
 
 function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
@@ -10,9 +20,20 @@ function isMac(): boolean {
   return process.platform === "darwin";
 }
 
-async function runAppleScript(script: string, signal: AbortSignal): Promise<{ stdout: string; stderr: string; code: number | null }> {
+async function runAppleScript(
+  script: string,
+  signal: AbortSignal,
+  language: "applescript" | "jxa" = "applescript"
+): Promise<{ stdout: string; stderr: string; code: number | null }> {
   return await new Promise((resolve, reject) => {
-    const child = spawn("osascript", ["-e", script], { stdio: ["ignore", "pipe", "pipe"] });
+    // Build osascript args
+    const args: string[] = [];
+    if (language === "jxa") {
+      args.push("-l", "JavaScript");
+    }
+    args.push("-e", script);
+
+    const child = spawn("osascript", args, { stdio: ["ignore", "pipe", "pipe"] });
     const out: Buffer[] = [];
     const err: Buffer[] = [];
 
@@ -34,6 +55,16 @@ async function runAppleScript(script: string, signal: AbortSignal): Promise<{ st
       resolve({ stdout: Buffer.concat(out).toString("utf8"), stderr: Buffer.concat(err).toString("utf8"), code });
     });
   });
+}
+
+/**
+ * Get knowledge base directory path
+ */
+function getKBDir(): string {
+  // Get directory of current file
+  const currentFile = fileURLToPath(import.meta.url);
+  const currentDir = dirname(currentFile);
+  return join(currentDir, "macos_control", "kb");
 }
 
 async function tryCliClick(target: string, signal: AbortSignal): Promise<{ ok: boolean; msg: string }> {
@@ -65,14 +96,81 @@ export async function macosControlTool(argsRaw: unknown, signal: AbortSignal): P
   const action = String(args?.action || "").trim();
   const target = String(args?.target || "").trim();
   const waitTime = typeof args?.wait_time === "number" ? Math.max(0, args.wait_time) : 1.0;
+  const language = args?.language || "applescript";
+  const kbScriptId = args?.kb_script_id?.trim();
+  const params = args?.params || {};
 
   if (!action) throw new Error("macos_control: missing args.action");
-  if (!target) throw new Error("macos_control: missing args.target");
 
   if (!isMac()) throw new Error("macos_control: only supported on macOS");
 
   const lower = action.toLowerCase();
-  let result: any = { ok: true, action, target };
+  let result: any = { ok: true, action };
+
+  // Handle knowledge base script execution
+  if (lower === "kb_script" || kbScriptId) {
+    if (!kbScriptId) throw new Error("macos_control(kb_script): missing kb_script_id");
+
+    const kbDir = getKBDir();
+    const script = getScript(kbDir, kbScriptId);
+
+    if (!script) {
+      throw new Error(`macos_control(kb_script): script not found: ${kbScriptId}`);
+    }
+
+    // Validate required parameters
+    const missing = validateParams(script, params);
+    if (missing.length > 0) {
+      throw new Error(`macos_control(kb_script): missing required parameters: ${missing.join(", ")}`);
+    }
+
+    // Substitute parameters
+    const scriptContent = substituteParams(script.content, params);
+
+    // Execute script
+    const r = await runAppleScript(scriptContent, signal, script.metadata.language);
+    if (r.code !== 0) {
+      throw new Error(`macos_control(kb_script) failed: ${r.stderr || r.stdout}`);
+    }
+
+    result = {
+      ok: true,
+      action: "kb_script",
+      kb_script_id: kbScriptId,
+      script_title: script.metadata.title,
+      language: script.metadata.language,
+      params,
+      stdout: r.stdout.trim(),
+      stderr: r.stderr.trim() || undefined,
+    };
+
+    if (waitTime > 0) await sleep(waitTime * 1000);
+    return JSON.stringify(result, null, 2);
+  }
+
+  // Handle list_scripts action
+  if (lower === "list_scripts") {
+    const kbDir = getKBDir();
+    const scripts = listScripts(kbDir);
+    result = {
+      ok: true,
+      action: "list_scripts",
+      count: scripts.length,
+      scripts: scripts.map((s) => ({
+        id: s.id,
+        title: s.title,
+        description: s.description,
+        language: s.language,
+        category: s.category,
+        params: s.params,
+      })),
+    };
+    return JSON.stringify(result, null, 2);
+  }
+
+  // All other actions require target
+  if (!target) throw new Error("macos_control: missing args.target");
+  result.target = target;
 
   if (lower === "open_app") {
     const script = `tell application \"${target.replace(/\"/g, "\\\"")}\" to activate`;
@@ -101,9 +199,12 @@ export async function macosControlTool(argsRaw: unknown, signal: AbortSignal): P
     const r = await runAppleScript(script, signal);
     if (r.code !== 0) throw new Error(`macos_control(spotlight_search) failed: ${r.stderr || r.stdout}`);
     result.applescript = script;
-  } else if (lower === "applescript") {
-    const r = await runAppleScript(target, signal);
-    if (r.code !== 0) throw new Error(`macos_control(applescript) failed: ${r.stderr || r.stdout}`);
+  } else if (lower === "applescript" || lower === "jxa" || lower === "script") {
+    // Support both 'applescript' and 'jxa' actions, or generic 'script' with language param
+    const scriptLanguage = lower === "jxa" ? "jxa" : language;
+    const r = await runAppleScript(target, signal, scriptLanguage);
+    if (r.code !== 0) throw new Error(`macos_control(${lower}) failed: ${r.stderr || r.stdout}`);
+    result.language = scriptLanguage;
     result.stdout = r.stdout.trim();
     result.stderr = r.stderr.trim() || undefined;
   } else if (lower === "click") {

@@ -1,0 +1,10 @@
+---
+id: jxa_file_operations
+title: JXA: File System Operations
+description: >-
+  Examples of file system operations in JXA, including reading, writing, and
+  managing files and folders.
+---
+// Get the current application and include standard additions
+const app = Application.currentApplication();
+app.includeStandardAdditions = true;

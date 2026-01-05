@@ -1,0 +1,125 @@
+---
+id: jxa_ui_element_values
+title: JXA UI Get & Set Element Values
+description: >-
+  Get and set values of UI elements in macOS applications using JavaScript for Automation (JXA).
+---
+// Get the value of a UI element
+function getElementValue(appName, target, wait) {
+    try {
+        // Activate the application
+        const app = Application(appName);
+        app.activate();
+        delay(wait);
+        
+        // Get System Events process for UI interaction
+        const systemEvents = Application("System Events");
+        const process = systemEvents.processes[appName];
+        
+        if (!process.exists()) {
+            return {
+                success: false,
+                error: `Process ${appName} not found`
+            };
+        }
+        
+        // Find the target element based on provided criteria
+        const element = findUIElement(process, target);
+        
+        if (!element) {
+            return {
+                success: false,
+                error: "Target element not found"
+            };
+        }
+        
+        // Get the value of the element
+        let value = null;
+        
+        // Different element types store their values differently
+        if (element.value !== undefined) {
+            value = element.value();
+        } else if (element.staticText && element.staticText.length > 0) {
+            value = element.staticText[0].value();
+        } else if (element.name !== undefined) {
+            value = element.name();
+        } else if (element.title !== undefined) {
+            value = element.title();
+        }
+        
+        return {
+            success: true,
+            value: value,
+            message: `Retrieved value from element in ${appName}`
+        };
+    } catch (error) {
+        return {
+            success: false,
+            error: `Error getting element value: ${error.message}`
+        };
+    }
+}
+
+// Set the value of a UI element
+function setElementValue(appName, target, value, wait) {
+    try {
+        if (value === undefined) {
+            return {
+                success: false,
+                error: "Value parameter is required"
+            };
+        }
+        
+        // Activate the application
+        const app = Application(appName);
+        app.activate();
+        delay(wait);
+        
+        // Get System Events process for UI interaction
+        const systemEvents = Application("System Events");
+        const process = systemEvents.processes[appName];
+        
+        if (!process.exists()) {
+            return {
+                success: false,
+                error: `Process ${appName} not found`
+            };
+        }
+        
+        // Find the target element based on provided criteria
+        const element = findUIElement(process, target);
+        
+        if (!element) {
+            return {
+                success: false,
+                error: "Target element not found"
+            };
+        }
+        
+        // Set the value of the element
+        if (element.value !== undefined) {
+            element.value.set(value);
+        } else {
+            // Try to set the element's value by selecting all text and typing
+            element.click();
+            delay(0.2);
+            
+            // Select all existing text (Cmd+A)
+            systemEvents.keystroke("a", {using: "command down"});
+            delay(0.2);
+            
+            // Type the new value
+            systemEvents.keystroke(value);
+        }
+        
+        return {
+            success: true,
+            message: `Set value of element in ${appName}`
+        };
+    } catch (error) {
+        return {
+            success: false,
+            error: `Error setting element value: ${error.message}`
+        };
+    }
+}

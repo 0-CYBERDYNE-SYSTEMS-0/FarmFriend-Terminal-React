@@ -1,0 +1,7 @@
+---
+id: jxa_basic_file_operations
+title: JXA Basic File Operations
+description: Reading and writing files using standard JXA methods
+---
+const app = Application.currentApplication();
+app.includeStandardAdditions = true;

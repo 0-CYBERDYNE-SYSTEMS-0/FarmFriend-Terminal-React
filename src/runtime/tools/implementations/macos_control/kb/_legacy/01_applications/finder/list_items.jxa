@@ -1,0 +1,25 @@
+---
+id: finder/list_items
+title: List Items in Current Finder Location
+description: Returns a list of all items in the current Finder window
+---
+const finder = Application('Finder');
+
+if (finder.windows.length === 0) {
+	"No Finder windows open";
+} else {
+	const target = finder.windows[0].target();
+	const items = target.items();
+	const itemList = [];
+
+	for (let i = 0; i < items.length; i++) {
+		const item = items[i];
+		itemList.push({
+			name: item.name(),
+			kind: item.class(),
+			path: item.posixPath()
+		});
+	}
+
+	JSON.stringify(itemList, null, 2);
+}

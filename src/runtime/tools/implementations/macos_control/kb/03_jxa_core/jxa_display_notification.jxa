@@ -1,0 +1,11 @@
+---
+id: jxa_display_notification
+title: Display Notifications with JXA
+description: Show macOS Notification Center messages using JavaScript for Automation
+---
+// Get the current application and include standard additions
+const app = Application.currentApplication();
+app.includeStandardAdditions = true;
+
+// Display a basic notification
+app.displayNotification('This is a notification message');

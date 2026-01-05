@@ -450,26 +450,44 @@
     "type": "function",
     "function": {
       "name": "macos_control",
-      "description": "GUI automation for macOS - send keystrokes, click UI elements, run AppleScript for complex app interactions. DO NOT use for opening files - use run_command with 'open filename' instead. Only use this tool when you need to interact with application GUIs (clicking buttons, typing into fields, navigating menus).",
+      "description": "Comprehensive macOS automation with 513+ pre-built scripts covering Safari, Chrome, Firefox, Mail, Notes, Calendar, Reminders, Photos, Music, Xcode, VS Code, Terminal, System controls, and more. Supports AppleScript and JXA (JavaScript for Automation). Use 'list_scripts' to browse 90+ categories. Use 'kb_script' to execute pre-built scripts with parameters. Includes educational examples, browser automation, productivity apps, creative apps, developer tools, and advanced workflows. DO NOT use for opening files - use run_command instead.",
       "parameters": {
         "type": "object",
         "properties": {
           "action": {
             "type": "string",
-            "description": "Action to perform: 'open_app', 'send_keys', 'click', 'spotlight_search', 'applescript', 'template', 'workflow', or 'simple_task'"
+            "description": "Action to perform: 'kb_script' (use knowledge base script), 'list_scripts' (list all KB scripts), 'open_app', 'send_keys', 'click', 'spotlight_search', 'applescript', 'jxa', 'script' (custom AppleScript/JXA)"
           },
           "target": {
             "type": "string",
-            "description": "Target for the action (app name, text to type, coordinates, search term, AppleScript code, or task description)"
+            "description": "Target for the action (app name, text to type, coordinates, search term, AppleScript/JXA code). Not needed for 'kb_script' or 'list_scripts' actions."
           },
           "wait_time": {
             "type": "number",
             "description": "Time to wait after action in seconds (default: 1.0)"
+          },
+          "language": {
+            "type": "string",
+            "description": "Script language for 'script' action: 'applescript' (default) or 'jxa' (JavaScript for Automation)",
+            "enum": [
+              "applescript",
+              "jxa"
+            ]
+          },
+          "kb_script_id": {
+            "type": "string",
+            "description": "Knowledge base script ID to execute (e.g., 'safari/open_url', 'notes/create_note', 'system/set_volume'). Use 'list_scripts' action to see all available scripts."
+          },
+          "params": {
+            "type": "object",
+            "description": "Parameters for knowledge base script execution. Each script may require different params (e.g., {url: 'https://example.com'}, {title: 'My Note', body: 'Note content'}). Check script definition for required params.",
+            "additionalProperties": {
+              "type": "string"
+            }
           }
         },
         "required": [
-          "action",
-          "target"
+          "action"
         ]
       }
     }

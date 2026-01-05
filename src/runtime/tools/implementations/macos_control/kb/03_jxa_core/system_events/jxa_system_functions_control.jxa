@@ -1,0 +1,11 @@
+---
+id: jxa_system_functions_control
+title: JXA System Functions Control
+description: Controlling system-wide functionality like screen saver and menu bar using JXA
+---
+// Basic System Events setup
+const systemEvents = Application('System Events');
+
+// Include standard additions for additional functionality
+const app = Application.currentApplication();
+app.includeStandardAdditions = true;

@@ -1,0 +1,8 @@
+---
+id: jxa_user_dialogs
+title: User Dialogs with JXA
+description: Create interactive dialog boxes using JavaScript for Automation
+---
+// Get the current application and include standard additions
+const app = Application.currentApplication();
+app.includeStandardAdditions = true;

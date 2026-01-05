@@ -1,0 +1,18 @@
+---
+id: workflow/list_running_apps
+title: List Running Applications
+description: Returns a list of all running applications
+---
+const se = Application('System Events');
+const processes = se.processes.whose({ backgroundOnly: false });
+const apps = [];
+
+for (let i = 0; i < processes.length; i++) {
+	const proc = processes[i];
+	apps.push({
+		name: proc.name(),
+		frontmost: proc.frontmost()
+	});
+}
+
+JSON.stringify(apps, null, 2);

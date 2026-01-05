@@ -1,0 +1,19 @@
+---
+id: notes/list_notes
+title: List All Notes
+description: Returns a list of all notes with their titles and modification dates
+---
+const notes = Application('Notes');
+const allNotes = notes.notes();
+const noteList = [];
+
+for (let i = 0; i < Math.min(allNotes.length, 20); i++) {
+	const note = allNotes[i];
+	noteList.push({
+		name: note.name(),
+		modificationDate: note.modificationDate().toISOString(),
+		body: note.body().substring(0, 100)
+	});
+}
+
+JSON.stringify(noteList, null, 2);

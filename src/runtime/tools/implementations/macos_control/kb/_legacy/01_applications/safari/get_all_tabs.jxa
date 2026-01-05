@@ -1,0 +1,24 @@
+---
+id: safari/get_all_tabs
+title: Get All Safari Tabs
+description: Returns URLs and titles of all open Safari tabs across all windows
+---
+const safari = Application('Safari');
+const windows = safari.windows();
+const tabs = [];
+
+for (let i = 0; i < windows.length; i++) {
+	const win = windows[i];
+	const winTabs = win.tabs();
+	for (let j = 0; j < winTabs.length; j++) {
+		const tab = winTabs[j];
+		tabs.push({
+			window: i + 1,
+			tab: j + 1,
+			url: tab.url(),
+			title: tab.name()
+		});
+	}
+}
+
+JSON.stringify(tabs, null, 2);

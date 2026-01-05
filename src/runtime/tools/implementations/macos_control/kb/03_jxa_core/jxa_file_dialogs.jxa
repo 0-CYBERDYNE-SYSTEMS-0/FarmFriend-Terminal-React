@@ -1,0 +1,8 @@
+---
+id: jxa_file_dialogs
+title: File Selection Dialogs with JXA
+description: Use JavaScript for Automation to create file and folder selection dialogs
+---
+// Get the current application and include standard additions
+const app = Application.currentApplication();
+app.includeStandardAdditions = true;

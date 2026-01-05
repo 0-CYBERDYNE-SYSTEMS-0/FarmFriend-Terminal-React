@@ -1,0 +1,21 @@
+---
+id: jxa_system_appearance
+title: Toggle System Appearance with JXA
+description: Use JavaScript for Automation to switch between Light and Dark mode
+---
+// Get the current application and include standard additions
+const app = Application.currentApplication();
+app.includeStandardAdditions = true;
+
+// Use System Events to access the appearance preferences
+const systemEvents = Application("System Events");
+const appearancePrefs = systemEvents.appearancePreferences();
+
+// Toggle the dark mode setting
+appearancePrefs.darkMode = !appearancePrefs.darkMode();
+
+// Display which mode was set
+const newMode = appearancePrefs.darkMode() ? "Dark" : "Light";
+app.displayNotification(`Appearance switched to ${newMode} Mode`, {
+    withTitle: "System Appearance"
+});
