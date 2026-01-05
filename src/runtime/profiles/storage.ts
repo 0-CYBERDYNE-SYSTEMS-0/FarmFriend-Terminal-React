@@ -4,7 +4,9 @@ import { existsSync, readFileSync, writeFileSync, chmodSync } from "node:fs";
 
 import type { Config, Profile } from "./types.js";
 
-const CONFIG_FILE = process.env.FF_PROFILE_STORE_PATH || join(homedir(), ".ff-terminal-profiles.json");
+function getConfigFile(): string {
+  return process.env.FF_PROFILE_STORE_PATH || join(homedir(), ".ff-terminal-profiles.json");
+}
 
 export type StoredData = {
   config: Config;
@@ -15,9 +17,10 @@ export type StoredData = {
 };
 
 export function readConfig(): Config {
-  if (!existsSync(CONFIG_FILE)) return { profiles: [] };
+  const configFile = getConfigFile();
+  if (!existsSync(configFile)) return { profiles: [] };
   try {
-    const data = JSON.parse(readFileSync(CONFIG_FILE, "utf8")) as StoredData;
+    const data = JSON.parse(readFileSync(configFile, "utf8")) as StoredData;
     return data.config || { profiles: [] };
   } catch {
     return { profiles: [] };
@@ -25,14 +28,15 @@ export function readConfig(): Config {
 }
 
 export function writeConfig(config: Config): void {
-  const existing: StoredData = existsSync(CONFIG_FILE)
-    ? (JSON.parse(readFileSync(CONFIG_FILE, "utf8")) as StoredData)
+  const configFile = getConfigFile();
+  const existing: StoredData = existsSync(configFile)
+    ? (JSON.parse(readFileSync(configFile, "utf8")) as StoredData)
     : { config: { profiles: [] } };
   existing.config = config;
-  writeFileSync(CONFIG_FILE, JSON.stringify(existing, null, 2) + "\n", "utf8");
+  writeFileSync(configFile, JSON.stringify(existing, null, 2) + "\n", "utf8");
   try {
     // Restrict file permissions to user-only (sensitive credential data)
-    chmodSync(CONFIG_FILE, 0o600);
+    chmodSync(configFile, 0o600);
   } catch {
     // ignore chmod errors on Windows or filesystems that don't support permissions
   }
@@ -43,8 +47,9 @@ export async function storeCredential(profileName: string, keyOrCredential: stri
   const key = hasKey ? keyOrCredential : undefined;
   const credential = hasKey ? credentialMaybe! : keyOrCredential;
 
-  const data: StoredData = existsSync(CONFIG_FILE)
-    ? (JSON.parse(readFileSync(CONFIG_FILE, "utf8")) as StoredData)
+  const configFile = getConfigFile();
+  const data: StoredData = existsSync(configFile)
+    ? (JSON.parse(readFileSync(configFile, "utf8")) as StoredData)
     : { config: { profiles: [] }, credentials: {} };
   if (!data.credentials) data.credentials = {};
 
@@ -59,18 +64,19 @@ export async function storeCredential(profileName: string, keyOrCredential: stri
     existing[key] = credential;
   }
 
-  writeFileSync(CONFIG_FILE, JSON.stringify(data, null, 2) + "\n", "utf8");
+  writeFileSync(configFile, JSON.stringify(data, null, 2) + "\n", "utf8");
   try {
     // Restrict file permissions to user-only (sensitive credential data)
-    chmodSync(CONFIG_FILE, 0o600);
+    chmodSync(configFile, 0o600);
   } catch {
     // ignore chmod errors on Windows or filesystems that don't support permissions
   }
 }
 
 export async function getCredential(profileName: string, key?: string): Promise<string | null> {
-  if (!existsSync(CONFIG_FILE)) return null;
-  const data = JSON.parse(readFileSync(CONFIG_FILE, "utf8")) as StoredData;
+  const configFile = getConfigFile();
+  if (!existsSync(configFile)) return null;
+  const data = JSON.parse(readFileSync(configFile, "utf8")) as StoredData;
   const v = data.credentials?.[profileName];
   if (!v) return null;
   if (typeof v === "string") return v; // legacy single-secret fallback
@@ -79,8 +85,9 @@ export async function getCredential(profileName: string, key?: string): Promise<
 }
 
 export async function deleteCredential(profileName: string, key?: string): Promise<void> {
-  if (!existsSync(CONFIG_FILE)) return;
-  const data = JSON.parse(readFileSync(CONFIG_FILE, "utf8")) as StoredData;
+  const configFile = getConfigFile();
+  if (!existsSync(configFile)) return;
+  const data = JSON.parse(readFileSync(configFile, "utf8")) as StoredData;
   if (!data.credentials || !data.credentials[profileName]) return;
 
   if (!key) {
@@ -95,10 +102,10 @@ export async function deleteCredential(profileName: string, key?: string): Promi
       if (Object.keys(cur).length === 0) delete data.credentials[profileName];
     }
   }
-  writeFileSync(CONFIG_FILE, JSON.stringify(data, null, 2) + "\n", "utf8");
+  writeFileSync(configFile, JSON.stringify(data, null, 2) + "\n", "utf8");
   try {
     // Restrict file permissions to user-only (sensitive credential data)
-    chmodSync(CONFIG_FILE, 0o600);
+    chmodSync(configFile, 0o600);
   } catch {
     // ignore chmod errors on Windows or filesystems that don't support permissions
   }
