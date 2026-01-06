@@ -1,0 +1,553 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>FF-Terminal Program User Guide</title>
+  <style>
+    :root {
+      --black: #0a0a0a;
+      --white: #f7f7f5;
+      --gray-1: #e6e6e2;
+      --gray-2: #c7c7c2;
+      --gray-3: #8e8e88;
+      --shadow: 0 14px 40px rgba(0,0,0,0.10);
+      --pad: clamp(18px, 3vw, 36px);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: "Bentos Pro", "Benton Sans", "Neue Haas Grotesk Display", "GT America", "Avenir Next", "Helvetica Neue", sans-serif;
+      color: var(--black);
+      background:
+        radial-gradient(900px 600px at 10% -10%, #ffffff 0%, #f1f1ee 50%, #e6e6e3 100%),
+        repeating-linear-gradient(135deg, rgba(0,0,0,0.02), rgba(0,0,0,0.02) 6px, rgba(0,0,0,0) 6px, rgba(0,0,0,0) 12px);
+      letter-spacing: -0.01em;
+    }
+
+    .page {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: var(--pad);
+    }
+
+    .hero {
+      border: 2px solid var(--black);
+      background: var(--white);
+      box-shadow: var(--shadow);
+      padding: var(--pad);
+      display: grid;
+      gap: 18px;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      align-items: end;
+    }
+
+    .tag {
+      display: inline-block;
+      border: 2px solid var(--black);
+      padding: 6px 12px;
+      text-transform: uppercase;
+      font-size: 11px;
+      letter-spacing: 0.2em;
+    }
+
+    h1 {
+      margin: 8px 0 0;
+      font-size: clamp(34px, 7vw, 86px);
+      line-height: 0.95;
+      text-transform: uppercase;
+    }
+
+    h2 {
+      margin: 56px 0 16px;
+      font-size: clamp(24px, 4vw, 44px);
+      text-transform: uppercase;
+      border-bottom: 2px solid var(--black);
+      padding-bottom: 10px;
+    }
+
+    h3 {
+      margin: 18px 0 10px;
+      text-transform: uppercase;
+      font-size: clamp(16px, 2.4vw, 24px);
+    }
+
+    p { margin: 0 0 12px; }
+
+    .lead { font-size: clamp(16px, 2.2vw, 20px); }
+
+    .bento {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 16px;
+    }
+
+    .card {
+      border: 2px solid var(--black);
+      background: var(--white);
+      box-shadow: var(--shadow);
+      padding: 16px;
+    }
+
+    .card.inverse { background: var(--black); color: var(--white); }
+
+    .pill {
+      display: inline-block;
+      padding: 4px 10px;
+      border: 1.5px solid currentColor;
+      text-transform: uppercase;
+      font-size: 11px;
+      letter-spacing: 0.2em;
+      margin-bottom: 10px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      border: 2px solid var(--black);
+      background: var(--white);
+      font-size: 14px;
+    }
+
+    th, td {
+      text-align: left;
+      padding: 12px 10px;
+      border-bottom: 1px solid var(--gray-2);
+      vertical-align: top;
+    }
+
+    th {
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      font-size: 11px;
+      border-bottom: 2px solid var(--black);
+    }
+
+    .mini { font-size: 12px; color: var(--gray-3); }
+
+    .ui-map {
+      border: 2px solid var(--black);
+      background: var(--white);
+      padding: 12px;
+      box-shadow: var(--shadow);
+    }
+
+    .ui-grid {
+      display: grid;
+      gap: 8px;
+      grid-template-rows: auto 1fr auto;
+      height: 220px;
+    }
+
+    .ui-box {
+      border: 2px solid var(--black);
+      padding: 8px 10px;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+    }
+
+    .ui-main {
+      display: grid;
+      grid-template-columns: 2fr 1fr;
+      gap: 8px;
+      height: 100%;
+    }
+
+    .kbd {
+      display: inline-block;
+      border: 1.5px solid var(--black);
+      padding: 2px 6px;
+      font-size: 12px;
+      margin: 2px 4px 2px 0;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .flow {
+      border: 2px solid var(--black);
+      background: var(--white);
+      padding: 12px;
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    .examples pre {
+      background: var(--black);
+      color: var(--white);
+      padding: 12px;
+      font-size: 13px;
+      border: 1px solid var(--black);
+      white-space: pre-wrap;
+    }
+
+    .footer {
+      margin: 48px 0 12px;
+      text-align: center;
+      font-size: 12px;
+      color: var(--gray-3);
+      text-transform: uppercase;
+      letter-spacing: 0.2em;
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <section class="hero">
+      <div>
+        <span class="tag">Program User Guide</span>
+        <h1>Commands, Wizards, Agents, Skills, UI</h1>
+        <p class="lead">This guide explains how the FF-Terminal interface works and how to use slash commands, wizards, skills, and agents with confidence.</p>
+      </div>
+      <div class="card inverse">
+        <div class="pill">Quick Start</div>
+        <p class="lead">Type <strong>/help</strong> any time. If a command does not do what you expect, use the wizard menu: <strong>/wizard</strong>.</p>
+        <p class="mini">Tip: Use <strong>//text</strong> to send a literal slash command as text.</p>
+      </div>
+    </section>
+
+    <h2>UI Map (What You Are Looking At)</h2>
+    <div class="ui-map">
+      <div class="ui-grid">
+        <div class="ui-box">Header: status + mode + hints</div>
+        <div class="ui-main">
+          <div class="ui-box">Transcript: you, assistant, tools, system messages</div>
+          <div class="ui-box">Panels: help, wizards, logs, plan, thinking</div>
+        </div>
+        <div class="ui-box">Input line: type your prompt or /command here</div>
+      </div>
+    </div>
+
+    <h2>Keyboard Shortcuts</h2>
+    <table>
+      <thead>
+        <tr><th>Shortcut</th><th>What It Does</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Shift+Tab</td><td>Cycle operation mode (auto, confirm, read_only, planning)</td></tr>
+        <tr><td>Ctrl+T</td><td>Toggle thinking visibility</td></tr>
+        <tr><td>Ctrl+P</td><td>Toggle plan panel</td></tr>
+        <tr><td>Ctrl+E</td><td>Toggle tool details</td></tr>
+        <tr><td>Ctrl+O</td><td>Toggle subagent swarm panel</td></tr>
+        <tr><td>PageUp / PageDown</td><td>Scroll transcript</td></tr>
+        <tr><td>Home</td><td>Jump to bottom</td></tr>
+      </tbody>
+    </table>
+
+    <h2>Slash Command Cheat Sheet (Complete)</h2>
+    <table>
+      <thead>
+        <tr><th>Category</th><th>Commands</th><th>Purpose</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Help</td>
+          <td>/help</td>
+          <td>Show command and shortcut list</td>
+        </tr>
+        <tr>
+          <td>Tools</td>
+          <td>/tools</td>
+          <td>List available tools and descriptions</td>
+        </tr>
+        <tr>
+          <td>Wizards</td>
+          <td>/wizard, /wizard models, /wizard mounts, /wizard init-project, /wizard commands, /wizard agents, /wizard skills, /wizard logs</td>
+          <td>Open wizard menu or jump directly to a specific wizard</td>
+        </tr>
+        <tr>
+          <td>Modes</td>
+          <td>/mode [auto|confirm|read_only|planning], /planning</td>
+          <td>Change how FF-Terminal behaves</td>
+        </tr>
+        <tr>
+          <td>Project Setup</td>
+          <td>/init, /init-project [path]</td>
+          <td>Start a session analysis or load a project context file</td>
+        </tr>
+        <tr>
+          <td>Workspace</td>
+          <td>/mounts, /doctor</td>
+          <td>Show mounts status or run a workspace health check</td>
+        </tr>
+        <tr>
+          <td>Visual</td>
+          <td>/theme (or /colors)</td>
+          <td>Preview UI colors</td>
+        </tr>
+        <tr>
+          <td>System</td>
+          <td>/clear, /quit (or /exit)</td>
+          <td>Clear the screen or exit</td>
+        </tr>
+        <tr>
+          <td>Escape</td>
+          <td>//text</td>
+          <td>Send a literal prompt that starts with a slash</td>
+        </tr>
+        <tr>
+          <td>Shortcuts</td>
+          <td>/models, /commands, /command, /agents, /skills, /logs</td>
+          <td>Direct wizard shortcuts and aliases</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>Wizard Atlas</h2>
+    <table>
+      <thead>
+        <tr><th>Wizard</th><th>Open With</th><th>What It Does</th><th>Keys</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Models</td>
+          <td>/wizard models or /models</td>
+          <td>Set model overrides for the current profile</td>
+          <td>Esc back, Up/Down select, Enter edit</td>
+        </tr>
+        <tr>
+          <td>Mounts</td>
+          <td>/wizard mounts</td>
+          <td>Enable read-only skill mounts (claude, factory)</td>
+          <td>Esc back, Up/Down select, Space or Enter toggle</td>
+        </tr>
+        <tr>
+          <td>Init Project</td>
+          <td>/wizard init-project or /init-project</td>
+          <td>Pick a project with FF_PROJECT.md or PROJECT.md</td>
+          <td>Type to filter, Up/Down select, Enter load</td>
+        </tr>
+        <tr>
+          <td>Commands</td>
+          <td>/wizard commands or /commands</td>
+          <td>Create and manage custom slash commands</td>
+          <td>Esc back, Up/Down select, Enter view, n new</td>
+        </tr>
+        <tr>
+          <td>Agents</td>
+          <td>/wizard agents or /agents</td>
+          <td>Create and configure specialized agent personas</td>
+          <td>Esc back, Up/Down select, Enter view, n new, t template</td>
+        </tr>
+        <tr>
+          <td>Skills</td>
+          <td>/wizard skills or /skills</td>
+          <td>Create and manage reusable skill files</td>
+          <td>Esc back, Up/Down select, Enter view, n new</td>
+        </tr>
+        <tr>
+          <td>Autonomy Logs</td>
+          <td>/wizard logs or /logs</td>
+          <td>Browse autonomy run logs in workspace</td>
+          <td>Esc back, Up/Down select, r refresh, t tail</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>Full Command Reference (Exact /help Coverage)</h2>
+    <table>
+      <thead>
+        <tr><th>Command</th><th>Description</th><th>Notes</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>/help</td><td>Show this panel</td><td>Esc returns to chat</td></tr>
+        <tr><td>/tools</td><td>List available tools</td><td>Shows tool names and descriptions</td></tr>
+        <tr><td>/agents</td><td>Open agent configuration wizard</td><td>Manage agent personas</td></tr>
+        <tr><td>/mounts</td><td>Show mounts status (read-only)</td><td>Use /wizard mounts to configure</td></tr>
+        <tr><td>/wizard</td><td>Open wizard menu</td><td>Includes models, mounts, init-project, commands, agents, skills, logs</td></tr>
+        <tr><td>/wizard models</td><td>Open models wizard</td><td>Model overrides per profile</td></tr>
+        <tr><td>/wizard mounts</td><td>Open mounts wizard (read-only)</td><td>Toggle read-only mounts</td></tr>
+        <tr><td>/wizard init-project</td><td>Open project initialization picker</td><td>Finds FF_PROJECT.md / PROJECT.md</td></tr>
+        <tr><td>/wizard commands</td><td>Open custom commands manager</td><td>Create/edit command templates</td></tr>
+        <tr><td>/wizard agents</td><td>Open agent configuration wizard</td><td>Create agent personas</td></tr>
+        <tr><td>/wizard skills</td><td>Open skills wizard (create reusable skills)</td><td>Create skill files and triggers</td></tr>
+        <tr><td>/wizard logs</td><td>Open autonomy logs view</td><td>Browse logs in workspace</td></tr>
+        <tr><td>/models</td><td>Shortcut for /wizard models</td><td>Model overrides per profile</td></tr>
+        <tr><td>/commands</td><td>Open custom commands manager</td><td>Alias: /command</td></tr>
+        <tr><td>/command</td><td>Alias for /commands</td><td>Same as /commands</td></tr>
+        <tr><td>/&lt;custom&gt; [args]</td><td>Run a custom command by slug</td><td>Example: /review $1</td></tr>
+        <tr><td>/skills</td><td>Open skills wizard</td><td>Create and view skills</td></tr>
+        <tr><td>/logs</td><td>Open autonomy logs view</td><td>See workspace log runs</td></tr>
+        <tr><td>/mode [auto|confirm|read_only|planning]</td><td>Set operation mode</td><td>Shift+Tab cycles modes</td></tr>
+        <tr><td>/planning</td><td>Alias for /mode planning</td><td>Planning only, no tools</td></tr>
+        <tr><td>/init</td><td>Run initialization analysis</td><td>Summarize repo + next steps</td></tr>
+        <tr><td>/init-project [path]</td><td>Initialize from a project directory</td><td>Picker opens if path omitted</td></tr>
+        <tr><td>/clear</td><td>Clear transcript</td><td>Clears on-screen history</td></tr>
+        <tr><td>/doctor</td><td>Check workspace health and fix issues</td><td>Interactive confirmation for fixes</td></tr>
+        <tr><td>/theme</td><td>Print color-role samples</td><td>Alias: /colors</td></tr>
+        <tr><td>/colors</td><td>Alias for /theme</td><td>Same as /theme</td></tr>
+        <tr><td>/quit</td><td>Exit</td><td>Alias: /exit</td></tr>
+        <tr><td>/exit</td><td>Exit</td><td>Alias: /quit</td></tr>
+        <tr><td>//text</td><td>Send literal prompt starting with "/"</td><td>Example: //help sends "/help" as text</td></tr>
+      </tbody>
+    </table>
+
+    <h2>Operation Modes (Behavior Controls)</h2>
+    <table>
+      <thead>
+        <tr><th>Mode</th><th>When to Use</th><th>Effect</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>auto</td>
+          <td>Normal work</td>
+          <td>FF-Terminal executes tools as needed</td>
+        </tr>
+        <tr>
+          <td>confirm</td>
+          <td>Extra caution</td>
+          <td>Designed for confirmation-first workflows</td>
+        </tr>
+        <tr>
+          <td>read_only</td>
+          <td>Inspection only</td>
+          <td>Requests no filesystem writes</td>
+        </tr>
+        <tr>
+          <td>planning</td>
+          <td>Strategy only</td>
+          <td>Focus on reasoning and plan without tools</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>Agents and Skills (What They Are)</h2>
+    <div class="bento">
+      <div class="card">
+        <div class="pill">Agents</div>
+        <p class="lead">Agents are specialized personas with their own system instructions, tool permissions, and max turn limits.</p>
+        <p class="mini">Create them from templates, by filling a form, or by describing what you want.</p>
+      </div>
+      <div class="card">
+        <div class="pill">Skills</div>
+        <p class="lead">Skills are reusable instructions you can trigger as slash commands. Each skill can include triggers, tags, and recommended tools.</p>
+        <p class="mini">Skills live in workspace/skills and can be mounted read-only from other locations.</p>
+      </div>
+      <div class="card">
+        <div class="pill">Custom Commands</div>
+        <p class="lead">Custom commands are shortcuts that expand into a full prompt template.</p>
+        <p class="mini">They live in workspace/commands as Markdown files.</p>
+      </div>
+    </div>
+
+    <h2>Tools, Tool Chains, and Workflows</h2>
+    <div class="bento">
+      <div class="card">
+        <div class="pill">Tools</div>
+        <p class="lead">Tools are built-in actions FF-Terminal can call (file I/O, search, execution, web, etc.).</p>
+        <p class="mini">Use /tools to see the full list available in your session.</p>
+      </div>
+      <div class="card">
+        <div class="pill">Tool Chains</div>
+        <p class="lead">A tool chain is a sequence of tool calls that accomplish a multi-step task (read -> edit -> test -> report).</p>
+        <p class="mini">Ask for step-by-step tool usage if you need visibility or approvals.</p>
+      </div>
+      <div class="card">
+        <div class="pill">Workflows</div>
+        <p class="lead">Workflows combine tools + prompts + skills for repeatable outcomes.</p>
+        <p class="mini">Skills often encode workflows so you can reuse them as one command.</p>
+      </div>
+    </div>
+
+    <h3>Example Workflow (Inspection -> Change -> Verify)</h3>
+    <table>
+      <thead>
+        <tr><th>Step</th><th>Action</th><th>Why It Helps</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>1</td><td>Inspect files / state</td><td>Grounds the work in real context</td></tr>
+        <tr><td>2</td><td>Plan the change</td><td>Prevents surprises and errors</td></tr>
+        <tr><td>3</td><td>Apply edits</td><td>Execute the change cleanly</td></tr>
+        <tr><td>4</td><td>Validate / test</td><td>Verify correctness and regressions</td></tr>
+        <tr><td>5</td><td>Summarize</td><td>Clear handoff and review</td></tr>
+      </tbody>
+    </table>
+
+    <h2>Custom Command Variables (Templates)</h2>
+    <table>
+      <thead>
+        <tr><th>Variable</th><th>Meaning</th><th>Example</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>$1</td><td>First argument</td><td>/review src/app.ts -> $1</td></tr>
+        <tr><td>$2, $3, ...</td><td>Next arguments</td><td>/compare A B -> $1 and $2</td></tr>
+        <tr><td>$ARG1, $ARG2</td><td>Same as $1, $2 (case-insensitive)</td><td>$ARG1</td></tr>
+        <tr><td>$ARGUMENTS</td><td>All arguments joined</td><td>Summarize: $ARGUMENTS</td></tr>
+      </tbody>
+    </table>
+
+    <h2>How Slash Commands Flow</h2>
+    <div class="flow">
+      <svg viewBox="0 0 900 180" width="100%" height="180" role="img" aria-label="Command flow diagram">
+        <rect x="10" y="30" width="160" height="50" fill="#0a0a0a" />
+        <text x="90" y="62" fill="#f7f7f5" font-size="13" text-anchor="middle" font-family="Bentos Pro, Benton Sans, sans-serif">Input</text>
+
+        <rect x="190" y="30" width="160" height="50" fill="#f7f7f5" stroke="#0a0a0a" stroke-width="2" />
+        <text x="270" y="62" fill="#0a0a0a" font-size="13" text-anchor="middle" font-family="Bentos Pro, Benton Sans, sans-serif">Router</text>
+
+        <rect x="370" y="10" width="200" height="50" fill="#0a0a0a" />
+        <text x="470" y="42" fill="#f7f7f5" font-size="13" text-anchor="middle" font-family="Bentos Pro, Benton Sans, sans-serif">Slash command</text>
+
+        <rect x="370" y="90" width="200" height="50" fill="#f7f7f5" stroke="#0a0a0a" stroke-width="2" />
+        <text x="470" y="122" fill="#0a0a0a" font-size="13" text-anchor="middle" font-family="Bentos Pro, Benton Sans, sans-serif">Normal prompt</text>
+
+        <rect x="590" y="10" width="160" height="50" fill="#f7f7f5" stroke="#0a0a0a" stroke-width="2" />
+        <text x="670" y="42" fill="#0a0a0a" font-size="13" text-anchor="middle" font-family="Bentos Pro, Benton Sans, sans-serif">Wizard / Tool</text>
+
+        <rect x="590" y="90" width="160" height="50" fill="#0a0a0a" />
+        <text x="670" y="122" fill="#f7f7f5" font-size="13" text-anchor="middle" font-family="Bentos Pro, Benton Sans, sans-serif">Assistant</text>
+
+        <path d="M170 55 H190" stroke="#0a0a0a" stroke-width="2" />
+        <path d="M350 55 H370" stroke="#0a0a0a" stroke-width="2" />
+        <path d="M350 55 L370 35" stroke="#0a0a0a" stroke-width="2" />
+        <path d="M350 55 L370 115" stroke="#0a0a0a" stroke-width="2" />
+        <path d="M570 35 H590" stroke="#0a0a0a" stroke-width="2" />
+        <path d="M570 115 H590" stroke="#0a0a0a" stroke-width="2" />
+      </svg>
+      <p class="mini">If the input starts with a slash, FF-Terminal treats it as a command and routes to the correct wizard or action.</p>
+    </div>
+
+    <h2>Practical Examples</h2>
+    <div class="bento examples">
+      <div class="card">
+        <h3>Open the Skills Wizard</h3>
+        <pre>/skills</pre>
+        <p class="mini">Browse and create reusable skills.</p>
+      </div>
+      <div class="card">
+        <h3>Run a Custom Command</h3>
+        <pre>/review src/cli/app.tsx</pre>
+        <p class="mini">Expands a command template using $1.</p>
+      </div>
+      <div class="card">
+        <h3>Check Workspace Health</h3>
+        <pre>/doctor</pre>
+        <p class="mini">Scans your workspace and offers fixes.</p>
+      </div>
+      <div class="card">
+        <h3>Load a Project Context</h3>
+        <pre>/init-project</pre>
+        <p class="mini">Pick from workspace/projects with FF_PROJECT.md.</p>
+      </div>
+    </div>
+
+    <h2>Where Things Live (Power Users)</h2>
+    <table>
+      <thead>
+        <tr><th>Thing</th><th>Location</th><th>Notes</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Skills</td><td>workspace/skills</td><td>Reusable instruction files</td></tr>
+        <tr><td>Commands</td><td>workspace/commands</td><td>Markdown templates for slash commands</td></tr>
+        <tr><td>Agents</td><td>workspace/agents</td><td>Specialized agent personas</td></tr>
+        <tr><td>Projects</td><td>workspace/projects</td><td>FF_PROJECT.md or PROJECT.md per project</td></tr>
+        <tr><td>Autonomy logs</td><td>workspace/logs/autonomy</td><td>Run history for autonomy mode</td></tr>
+      </tbody>
+    </table>
+
+    <div class="footer">FF-Terminal Program User Guide</div>
+  </div>
+</body>
+</html>
