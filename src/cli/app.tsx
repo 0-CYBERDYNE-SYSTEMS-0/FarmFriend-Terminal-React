@@ -4020,80 +4020,97 @@ Use skill_draft first to create the draft, then skill_apply to create the final 
     if (ch) updateInputValue((v) => v + ch);
   });
 
+  const isChatMode = mode === "chat";
+  const transcriptVisibleCount = useMemo(() => {
+    if (isChatMode) return transcriptHeight;
+    const reduced = Math.floor(transcriptHeight / 4);
+    return Math.max(4, Math.min(10, reduced));
+  }, [isChatMode, transcriptHeight]);
+
+  const mainView = (
+    <MainView
+      displayMode={displayMode}
+      stdoutWidth={stdoutWidth}
+      connected={connected}
+      daemonVersion={daemonVersion}
+      currentProvider={currentProvider}
+      currentModel={currentModel}
+      mode={mode}
+      wizardIndex={wizardIndex}
+      mountRows={mountRows}
+      mountsIndex={mountsIndex}
+      workspaceDir={workspaceDir}
+      projectFilter={projectFilter}
+      projectRows={projectRows}
+      projectIndex={projectIndex}
+      modelIndex={modelIndex}
+      modelEditingKey={modelEditingKey}
+      modelEditValue={modelEditValue}
+      currentProfile={currentProfile}
+      profileName={profileName}
+      commandRows={commandRows}
+      commandsIndex={commandsIndex}
+      skillRows={skillRows}
+      skillsIndex={skillsIndex}
+      logRows={logRows}
+      logsIndex={logsIndex}
+      agentRows={agentRows}
+      agentsIndex={agentsIndex}
+      agentTemplates={agentTemplates}
+      agentMenuMode={agentMenuMode}
+      agentCreationMethodIndex={agentCreationMethodIndex}
+      agentTemplateIndex={agentTemplateIndex}
+      agentFormStep={agentFormStep}
+      agentFormData={agentFormData}
+      agentEditValue={agentEditValue}
+      skillMenuMode={skillMenuMode}
+      skillFormStep={skillFormStep}
+      skillFormData={skillFormData}
+      skillSkippedFields={skillSkippedFields}
+      skillEditValue={skillEditValue}
+      commandMenuMode={commandMenuMode}
+      commandFormStep={commandFormStep}
+      commandFormData={commandFormData}
+      commandSkippedFields={commandSkippedFields}
+      commandEditValue={commandEditValue}
+      themeName={themeName}
+    />
+  );
+
+  const transcript = (
+    <Transcript
+      lines={lines}
+      showThinking={showThinking}
+      showToolDetails={showToolDetails}
+      scrollOffset={scrollOffset}
+      visibleCount={transcriptVisibleCount}
+      themeName={themeName}
+    />
+  );
+
   return (
     <Box flexDirection="column" gap={1}>
-      <MainView
-        displayMode={displayMode}
-        stdoutWidth={stdoutWidth}
-        connected={connected}
-        daemonVersion={daemonVersion}
-        currentProvider={currentProvider}
-        currentModel={currentModel}
-        mode={mode}
-        wizardIndex={wizardIndex}
-        mountRows={mountRows}
-        mountsIndex={mountsIndex}
-        workspaceDir={workspaceDir}
-        projectFilter={projectFilter}
-        projectRows={projectRows}
-        projectIndex={projectIndex}
-        modelIndex={modelIndex}
-        modelEditingKey={modelEditingKey}
-        modelEditValue={modelEditValue}
-        currentProfile={currentProfile}
-        profileName={profileName}
-        commandRows={commandRows}
-        commandsIndex={commandsIndex}
-        skillRows={skillRows}
-        skillsIndex={skillsIndex}
-        logRows={logRows}
-        logsIndex={logsIndex}
-        agentRows={agentRows}
-        agentsIndex={agentsIndex}
-        agentTemplates={agentTemplates}
-        agentMenuMode={agentMenuMode}
-        agentCreationMethodIndex={agentCreationMethodIndex}
-        agentTemplateIndex={agentTemplateIndex}
-        agentFormStep={agentFormStep}
-        agentFormData={agentFormData}
-        agentEditValue={agentEditValue}
-        skillMenuMode={skillMenuMode}
-        skillFormStep={skillFormStep}
-        skillFormData={skillFormData}
-        skillSkippedFields={skillSkippedFields}
-        skillEditValue={skillEditValue}
-        commandMenuMode={commandMenuMode}
-        commandFormStep={commandFormStep}
-        commandFormData={commandFormData}
-        commandSkippedFields={commandSkippedFields}
-        commandEditValue={commandEditValue}
-        themeName={themeName}
-      />
-      <PlanPanel
-        sessionId={sessionId}
-        workspaceDir={workspaceDir}
-        visible={showPlanPanel}
-        themeName={themeName}
-      />
-      <Transcript
-        lines={lines}
-        showThinking={showThinking}
-        showToolDetails={showToolDetails}
-        scrollOffset={scrollOffset}
-        visibleCount={transcriptHeight}
-        themeName={themeName}
-      />
-      {mode === "chat" && currentTodos.length > 0 ? (
+      {isChatMode ? mainView : transcript}
+      {isChatMode ? (
+        <PlanPanel
+          sessionId={sessionId}
+          workspaceDir={workspaceDir}
+          visible={showPlanPanel}
+          themeName={themeName}
+        />
+      ) : null}
+      {isChatMode ? transcript : mainView}
+      {isChatMode && currentTodos.length > 0 ? (
         <InlineTodoStatus todos={currentTodos} themeName={themeName} />
       ) : null}
-      {mode === "chat" && runningSubagents.size > 0 ? (
+      {isChatMode && runningSubagents.size > 0 ? (
         <SubagentSwarm
           agents={Array.from(runningSubagents.values())}
           expanded={subagentsExpanded}
           themeName={themeName}
         />
       ) : null}
-      {mode === "chat" ? (
+      {isChatMode ? (
         <ChatPrompt
           inputStore={inputStore.current}
           operationMode={operationMode}
