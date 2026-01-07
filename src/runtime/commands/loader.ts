@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import type { Command, CommandFrontmatter } from "./types.js";
 import { parseFrontmatter } from "./parser.js";
+import { readMountsConfig } from "../config/mounts.js";
 
 /**
  * Recursively find all .md files in a directory
@@ -30,22 +31,14 @@ function findMarkdownFiles(dir: string, prefix = ""): string[] {
 }
 
 /**
- * Load all commands from workspace commands directory
- * Recursively searches for .md files and converts to command slugs
- * Example: commands/review.md → "review"
- *          commands/git/commit.md → "git:commit"
+ * Load commands from a single directory
  */
-export function loadCommands(workspaceDir: string): Map<string, Command> {
-  const commandsDir = path.join(workspaceDir, "commands");
-
+function loadCommandsFromDir(commandsDir: string, commands: Map<string, Command>): void {
   if (!fs.existsSync(commandsDir)) {
-    return new Map();
+    return;
   }
 
-  const commands = new Map<string, Command>();
-
   try {
-    // Find all .md files recursively
     const files = findMarkdownFiles(commandsDir);
 
     for (const file of files) {
@@ -53,18 +46,19 @@ export function loadCommands(workspaceDir: string): Map<string, Command> {
         const filePath = path.join(commandsDir, file);
         const content = fs.readFileSync(filePath, "utf8");
 
-        // Parse frontmatter and body
         const { frontmatter, body } = parseFrontmatter(content);
         const fm = frontmatter as CommandFrontmatter;
 
-        // Convert file path to slug
-        // commands/review.md → "review"
-        // commands/git/commit.md → "git:commit"
         const slug = file
           .replace(/\.md$/, "")
-          .replace(/\\/g, "/") // Windows compatibility
+          .replace(/\\/g, "/")
           .split("/")
           .join(":");
+
+        // Skip if already loaded (workspace takes priority)
+        if (commands.has(slug)) {
+          continue;
+        }
 
         const stats = fs.statSync(filePath);
 
@@ -83,18 +77,39 @@ export function loadCommands(workspaceDir: string): Map<string, Command> {
 
         commands.set(slug, command);
 
-        // Also register aliases
         if (command.aliases) {
           for (const alias of command.aliases) {
-            commands.set(alias.toLowerCase(), command);
+            if (!commands.has(alias.toLowerCase())) {
+              commands.set(alias.toLowerCase(), command);
+            }
           }
         }
       } catch (err) {
-        console.error(`Failed to load command ${file}:`, err);
+        // Skip invalid commands silently
       }
     }
   } catch (err) {
-    console.error(`Failed to load commands from ${commandsDir}:`, err);
+    // Skip unreadable directories silently
+  }
+}
+
+/**
+ * Load all commands from workspace and external directories
+ * Recursively searches for .md files and converts to command slugs
+ * Example: commands/review.md → "review"
+ *          commands/git/commit.md → "git:commit"
+ */
+export function loadCommands(workspaceDir: string): Map<string, Command> {
+  const commands = new Map<string, Command>();
+
+  // 1. Load from workspace (highest priority)
+  const workspaceCommandsDir = path.join(workspaceDir, "commands");
+  loadCommandsFromDir(workspaceCommandsDir, commands);
+
+  // 2. Load from extra_command_dirs in mount config
+  const config = readMountsConfig();
+  for (const dir of config.extra_command_dirs ?? []) {
+    loadCommandsFromDir(dir, commands);
   }
 
   return commands;

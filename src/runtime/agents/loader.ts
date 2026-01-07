@@ -2,18 +2,15 @@ import fs from "node:fs";
 import path from "node:path";
 import type { AgentConfig, AgentTemplate } from "./types.js";
 import { getBuiltInTemplates } from "./templates.js";
+import { readMountsConfig } from "../config/mounts.js";
 
 /**
- * Load all agent configs from workspace agents directory
+ * Load agents from a single directory
  */
-export function loadAgentConfigs(workspaceDir: string): Map<string, AgentConfig> {
-  const agentsDir = path.join(workspaceDir, "agents");
-
+function loadAgentsFromDir(agentsDir: string, agents: Map<string, AgentConfig>): void {
   if (!fs.existsSync(agentsDir)) {
-    return new Map();
+    return;
   }
-
-  const agents = new Map<string, AgentConfig>();
 
   try {
     const files = fs.readdirSync(agentsDir);
@@ -26,15 +23,33 @@ export function loadAgentConfigs(workspaceDir: string): Map<string, AgentConfig>
         const content = fs.readFileSync(filePath, "utf8");
         const config = JSON.parse(content) as AgentConfig;
 
-        if (config.id) {
+        // Skip if already loaded (workspace takes priority)
+        if (config.id && !agents.has(config.id)) {
           agents.set(config.id, config);
         }
       } catch (err) {
-        console.error(`Failed to load agent config ${file}:`, err);
+        // Skip invalid agents silently
       }
     }
   } catch (err) {
-    console.error(`Failed to load agents from ${agentsDir}:`, err);
+    // Skip unreadable directories silently
+  }
+}
+
+/**
+ * Load all agent configs from workspace and external directories
+ */
+export function loadAgentConfigs(workspaceDir: string): Map<string, AgentConfig> {
+  const agents = new Map<string, AgentConfig>();
+
+  // 1. Load from workspace (highest priority)
+  const workspaceAgentsDir = path.join(workspaceDir, "agents");
+  loadAgentsFromDir(workspaceAgentsDir, agents);
+
+  // 2. Load from extra_agent_dirs in mount config
+  const config = readMountsConfig();
+  for (const dir of config.extra_agent_dirs ?? []) {
+    loadAgentsFromDir(dir, agents);
   }
 
   return agents;

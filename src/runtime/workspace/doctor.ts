@@ -1,6 +1,21 @@
 import fs from "node:fs";
 import path from "node:path";
 import { ffHomeDir } from "../config/ffHome.js";
+import {
+  discoverExternalResources,
+  formatDiscoveryReport,
+  countUnintegratedResources,
+  getUniqueSources,
+  type DiscoveryResult
+} from "./discovery.js";
+
+export {
+  discoverExternalResources,
+  formatDiscoveryReport,
+  countUnintegratedResources,
+  getUniqueSources,
+  type DiscoveryResult
+};
 
 export type ValidationIssueType = 'missing_directory' | 'legacy_data' | 'misplaced_file' | 'invalid_structure';
 export type ValidationSeverity = 'error' | 'warning' | 'info';
@@ -19,6 +34,7 @@ export type ValidationResult = {
   scannedPaths: string[];
   timestamp: string;
   workspaceDir: string;
+  discoveries?: DiscoveryResult;
 };
 
 const CANONICAL_DIRECTORIES = [
@@ -151,7 +167,7 @@ export function checkLegacyWorkspace(workspaceDir: string): ValidationIssue[] {
   return issues;
 }
 
-export async function validateWorkspace(workspaceDir: string): Promise<ValidationResult> {
+export async function validateWorkspace(workspaceDir: string, repoRoot?: string): Promise<ValidationResult> {
   const scannedPaths: string[] = [workspaceDir];
   const issues: ValidationIssue[] = [];
 
@@ -163,6 +179,10 @@ export async function validateWorkspace(workspaceDir: string): Promise<Validatio
 
   scannedPaths.push(ffHomeDir());
 
+  // Discover external resources
+  const discoveries = await discoverExternalResources(workspaceDir, repoRoot);
+  scannedPaths.push(...discoveries.scannedLocations);
+
   const ok = issues.every(issue => issue.severity !== 'error');
 
   return {
@@ -170,7 +190,8 @@ export async function validateWorkspace(workspaceDir: string): Promise<Validatio
     issues,
     scannedPaths,
     timestamp: new Date().toISOString(),
-    workspaceDir
+    workspaceDir,
+    discoveries
   };
 }
 

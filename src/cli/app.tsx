@@ -9,7 +9,7 @@ import { readConfig, writeConfig } from "../runtime/profiles/storage.js";
 import type { Profile } from "../runtime/profiles/types.js";
 import type { ExecutionPlan } from "../runtime/planning/types.js";
 import { loadToolSchemas } from "../runtime/tools/toolSchemas.js";
-import { readMountsConfig, setMountEnabled } from "../runtime/config/mounts.js";
+import { readMountsConfig, setMountEnabled, addExtraDirs } from "../runtime/config/mounts.js";
 import { findRepoRoot } from "../runtime/config/repoRoot.js";
 import { resolveWorkspaceDir } from "../runtime/config/paths.js";
 import { resolveConfig } from "../runtime/config/loadConfig.js";
@@ -20,7 +20,14 @@ import { listSkillStubs } from "../runtime/tools/implementations/skills.js";
 import type { Command } from "../runtime/commands/types.js";
 import type { AgentConfig, AgentTemplate } from "../runtime/agents/types.js";
 import type { SkillStub } from "../runtime/tools/implementations/skills.js";
-import { validateWorkspace, generateReport } from "../runtime/workspace/doctor.js";
+import {
+  validateWorkspace,
+  generateReport,
+  formatDiscoveryReport,
+  countUnintegratedResources,
+  getUniqueSources,
+  type DiscoveryResult
+} from "../runtime/workspace/doctor.js";
 import { planMigration, executeMigration } from "../runtime/workspace/migration.js";
 import { isValidSessionId as isValidSessionIdFormat } from "../shared/ids.js";
 import { getTheme, getCurrentTheme, color, type ThemeName } from "./colorTheme.js";
@@ -1129,7 +1136,8 @@ type MainViewProps = {
   skillFormData: Record<string, any>;
   skillSkippedFields: Set<string>;
   skillEditValue: string;
-  commandMenuMode: "list" | "form" | "preview";
+  commandMenuMode: "list" | "creation_method" | "form" | "preview" | "ai_description";
+  commandCreationMethodIndex: number;
   commandFormStep: number;
   commandFormData: Record<string, any>;
   commandSkippedFields: Set<string>;
@@ -1180,6 +1188,7 @@ const MainView = memo(function MainView(props: MainViewProps) {
     skillSkippedFields,
     skillEditValue,
     commandMenuMode,
+    commandCreationMethodIndex,
     commandFormStep,
     commandFormData,
     commandSkippedFields,
@@ -1352,6 +1361,49 @@ const MainView = memo(function MainView(props: MainViewProps) {
           {commandRows.length > 0 && (
             <Text dimColor>{commandRows[commandsIndex]?.template?.slice(0, 60)}...</Text>
           )}
+        </Box>
+      );
+    }
+
+    // Creation method selection menu
+    if (commandMenuMode === "creation_method") {
+      const creationMethods = [
+        { label: "Create from scratch", description: "Manual form entry" },
+        { label: "AI-assisted creation", description: "Describe what you want" }
+      ];
+
+      return (
+        <Box flexDirection="column">
+          <Text>Create New Command</Text>
+          <Text dimColor>↑/↓: select • Enter: choose • Esc: back</Text>
+          <Box flexDirection="column" marginTop={1}>
+            {creationMethods.map((method, idx) => {
+              const selected = idx === commandCreationMethodIndex;
+              return (
+                <Box key={idx} flexDirection="column">
+                  <Text color={selected ? "cyan" : "white"} dimColor={!selected}>
+                    {selected ? "› " : "  "}
+                    {method.label}
+                  </Text>
+                  {selected && <Text dimColor>  {method.description}</Text>}
+                </Box>
+              );
+            })}
+          </Box>
+        </Box>
+      );
+    }
+
+    // AI description input
+    if (commandMenuMode === "ai_description") {
+      return (
+        <Box flexDirection="column">
+          <Text>AI-Assisted Command Creation</Text>
+          <Text dimColor>Describe what you want • Enter when done • Esc: cancel</Text>
+          <Box flexDirection="column" marginTop={1}>
+            <Text dimColor>Description:</Text>
+            <Text>{commandEditValue || "(type here)"}</Text>
+          </Box>
         </Box>
       );
     }
@@ -1830,7 +1882,8 @@ function App(props: { port: number }) {
   const [skillSkippedFields, setSkillSkippedFields] = useState<Set<string>>(new Set());
   const [skillEditValue, setSkillEditValue] = useState("");
 
-  const [commandMenuMode, setCommandMenuMode] = useState<"list" | "form" | "preview">("list");
+  const [commandMenuMode, setCommandMenuMode] = useState<"list" | "creation_method" | "form" | "preview" | "ai_description">("list");
+  const [commandCreationMethodIndex, setCommandCreationMethodIndex] = useState(0);
   const [commandFormStep, setCommandFormStep] = useState(0);
   const [commandFormData, setCommandFormData] = useState<Record<string, any>>({});
   const [commandSkippedFields, setCommandSkippedFields] = useState<Set<string>>(new Set());
@@ -1854,6 +1907,8 @@ function App(props: { port: number }) {
 
   const [doctorRunning, setDoctorRunning] = useState(false);
   const [doctorWaitingForConfirm, setDoctorWaitingForConfirm] = useState(false);
+  const [doctorWaitingForIntegration, setDoctorWaitingForIntegration] = useState(false);
+  const [doctorDiscoveries, setDoctorDiscoveries] = useState<DiscoveryResult | null>(null);
 
   const mountsCfg = useMemo(() => readMountsConfig(), [mountsRefresh]);
   const mountRows = useMemo(
@@ -2912,11 +2967,126 @@ Then apply it with agent_apply to save the agent config.`;
         return;
       }
       if (ch === "n") {
-        setCommandMenuMode("form");
+        setCommandMenuMode("creation_method");
+        setCommandCreationMethodIndex(0);
         setCommandFormStep(0);
         setCommandFormData({});
         setCommandSkippedFields(new Set());
         setCommandEditValue("");
+        return;
+      }
+      return;
+    }
+
+    // Commands wizard - creation method selection
+    if (mode === "commands" && commandMenuMode === "creation_method") {
+      if (key.escape) {
+        setCommandMenuMode("list");
+        return;
+      }
+      if (key.upArrow) {
+        setCommandCreationMethodIndex((i) => Math.max(0, i - 1));
+        return;
+      }
+      if (key.downArrow) {
+        setCommandCreationMethodIndex((i) => Math.min(1, i + 1));
+        return;
+      }
+      if (key.return) {
+        if (commandCreationMethodIndex === 0) {
+          // Create from scratch
+          setCommandMenuMode("form");
+          setCommandFormStep(0);
+          setCommandFormData({});
+          setCommandSkippedFields(new Set());
+          setCommandEditValue("");
+        } else if (commandCreationMethodIndex === 1) {
+          // AI-assisted
+          setCommandMenuMode("ai_description");
+          setCommandEditValue("");
+        }
+        return;
+      }
+      return;
+    }
+
+    // Commands wizard - AI description input
+    if (mode === "commands" && commandMenuMode === "ai_description") {
+      if (key.escape) {
+        setCommandMenuMode("creation_method");
+        setCommandEditValue("");
+        return;
+      }
+      if (key.return) {
+        const description = commandEditValue.trim();
+        if (!description) {
+          pushLines({ kind: "system", text: "Description cannot be empty." });
+          return;
+        }
+        const aiPrompt = `Create a custom slash command using command_draft tool based on this description:
+
+"${description}"
+
+IMPORTANT: This creates a SLASH COMMAND (like /review or /cleanup), NOT a tool. The template should be MARKDOWN INSTRUCTIONS that tell the agent what to do when the user types the slash command.
+
+Generate appropriate values for:
+- command_slug: unique kebab-case identifier (e.g., "review-code", "cleanup-workspace")
+- description: one-line description shown in /help
+- template: MARKDOWN INSTRUCTIONS that will guide the agent (see example below)
+- tags: array of relevant tags for categorization
+
+EXAMPLE TEMPLATE FORMAT (markdown with clear sections and instructions):
+\`\`\`markdown
+# [Task Name]
+
+You are helping the user with [describe what this command does].
+
+## 🎯 OBJECTIVE
+[Clear statement of what this command accomplishes]
+
+## 📋 INSTRUCTIONS
+
+1. **[First Step Name]**
+   - [Detailed instruction]
+   - [What to check or verify]
+
+2. **[Second Step Name]**
+   - [Detailed instruction]
+   - [Expected outcome]
+
+3. **[Third Step Name]**
+   - [Detailed instruction]
+   - [Best practices]
+
+${description.includes('$1') || description.includes('argument') || description.includes('focus') ? '\n## 🔍 FOCUS AREA\n$1 (user provided argument)\n' : ''}
+## ✅ SUCCESS CRITERIA
+- [What defines successful completion]
+- [Quality standards to meet]
+
+---
+Be thorough, accurate, and helpful.
+\`\`\`
+
+The template should be natural language instructions/prompts, NOT JSON or tool specs.
+
+Call command_draft with these parameters. Show me the preview but DO NOT call command_apply yet. Wait for my confirmation.`;
+
+        pushLines({ kind: "system", text: "Creating command from description..." });
+        sendTurn(aiPrompt, { echoUser: false });
+        setMode("chat");
+        setCommandMenuMode("list");
+        setCommandFormStep(0);
+        setCommandFormData({});
+        setCommandSkippedFields(new Set());
+        setCommandEditValue("");
+        return;
+      }
+      if (key.backspace || key.delete) {
+        setCommandEditValue((v) => v.slice(0, -1));
+        return;
+      }
+      if (ch) {
+        setCommandEditValue((v) => v + ch);
         return;
       }
       return;
@@ -2929,7 +3099,7 @@ Then apply it with agent_apply to save the agent config.`;
       const fieldKeys = ["command_slug", "description", "template", "tags"];
 
       if (key.escape) {
-        setCommandMenuMode("list");
+        setCommandMenuMode("creation_method");
         setCommandFormStep(0);
         setCommandFormData({});
         setCommandSkippedFields(new Set());
@@ -3680,6 +3850,56 @@ Use skill_draft first to create the draft, then skill_apply to create the final 
       const currentInput = inputStore.current.value;
       let trimmed = currentInput.trim();
       if (trimmed.length) {
+        // Check if waiting for doctor integration confirmation
+        if (doctorWaitingForIntegration && doctorDiscoveries) {
+          const response = trimmed.toLowerCase();
+          if (response === "y" || response === "yes") {
+            setDoctorWaitingForIntegration(false);
+            pushLines({ kind: "system", text: "Integrating external resources..." });
+
+            const sources = getUniqueSources(doctorDiscoveries);
+
+            // Add skill directories
+            if (sources.skillDirs.length > 0) {
+              addExtraDirs("skills", sources.skillDirs);
+              for (const dir of sources.skillDirs) {
+                pushLines({ kind: "system", text: `  Added skills: ${dir}` });
+              }
+            }
+
+            // Add command directories
+            if (sources.commandDirs.length > 0) {
+              addExtraDirs("commands", sources.commandDirs);
+              for (const dir of sources.commandDirs) {
+                pushLines({ kind: "system", text: `  Added commands: ${dir}` });
+              }
+            }
+
+            // Add agent directories
+            if (sources.agentDirs.length > 0) {
+              addExtraDirs("agents", sources.agentDirs);
+              for (const dir of sources.agentDirs) {
+                pushLines({ kind: "system", text: `  Added agents: ${dir}` });
+              }
+            }
+
+            pushLines({ kind: "system", text: "Integration complete. Resources will be available on next load." });
+            setDoctorDiscoveries(null);
+            setInputValue("");
+            return;
+          } else if (response === "n" || response === "no") {
+            setDoctorWaitingForIntegration(false);
+            setDoctorDiscoveries(null);
+            pushLines({ kind: "system", text: "Integration skipped." });
+            setInputValue("");
+            return;
+          } else {
+            pushLines({ kind: "system", text: "Please answer 'y' or 'n'" });
+            setInputValue("");
+            return;
+          }
+        }
+
         // Check if waiting for doctor confirmation
         if (doctorWaitingForConfirm) {
           const response = trimmed.toLowerCase();
@@ -3960,9 +4180,35 @@ Use skill_draft first to create the draft, then skill_apply to create the final 
 
             (async () => {
               try {
-                const result = await validateWorkspace(workspaceDir);
+                const result = await validateWorkspace(workspaceDir, repoRoot || undefined);
                 const report = generateReport(result);
                 pushLines({ kind: "system", text: report });
+
+                // Show discovery results
+                if (result.discoveries) {
+                  const discoveryReport = formatDiscoveryReport(result.discoveries);
+                  pushLines({ kind: "system", text: discoveryReport });
+
+                  // Count unintegrated external resources
+                  const counts = countUnintegratedResources(result.discoveries);
+                  if (counts.unique > 0) {
+                    const dupeNote = counts.total > counts.unique
+                      ? ` (${counts.total - counts.unique} duplicates will be skipped)`
+                      : "";
+                    const breakdown = [
+                      counts.skills > 0 ? `${counts.skills} skills` : "",
+                      counts.commands > 0 ? `${counts.commands} commands` : "",
+                      counts.agents > 0 ? `${counts.agents} agents` : ""
+                    ].filter(Boolean).join(", ");
+                    pushLines({
+                      kind: "system",
+                      text: `\nIntegrate ${counts.unique} unique resources (${breakdown})${dupeNote}? (y/n)`
+                    });
+                    setDoctorDiscoveries(result.discoveries);
+                    setDoctorWaitingForIntegration(true);
+                    return;
+                  }
+                }
 
                 if (result.issues.length > 0) {
                   pushLines({
@@ -3979,6 +4225,7 @@ Use skill_draft first to create the draft, then skill_apply to create the final 
                   text: `Doctor error: ${err instanceof Error ? err.message : String(err)}`
                 });
                 setDoctorWaitingForConfirm(false);
+                setDoctorWaitingForIntegration(false);
               } finally {
                 setDoctorRunning(false);
               }
@@ -4027,70 +4274,56 @@ Use skill_draft first to create the draft, then skill_apply to create the final 
     return Math.max(4, Math.min(10, reduced));
   }, [isChatMode, transcriptHeight]);
 
-  const mainView = (
-    <MainView
-      displayMode={displayMode}
-      stdoutWidth={stdoutWidth}
-      connected={connected}
-      daemonVersion={daemonVersion}
-      currentProvider={currentProvider}
-      currentModel={currentModel}
-      mode={mode}
-      wizardIndex={wizardIndex}
-      mountRows={mountRows}
-      mountsIndex={mountsIndex}
-      workspaceDir={workspaceDir}
-      projectFilter={projectFilter}
-      projectRows={projectRows}
-      projectIndex={projectIndex}
-      modelIndex={modelIndex}
-      modelEditingKey={modelEditingKey}
-      modelEditValue={modelEditValue}
-      currentProfile={currentProfile}
-      profileName={profileName}
-      commandRows={commandRows}
-      commandsIndex={commandsIndex}
-      skillRows={skillRows}
-      skillsIndex={skillsIndex}
-      logRows={logRows}
-      logsIndex={logsIndex}
-      agentRows={agentRows}
-      agentsIndex={agentsIndex}
-      agentTemplates={agentTemplates}
-      agentMenuMode={agentMenuMode}
-      agentCreationMethodIndex={agentCreationMethodIndex}
-      agentTemplateIndex={agentTemplateIndex}
-      agentFormStep={agentFormStep}
-      agentFormData={agentFormData}
-      agentEditValue={agentEditValue}
-      skillMenuMode={skillMenuMode}
-      skillFormStep={skillFormStep}
-      skillFormData={skillFormData}
-      skillSkippedFields={skillSkippedFields}
-      skillEditValue={skillEditValue}
-      commandMenuMode={commandMenuMode}
-      commandFormStep={commandFormStep}
-      commandFormData={commandFormData}
-      commandSkippedFields={commandSkippedFields}
-      commandEditValue={commandEditValue}
-      themeName={themeName}
-    />
-  );
-
-  const transcript = (
-    <Transcript
-      lines={lines}
-      showThinking={showThinking}
-      showToolDetails={showToolDetails}
-      scrollOffset={scrollOffset}
-      visibleCount={transcriptVisibleCount}
-      themeName={themeName}
-    />
-  );
-
   return (
     <Box flexDirection="column" gap={1}>
-      {isChatMode ? mainView : transcript}
+      <MainView
+        displayMode={displayMode}
+        stdoutWidth={stdoutWidth}
+        connected={connected}
+        daemonVersion={daemonVersion}
+        currentProvider={currentProvider}
+        currentModel={currentModel}
+        mode={mode}
+        wizardIndex={wizardIndex}
+        mountRows={mountRows}
+        mountsIndex={mountsIndex}
+        workspaceDir={workspaceDir}
+        projectFilter={projectFilter}
+        projectRows={projectRows}
+        projectIndex={projectIndex}
+        modelIndex={modelIndex}
+        modelEditingKey={modelEditingKey}
+        modelEditValue={modelEditValue}
+        currentProfile={currentProfile}
+        profileName={profileName}
+        commandRows={commandRows}
+        commandsIndex={commandsIndex}
+        skillRows={skillRows}
+        skillsIndex={skillsIndex}
+        logRows={logRows}
+        logsIndex={logsIndex}
+        agentRows={agentRows}
+        agentsIndex={agentsIndex}
+        agentTemplates={agentTemplates}
+        agentMenuMode={agentMenuMode}
+        agentCreationMethodIndex={agentCreationMethodIndex}
+        agentTemplateIndex={agentTemplateIndex}
+        agentFormStep={agentFormStep}
+        agentFormData={agentFormData}
+        agentEditValue={agentEditValue}
+        skillMenuMode={skillMenuMode}
+        skillFormStep={skillFormStep}
+        skillFormData={skillFormData}
+        skillSkippedFields={skillSkippedFields}
+        skillEditValue={skillEditValue}
+        commandMenuMode={commandMenuMode}
+        commandCreationMethodIndex={commandCreationMethodIndex}
+        commandFormStep={commandFormStep}
+        commandFormData={commandFormData}
+        commandSkippedFields={commandSkippedFields}
+        commandEditValue={commandEditValue}
+        themeName={themeName}
+      />
       {isChatMode ? (
         <PlanPanel
           sessionId={sessionId}
@@ -4099,7 +4332,14 @@ Use skill_draft first to create the draft, then skill_apply to create the final 
           themeName={themeName}
         />
       ) : null}
-      {isChatMode ? transcript : mainView}
+      <Transcript
+        lines={lines}
+        showThinking={showThinking}
+        showToolDetails={showToolDetails}
+        scrollOffset={scrollOffset}
+        visibleCount={transcriptVisibleCount}
+        themeName={themeName}
+      />
       {isChatMode && currentTodos.length > 0 ? (
         <InlineTodoStatus todos={currentTodos} themeName={themeName} />
       ) : null}
