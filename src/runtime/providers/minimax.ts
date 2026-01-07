@@ -108,7 +108,9 @@ export function minimaxProvider(params: {
 
   const modelMapping: Record<string, string> = {
     "minimax-m2": "MiniMax-M2",
+    "minimax-m2.1": "MiniMax-M2.1",
     "MiniMax-M2": "MiniMax-M2",
+    "MiniMax-M2.1": "MiniMax-M2.1",
     "claude-3-5-sonnet-20241022": "MiniMax-M2",
     "claude-3-5-haiku-20241022": "MiniMax-M2",
     "claude-3-haiku": "MiniMax-M2",
