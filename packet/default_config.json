@@ -80,5 +80,13 @@
   "force_tool_calls": true,
   "force_tool_calls_threshold": 2,
   "glm_thinking_mode": "disabled",
-  "_providers": {}
+  "_providers": {},
+  "whatsapp": {
+    "enabled": false,
+    "allowFrom": [],
+    "groups": [],
+    "dmPolicy": "pairing",
+    "autoReconnect": true,
+    "qrTimeout": 60000
+  }
 }

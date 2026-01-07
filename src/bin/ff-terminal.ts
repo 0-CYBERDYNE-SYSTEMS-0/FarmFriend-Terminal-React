@@ -53,11 +53,18 @@ function usage(): void {
   ff-terminal profile default <name>
   ff-terminal profile delete <name>
   ff-terminal profile tool-keys
+  ff-terminal whatsapp <command>
   --allow-macos-control       Enable macOS automation tool (FF_ALLOW_MACOS_CONTROL=1)
   --allow-browser-use         Enable browser-use automation (FF_ALLOW_BROWSER_USE=1)
   --autonomy-auto             Auto-start autonomy loop if agent requests it (run mode)
   --tts                       Enable text-to-speech voice output
   --voice <voice>             Set TTS voice (af_heart, af_bella, af_sarah, am_adam, am_michael, bf_emma, bm_george)
+
+WhatsApp Commands:
+  ff-terminal whatsapp login         Link WhatsApp device via QR code
+  ff-terminal whatsapp status        Show WhatsApp connection status
+  ff-terminal whatsapp approve <code>  Approve a pairing request
+  ff-terminal whatsapp help          Show all WhatsApp commands
 `);
 }
 
@@ -1136,6 +1143,12 @@ async function run(): Promise<void> {
 
     usage();
     process.exit(1);
+  }
+
+  if (cmd === "whatsapp") {
+    const { handleWhatsAppCommand } = await import("../whatsapp/cli.js");
+    await handleWhatsAppCommand(rest);
+    return;
   }
 
   usage();

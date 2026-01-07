@@ -29,11 +29,13 @@
   },
   "dependencies": {
     "@ast-grep/cli": "^0.40.1",
+    "@whiskeysockets/baileys": "^6.7.9",
     "busboy": "^1.6.0",
     "ink": "^5.0.0",
     "inquirer": "^9.2.12",
     "luxon": "^3.7.2",
     "playwright": "^1.57.0",
+    "qrcode-terminal": "^0.12.0",
     "react": "^18.3.1",
     "rrule": "^2.8.1",
     "ws": "^8.18.0"
@@ -44,6 +46,7 @@
     "@types/inquirer": "^9.0.8",
     "@types/luxon": "^3.7.1",
     "@types/node": "^22.10.2",
+    "@types/qrcode-terminal": "^0.12.2",
     "@types/react": "^18.3.18",
     "@types/ws": "^8.5.12",
     "@vitest/coverage-v8": "^4.0.16",

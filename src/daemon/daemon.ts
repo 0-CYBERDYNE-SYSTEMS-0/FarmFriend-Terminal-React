@@ -103,6 +103,37 @@ export async function startDaemon(): Promise<void> {
   const registry = new ToolRegistry();
   registerAllTools(registry, { workspaceDir });
 
+  // Start WhatsApp integration if enabled
+  let whatsappServer: any = null;
+  const whatsappConfig = (runtimeCfg as any).whatsapp;
+  if (whatsappConfig?.enabled) {
+    try {
+      const { WhatsAppServer } = await import("../whatsapp/whatsappServer.js");
+      whatsappServer = new WhatsAppServer(whatsappConfig, registry, workspaceDir, repoRoot);
+      await whatsappServer.start();
+      // eslint-disable-next-line no-console
+      console.log("✓ WhatsApp integration started");
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error("Failed to start WhatsApp integration:", error);
+    }
+  }
+
+  // Cleanup on process exit
+  process.on("SIGINT", async () => {
+    if (whatsappServer) {
+      await whatsappServer.stop();
+    }
+    process.exit(0);
+  });
+
+  process.on("SIGTERM", async () => {
+    if (whatsappServer) {
+      await whatsappServer.stop();
+    }
+    process.exit(0);
+  });
+
   wss.on("connection", (ws) => {
     let sessionId: string | null = null;
     let currentTurn: { id: string; controller: AbortController } | null = null;
