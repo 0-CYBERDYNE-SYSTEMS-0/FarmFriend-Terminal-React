@@ -83,6 +83,97 @@
   {
     "type": "function",
     "function": {
+      "name": "agent_draft",
+      "description": "Draft a specialized agent configuration before saving. Creates a preview in the drafts directory.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "agent_id": {
+            "type": "string",
+            "description": "Unique identifier for the agent (lowercase, 2-64 chars of a-z, 0-9, _, -)"
+          },
+          "name": {
+            "type": "string",
+            "description": "Human-friendly name for the agent"
+          },
+          "description": {
+            "type": "string",
+            "description": "Description of what the agent does"
+          },
+          "systemPromptAddition": {
+            "type": "string",
+            "description": "Additional system prompt instructions for this agent"
+          },
+          "mode": {
+            "type": "string",
+            "description": "Operation mode: auto, confirm, read_only, or planning",
+            "enum": ["auto", "confirm", "read_only", "planning"]
+          },
+          "allowedTools": {
+            "type": "array",
+            "description": "Optional list of allowed tool names (empty array for all tools)",
+            "items": {
+              "type": "string"
+            }
+          },
+          "deniedTools": {
+            "type": "array",
+            "description": "Optional list of denied tool names",
+            "items": {
+              "type": "string"
+            }
+          },
+          "maxTurns": {
+            "type": "integer",
+            "description": "Optional maximum number of turns for this agent"
+          },
+          "tags": {
+            "type": "array",
+            "description": "Optional tags for categorization",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "agent_id",
+          "name",
+          "description",
+          "systemPromptAddition"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "agent_apply",
+      "description": "Apply a drafted agent configuration, writing it to the agents directory",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "draft_id": {
+            "type": "string",
+            "description": "The draft ID (agent_id) to apply"
+          },
+          "force_overwrite": {
+            "type": "boolean",
+            "description": "If true, overwrites existing agent with same ID"
+          },
+          "cleanup_draft": {
+            "type": "boolean",
+            "description": "If true, removes the draft file after applying"
+          }
+        },
+        "required": [
+          "draft_id"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
       "name": "ask_oracle",
       "description": "Escalate only when normal reasoning is exhausted or when a user explicitly requests it. Ask Oracle summons DeepSeek V3.2 via OpenRouter for ultra-hard problems, intricate code debugging, or Oracle-level insight, returning a deeply reasoned answer plus optional reasoning traces.",
       "parameters": {
@@ -115,6 +206,69 @@
         },
         "required": [
           "question"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "command_draft",
+      "description": "Draft a custom command before saving. Creates a preview in the drafts directory.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "command_slug": {
+            "type": "string",
+            "description": "Unique slug for the command (lowercase, 2-64 chars of a-z, 0-9, -, _). Example: 'deploy-app'"
+          },
+          "description": {
+            "type": "string",
+            "description": "Short description of what the command does"
+          },
+          "template": {
+            "type": "string",
+            "description": "Command template content. Use $1, $2, etc. for arguments."
+          },
+          "tags": {
+            "type": "array",
+            "description": "Optional tags for categorization",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "command_slug",
+          "description",
+          "template"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "command_apply",
+      "description": "Apply a drafted command, writing it to the commands directory",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "draft_id": {
+            "type": "string",
+            "description": "The draft ID (command slug) to apply"
+          },
+          "force_overwrite": {
+            "type": "boolean",
+            "description": "If true, overwrites existing command with same slug"
+          },
+          "cleanup_draft": {
+            "type": "boolean",
+            "description": "If true, removes the draft file after applying"
+          }
+        },
+        "required": [
+          "draft_id"
         ]
       }
     }
@@ -1104,43 +1258,6 @@
         "required": [
           "task"
         ]
-      }
-    }
-  },
-  {
-    "type": "function",
-    "function": {
-      "name": "smart_cleanup",
-      "description": "Clean workspace with intelligent rules (age, size, file type).",
-      "parameters": {
-        "type": "object",
-        "properties": {
-          "dry_run": {
-            "type": "boolean",
-            "description": "Show what would be deleted without actually deleting."
-          },
-          "age_days": {
-            "type": "integer",
-            "description": "Delete files older than this many days (0 to ignore age)."
-          },
-          "max_file_size_mb": {
-            "type": "integer",
-            "description": "Delete files larger than this many MB (0 to ignore size)."
-          },
-          "delete_temp": {
-            "type": "boolean",
-            "description": "Delete all files in temp/ directory."
-          },
-          "delete_logs": {
-            "type": "boolean",
-            "description": "Delete log files older than age_days."
-          },
-          "workspace_path": {
-            "type": "string",
-            "description": "Custom workspace path (optional)."
-          }
-        },
-        "required": []
       }
     }
   },

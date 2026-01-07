@@ -477,6 +477,7 @@ export async function* runAgentTurn(params: {
       let assistantContent = "";
       let emittedAnyContent = false;
       let emittedAnyThinking = false;
+      let sawAwaitingInput = false;
 
       const shouldForceTools = forceToolCalls && consecutiveNoAction >= 2;
 
@@ -497,6 +498,7 @@ export async function* runAgentTurn(params: {
         sessionId
       })) {
         if (ev.type === "content") {
+          if (ev.delta.includes("[AWAITING_INPUT]")) sawAwaitingInput = true;
           // Hide stop token from UI if it appears.
           const cleaned = ev.delta.replace("[AWAITING_INPUT]", "");
           if (cleaned) {
@@ -531,6 +533,7 @@ export async function* runAgentTurn(params: {
           // Provider error is terminal - stop processing this iteration
           break;
         } else if (ev.type === "final") {
+          if (ev.content.includes("[AWAITING_INPUT]")) sawAwaitingInput = true;
           assistantContent = ev.content.replace("[AWAITING_INPUT]", "");
           toolCalls = ev.toolCalls;
         }
@@ -547,7 +550,8 @@ export async function* runAgentTurn(params: {
       turn_id: turnId,
       iteration: i + 1,
       content_preview: smartTruncate(assistantContent, 800),
-      tool_calls_count: toolCalls.length
+      tool_calls_count: toolCalls.length,
+      awaiting_input_seen: sawAwaitingInput
     });
 
     // Thought loop detection: Check if agent is repeating same thinking pattern

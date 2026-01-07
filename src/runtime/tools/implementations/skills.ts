@@ -101,7 +101,10 @@ function getSkillRoots(params: { workspaceDir?: string; repoRoot?: string }): Ar
   const bundledRoot = bundledSkillsRoot();
   const roots: Array<{ root: string; rootKind: SkillRecord["rootKind"] }> = [];
 
-  if (params.workspaceDir) roots.push({ root: path.join(params.workspaceDir, "skills"), rootKind: "skills" });
+  if (params.workspaceDir) {
+    roots.push({ root: path.join(params.workspaceDir, "skills"), rootKind: "skills" });
+    roots.push({ root: path.join(params.workspaceDir, "commands"), rootKind: "markdown_commands" });
+  }
   roots.push({ root: bundledRoot, rootKind: "skills" });
 
   // External mounts are opt-in (read-only) via ~/.ff-terminal/config.json.

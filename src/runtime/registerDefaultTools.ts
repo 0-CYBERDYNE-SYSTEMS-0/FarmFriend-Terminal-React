@@ -23,7 +23,6 @@ import { listTemplatesTool, projectTemplateTool } from "./tools/implementations/
 import { skillApplyTool, skillDraftTool, skillSequencerTool } from "./tools/implementations/skillsWorkflow.js";
 import { agentApplyTool, agentDraftTool } from "./tools/implementations/agentsWorkflow.js";
 import { commandApplyTool, commandDraftTool } from "./tools/implementations/commandsWorkflow.js";
-import { smartCleanupTool } from "./tools/implementations/smartCleanup.js";
 import { analyzeDataTool } from "./tools/implementations/analyzeData.js";
 import { notebookEditTool } from "./tools/implementations/notebookEdit.js";
 import { generateImageGeminiTool, analyzeImageGeminiTool, editImageGeminiTool, analyzeVideoGeminiTool } from "./tools/implementations/mediaTools.js";
@@ -82,9 +81,6 @@ export function registerDefaultTools(registry: ToolRegistry, opts: { workspaceDi
   // Commands workflow helpers (draft/apply).
   registry.register("command_draft", async (args) => commandDraftTool(args));
   registry.register("command_apply", async (args) => commandApplyTool(args));
-
-  // Workspace cleanup.
-  registry.register("smart_cleanup", async (args) => smartCleanupTool(args));
 
   // Data + notebooks.
   registry.register("analyze_data", async (args) => analyzeDataTool(args));

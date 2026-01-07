@@ -1,5 +1,5 @@
 {
-  "tool_count": 43,
+  "tool_count": 42,
   "tools": [
     {
       "name": "analyze_data",
@@ -164,11 +164,6 @@
     {
       "name": "skill_sequencer",
       "description": "Execute multi-skill workflows with intelligent sequencing and compatibility checking.",
-      "category": "system"
-    },
-    {
-      "name": "smart_cleanup",
-      "description": "Clean workspace with intelligent rules (age, size, file type).",
       "category": "system"
     },
     {
