@@ -1,0 +1,339 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Agriculture-First UX Dashboard</title>
+  <style>
+    :root {
+      --bg: #0b1110;
+      --bg-2: #111a16;
+      --ink: #f2f7f3;
+      --muted: #a4b6ad;
+      --accent: #8bd45c;
+      --accent-2: #f2c94c;
+      --accent-3: #6fb1ff;
+      --accent-4: #ff7a59;
+      --card: rgba(16,22,20,0.92);
+      --grid: rgba(255,255,255,0.05);
+      --shadow: 0 14px 32px rgba(0,0,0,0.45);
+      --radius: 18px;
+      --display: "Georgia", "Palatino", "Book Antiqua", serif;
+      --mono: "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: var(--display);
+      color: var(--ink);
+      background:
+        radial-gradient(1200px 900px at 90% 10%, rgba(111,177,255,0.14), transparent 60%),
+        radial-gradient(1000px 700px at 10% 80%, rgba(139,212,92,0.16), transparent 60%),
+        linear-gradient(160deg, var(--bg), var(--bg-2));
+      min-height: 100vh;
+    }
+
+    .grid-overlay {
+      position: fixed;
+      inset: 0;
+      background-image:
+        linear-gradient(var(--grid) 1px, transparent 1px),
+        linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+      background-size: 30px 30px;
+      opacity: 0.18;
+      pointer-events: none;
+    }
+
+    header {
+      padding: 40px 6vw 18px;
+      border-bottom: 1px solid rgba(255,255,255,0.08);
+      display: grid;
+      gap: 12px;
+    }
+
+    h1 { margin: 0; font-size: clamp(28px, 3vw, 46px); }
+    .subtitle { margin: 0; color: var(--muted); line-height: 1.5; max-width: 980px; }
+
+    main {
+      padding: 26px 6vw 48px;
+      display: grid;
+      gap: 20px;
+    }
+
+    .panel {
+      display: grid;
+      gap: 18px;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    }
+
+    .card {
+      background: var(--card);
+      border-radius: var(--radius);
+      border: 1px solid rgba(255,255,255,0.08);
+      box-shadow: var(--shadow);
+      padding: 18px;
+      opacity: 0;
+      transform: translateY(10px);
+      animation: rise 0.7s ease forwards;
+    }
+
+    .card:nth-child(2) { animation-delay: 0.1s; }
+    .card:nth-child(3) { animation-delay: 0.2s; }
+    .card:nth-child(4) { animation-delay: 0.3s; }
+
+    h3 { margin: 0 0 10px; font-size: 16px; }
+
+    .pill {
+      display: inline-block;
+      font-size: 10px;
+      padding: 4px 8px;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.08);
+      color: var(--muted);
+      margin-bottom: 8px;
+    }
+
+    .list {
+      margin: 0;
+      padding-left: 16px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.55;
+    }
+
+    .mono {
+      font-family: var(--mono);
+      font-size: 12px;
+      line-height: 1.5;
+      background: rgba(6,8,12,0.7);
+      padding: 12px;
+      border-radius: 12px;
+      border: 1px solid rgba(255,255,255,0.08);
+    }
+
+    .flow {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 12px;
+    }
+
+    .flow-block {
+      background: rgba(10,14,20,0.7);
+      border-radius: 12px;
+      padding: 12px;
+      border: 1px solid rgba(255,255,255,0.08);
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .grid-chart {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .chart-cell {
+      background: rgba(10,14,20,0.7);
+      border-radius: 12px;
+      padding: 12px;
+      border: 1px solid rgba(255,255,255,0.08);
+    }
+
+    .chart-cell h4 { margin: 0 0 6px; font-size: 13px; }
+
+    .bar {
+      height: 6px;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.1);
+      overflow: hidden;
+      margin-top: 6px;
+    }
+
+    .bar > span {
+      display: block;
+      height: 100%;
+      background: linear-gradient(90deg, var(--accent), var(--accent-3));
+    }
+
+    .bar.warn > span { background: linear-gradient(90deg, var(--accent-2), var(--accent-4)); }
+
+    .decision {
+      display: grid;
+      gap: 10px;
+    }
+
+    .decision-item {
+      padding: 12px;
+      border-radius: 12px;
+      border: 1px solid rgba(255,255,255,0.1);
+      background: rgba(12,16,22,0.7);
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .tag {
+      display: inline-block;
+      font-size: 10px;
+      padding: 2px 6px;
+      border-radius: 6px;
+      margin-right: 6px;
+      background: rgba(139,212,92,0.2);
+      color: #d9f2c7;
+    }
+
+    .tag.warn { background: rgba(242,201,76,0.2); color: #f7e7b6; }
+    .tag.risk { background: rgba(255,122,89,0.2); color: #ffd1c5; }
+
+    @keyframes rise {
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    @media (max-width: 900px) {
+      .grid-chart { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="grid-overlay"></div>
+  <header>
+    <h1>Agriculture-First UX Dashboard</h1>
+    <p class="subtitle">
+      This dashboard translates an agriculture-first, low-tech user target into concrete product choices: frictionless
+      onboarding, minimal UI, clear language, and a "magic wand" experience that hides complexity but never blocks power.
+    </p>
+  </header>
+
+  <main>
+    <section class="panel">
+      <article class="card">
+        <span class="pill">Design North Star</span>
+        <h3>Frictionless, Trustworthy, Human</h3>
+        <ul class="list">
+          <li>Zero configuration at first use; the system should "just work".</li>
+          <li>Language should be plain, not technical; avoid jargon like "models" or "tools".</li>
+          <li>Actions should be visible and reversible ("Here’s what I’ll do, okay?").</li>
+        </ul>
+      </article>
+      <article class="card">
+        <span class="pill">User Reality</span>
+        <h3>Low-Tech, High-Trust</h3>
+        <ul class="list">
+          <li>Users may prefer WhatsApp/SMS over web dashboards.</li>
+          <li>They will abandon if setup takes more than 2-3 minutes.</li>
+          <li>They need immediate, practical value: weather, scheduling, logs, reminders.</li>
+        </ul>
+      </article>
+      <article class="card">
+        <span class="pill">Product Posture</span>
+        <h3>The Magic Wand Layer</h3>
+        <ul class="list">
+          <li>Default to safe, helpful actions with confirmation prompts.</li>
+          <li>Progressive disclosure: advanced features appear only when needed.</li>
+          <li>Session continuity across projects so users never re-explain.</li>
+        </ul>
+      </article>
+    </section>
+
+    <section class="panel">
+      <article class="card">
+        <h3>Experience Flow (Ideal)</h3>
+        <div class="flow">
+          <div class="flow-block">
+            <strong>1) Start Anywhere</strong><br>
+            Text via WhatsApp or open the CLI; no config required.
+          </div>
+          <div class="flow-block">
+            <strong>2) Assistant Onboards Itself</strong><br>
+            "I can do X, Y, Z. Want me to set reminders?"
+          </div>
+          <div class="flow-block">
+            <strong>3) Ongoing Value</strong><br>
+            Daily check-ins, weather, schedule, tasks, alerts.
+          </div>
+        </div>
+      </article>
+      <article class="card">
+        <h3>What to Hide by Default</h3>
+        <ul class="list">
+          <li>Provider profiles, model names, and tool terminology.</li>
+          <li>Workspace paths and local folder structures.</li>
+          <li>Complex command lists or configuration files.</li>
+        </ul>
+      </article>
+    </section>
+
+    <section class="panel">
+      <article class="card">
+        <h3>Adopt / Modify / Omit (UX Edition)</h3>
+        <div class="grid-chart">
+          <div class="chart-cell">
+            <h4>Adopt</h4>
+            <div class="decision">
+              <div class="decision-item"><span class="tag">Adopt</span>WhatsApp-first onboarding</div>
+              <div class="decision-item"><span class="tag">Adopt</span>One shared workspace per user</div>
+              <div class="decision-item"><span class="tag">Adopt</span>Daily assistant check-ins</div>
+            </div>
+          </div>
+          <div class="chart-cell">
+            <h4>Modify</h4>
+            <div class="decision">
+              <div class="decision-item"><span class="tag warn">Modify</span>CLI to be optional, not required</div>
+              <div class="decision-item"><span class="tag warn">Modify</span>Replace tool jargon with plain verbs</div>
+              <div class="decision-item"><span class="tag warn">Modify</span>Workspace selection UX to be invisible</div>
+            </div>
+          </div>
+          <div class="chart-cell">
+            <h4>Omit</h4>
+            <div class="decision">
+              <div class="decision-item"><span class="tag risk">Omit</span>Advanced configuration in initial flow</div>
+              <div class="decision-item"><span class="tag risk">Omit</span>Multi-step setup wizards for MVP</div>
+              <div class="decision-item"><span class="tag risk">Omit</span>UI clutter from skill lists</div>
+            </div>
+          </div>
+        </div>
+      </article>
+
+      <article class="card">
+        <h3>Impact vs Effort (UX)</h3>
+        <div class="grid-chart">
+          <div class="chart-cell">
+            <h4>WhatsApp-first onboarding</h4>
+            <div class="bar"><span style="width: 85%"></span></div>
+            <p class="list">High impact, medium effort</p>
+          </div>
+          <div class="chart-cell">
+            <h4>Shared workspace</h4>
+            <div class="bar"><span style="width: 75%"></span></div>
+            <p class="list">High impact, low effort</p>
+          </div>
+          <div class="chart-cell">
+            <h4>Plain-language UX</h4>
+            <div class="bar warn"><span style="width: 65%"></span></div>
+            <p class="list">Medium impact, low effort</p>
+          </div>
+        </div>
+      </article>
+    </section>
+
+    <section class="panel">
+      <article class="card">
+        <h3>Example Prompt Language (Farmer-Friendly)</h3>
+        <div class="mono">
+“Want me to check today’s weather and remind you at 6am?”
+“Should I save this as a farm task list?”
+“I can keep track of irrigation schedules. Want to set that up?”
+        </div>
+      </article>
+      <article class="card">
+        <h3>Trust Builders</h3>
+        <ul class="list">
+          <li>Always explain what will happen before taking action.</li>
+          <li>Allow a simple "undo" for every automated action.</li>
+          <li>Keep a clear daily summary: what happened, what’s next.</li>
+        </ul>
+      </article>
+    </section>
+  </main>
+</body>
+</html>

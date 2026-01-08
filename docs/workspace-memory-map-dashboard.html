@@ -1,0 +1,272 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Workspace Memory Map -- FF-Terminal vs ClawdBot</title>
+  <style>
+    :root {
+      --bg: #0b0b0f;
+      --bg-2: #141824;
+      --ink: #f2f5f8;
+      --muted: #9da9b6;
+      --accent: #f6c445;
+      --accent-2: #6dd3a1;
+      --accent-3: #5f9dff;
+      --card: rgba(18,22,32,0.92);
+      --grid: rgba(255,255,255,0.05);
+      --shadow: 0 12px 30px rgba(0,0,0,0.45);
+      --radius: 18px;
+      --display: "Palatino", "Book Antiqua", "Georgia", serif;
+      --mono: "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: var(--display);
+      color: var(--ink);
+      background:
+        radial-gradient(900px 600px at 10% 10%, rgba(246,196,69,0.2), transparent 60%),
+        radial-gradient(900px 600px at 90% 80%, rgba(95,157,255,0.16), transparent 60%),
+        linear-gradient(160deg, var(--bg), var(--bg-2));
+      min-height: 100vh;
+    }
+
+    .grid-overlay {
+      position: fixed;
+      inset: 0;
+      background-image:
+        linear-gradient(var(--grid) 1px, transparent 1px),
+        linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+      background-size: 30px 30px;
+      opacity: 0.18;
+      pointer-events: none;
+    }
+
+    header {
+      padding: 36px 6vw 18px;
+      border-bottom: 1px solid rgba(255,255,255,0.08);
+    }
+
+    h1 {
+      margin: 0 0 8px;
+      font-size: clamp(30px, 3.2vw, 48px);
+    }
+
+    .subtitle {
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.5;
+      max-width: 960px;
+    }
+
+    main {
+      padding: 28px 6vw 48px;
+      display: grid;
+      gap: 20px;
+    }
+
+    .panel {
+      display: grid;
+      gap: 18px;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    }
+
+    .card {
+      background: var(--card);
+      border-radius: var(--radius);
+      border: 1px solid rgba(255,255,255,0.08);
+      box-shadow: var(--shadow);
+      padding: 18px;
+      opacity: 0;
+      transform: translateY(10px);
+      animation: rise 0.7s ease forwards;
+    }
+
+    .card:nth-child(2) { animation-delay: 0.1s; }
+    .card:nth-child(3) { animation-delay: 0.2s; }
+    .card:nth-child(4) { animation-delay: 0.3s; }
+
+    h3 { margin: 0 0 10px; font-size: 16px; }
+
+    .mono {
+      font-family: var(--mono);
+      font-size: 12px;
+      line-height: 1.5;
+      background: rgba(6,8,12,0.7);
+      padding: 12px;
+      border-radius: 12px;
+      border: 1px solid rgba(255,255,255,0.08);
+    }
+
+    .list {
+      margin: 0;
+      padding-left: 18px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    .map {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+
+    .map-block {
+      background: rgba(10,12,18,0.7);
+      padding: 14px;
+      border-radius: 14px;
+      border: 1px solid rgba(255,255,255,0.08);
+    }
+
+    .map-block h4 { margin: 0 0 8px; font-size: 14px; }
+
+    .pill {
+      display: inline-block;
+      font-size: 10px;
+      padding: 3px 8px;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.08);
+      color: var(--muted);
+      margin-bottom: 8px;
+    }
+
+    .timeline {
+      display: grid;
+      gap: 10px;
+      font-size: 12px;
+    }
+
+    .timeline-item {
+      padding: 10px 12px;
+      border-radius: 12px;
+      border: 1px solid rgba(255,255,255,0.1);
+      background: rgba(12,16,22,0.7);
+    }
+
+    .highlight {
+      color: var(--accent);
+    }
+
+    @keyframes rise {
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    @media (max-width: 900px) {
+      .map { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="grid-overlay"></div>
+  <header>
+    <h1>Workspace Memory Map</h1>
+    <p class="subtitle">
+      This map frames the workspace as a product surface. It compares ClawdBot's explicit memory files
+      with FF-Terminal's implicit workspace artifacts, then proposes a contract that turns memory into
+      a deployable, inspectable spec.
+    </p>
+  </header>
+
+  <main>
+    <section class="panel">
+      <article class="card">
+        <span class="pill">Memory Surface</span>
+        <h3>ClawdBot Contract (Explicit Files)</h3>
+        <div class="mono">
+AGENTS.md  -- agent persona + allowed modes
+SOUL.md    -- behavioral tone and guardrails
+TOOLS.md   -- tool access and operational limits
+MEMORY.md  -- long-lived memory and facts
+PLAN.md    -- active plan snapshot
+TASKS.md   -- task queue + status
+LOG.md     -- audit trail of key actions
+        </div>
+      </article>
+      <article class="card">
+        <span class="pill">Current State</span>
+        <h3>FF-Terminal Workspace (Implicit)</h3>
+        <div class="mono">
+/ff-terminal-workspace
+  /sessions            -- chat history per session
+  /logs                -- structured logs and autonomy logs
+  /whatsapp            -- auth, sessions, allowlist
+  /skills              -- skill library + drafts
+  /todos               -- session todo lists
+  /projects            -- user-defined project spaces
+  /memory_core         -- session_summary.md (implicit)
+        </div>
+      </article>
+      <article class="card">
+        <span class="pill">Gap</span>
+        <h3>Why It Matters</h3>
+        <ul class="list">
+          <li>Explicit files make behavior inspectable and portable across deployments.</li>
+          <li>Implicit memory reduces user control and makes audits harder.</li>
+          <li>A contract enables tooling, reviews, and safer automation.</li>
+        </ul>
+      </article>
+    </section>
+
+    <section class="panel">
+      <article class="card">
+        <h3>Proposed Workspace Contract for FF-Terminal</h3>
+        <div class="map">
+          <div class="map-block">
+            <h4>Human-Readable Contract</h4>
+            <ul class="list">
+              <li>AGENTS.md (persona + tool tiers)</li>
+              <li>TOOLS.md (tool policy + limits)</li>
+              <li>PLAN.md (active plan + progress)</li>
+              <li>MEMORY.md (facts + preferences)</li>
+            </ul>
+          </div>
+          <div class="map-block">
+            <h4>Runtime Artifacts</h4>
+            <ul class="list">
+              <li>sessions/ (history snapshots)</li>
+              <li>logs/ (audit + errors)</li>
+              <li>whatsapp/ (pairing + allowlist)</li>
+              <li>skills/ (bundled + external)</li>
+            </ul>
+          </div>
+        </div>
+      </article>
+
+      <article class="card">
+        <h3>Implementation Notes</h3>
+        <ul class="list">
+          <li>Load AGENTS/TOOLS/MEMORY into system prompt at session start.</li>
+          <li>Write PLAN.md on plan updates; expose in CLI UI.</li>
+          <li>Emit LOG.md summaries after each turn or at task end.</li>
+          <li>Make contract optional but discoverable in UI.</li>
+        </ul>
+      </article>
+    </section>
+
+    <section class="panel">
+      <article class="card">
+        <h3>Refactor Roadmap</h3>
+        <div class="timeline">
+          <div class="timeline-item">Phase 1: Introduce contract files in workspace wizard.</div>
+          <div class="timeline-item">Phase 2: Wire contract into system prompts and logs.</div>
+          <div class="timeline-item">Phase 3: Build a workspace diff viewer in CLI/Web UI.</div>
+          <div class="timeline-item">Phase 4: Add export/import for deployment portability.</div>
+        </div>
+      </article>
+
+      <article class="card">
+        <h3>Experience Design Levers</h3>
+        <ul class="list">
+          <li>Expose a "Memory Map" panel with status indicators for each file.</li>
+          <li>Highlight stale or missing files with <span class="highlight">warnings</span>.</li>
+          <li>Allow user edits with a structured validation preview.</li>
+          <li>Provide one-click "sync" to regenerate missing artifacts.</li>
+        </ul>
+      </article>
+    </section>
+  </main>
+</body>
+</html>

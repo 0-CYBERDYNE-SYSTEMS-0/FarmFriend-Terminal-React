@@ -1,0 +1,368 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Skill Atlas -- FF-Terminal vs ClawdBot</title>
+  <style>
+    :root {
+      --bg: #0a0d12;
+      --bg-2: #0f1621;
+      --ink: #eef3f7;
+      --muted: #9fb0bf;
+      --accent: #ff7a59;
+      --accent-2: #26c6da;
+      --accent-3: #9ccc65;
+      --card: rgba(16,22,30,0.9);
+      --grid: rgba(255,255,255,0.06);
+      --shadow: 0 12px 28px rgba(0,0,0,0.4);
+      --radius: 18px;
+      --display: "Gill Sans", "Avenir Next", "Futura", "Trebuchet MS", Arial, sans-serif;
+      --mono: "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: var(--display);
+      color: var(--ink);
+      background:
+        radial-gradient(1200px 800px at 90% 10%, rgba(255,122,89,0.18), transparent 65%),
+        radial-gradient(900px 700px at 10% 80%, rgba(38,198,218,0.18), transparent 60%),
+        linear-gradient(160deg, var(--bg), var(--bg-2));
+      min-height: 100vh;
+    }
+
+    .grid-overlay {
+      position: fixed;
+      inset: 0;
+      background-image:
+        linear-gradient(var(--grid) 1px, transparent 1px),
+        linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+      background-size: 32px 32px;
+      opacity: 0.2;
+      pointer-events: none;
+    }
+
+    header {
+      padding: 36px 6vw 18px;
+      border-bottom: 1px solid rgba(255,255,255,0.08);
+      display: grid;
+      gap: 16px;
+    }
+
+    .title {
+      font-size: clamp(30px, 3.2vw, 48px);
+      margin: 0;
+    }
+
+    .subtitle {
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.5;
+      max-width: 900px;
+    }
+
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 12px;
+    }
+
+    .chip {
+      border: 1px solid rgba(255,255,255,0.14);
+      padding: 8px 12px;
+      border-radius: 999px;
+      font-size: 12px;
+      color: var(--muted);
+      background: rgba(12,16,22,0.7);
+      cursor: pointer;
+      transition: 0.2s ease;
+    }
+
+    .chip.active {
+      color: #111;
+      background: var(--accent-2);
+      border-color: var(--accent-2);
+    }
+
+    main {
+      padding: 26px 6vw 48px;
+      display: grid;
+      gap: 20px;
+    }
+
+    .panel {
+      display: grid;
+      gap: 18px;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    }
+
+    .card {
+      background: var(--card);
+      padding: 18px;
+      border-radius: var(--radius);
+      border: 1px solid rgba(255,255,255,0.08);
+      box-shadow: var(--shadow);
+      opacity: 0;
+      transform: translateY(10px);
+      animation: rise 0.7s ease forwards;
+    }
+
+    .card:nth-child(2) { animation-delay: 0.1s; }
+    .card:nth-child(3) { animation-delay: 0.2s; }
+    .card:nth-child(4) { animation-delay: 0.3s; }
+
+    h3 { margin: 0 0 10px; font-size: 16px; }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      padding: 4px 10px;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.08);
+      color: var(--muted);
+      margin-bottom: 10px;
+    }
+
+    .list {
+      margin: 0;
+      padding-left: 16px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    .atlas {
+      display: grid;
+      grid-template-columns: 1.2fr 1fr;
+      gap: 18px;
+    }
+
+    .map {
+      background: rgba(8,12,18,0.85);
+      border-radius: var(--radius);
+      border: 1px solid rgba(255,255,255,0.08);
+      padding: 16px;
+      min-height: 320px;
+    }
+
+    .map svg {
+      width: 100%;
+      height: 100%;
+    }
+
+    .skill-list {
+      display: grid;
+      gap: 10px;
+    }
+
+    .skill-item {
+      padding: 12px;
+      border-radius: 12px;
+      border: 1px solid rgba(255,255,255,0.08);
+      background: rgba(12,16,22,0.7);
+    }
+
+    .skill-item h4 { margin: 0 0 6px; font-size: 14px; }
+
+    .tag {
+      display: inline-block;
+      font-size: 10px;
+      padding: 2px 6px;
+      margin-right: 6px;
+      border-radius: 6px;
+      background: rgba(38,198,218,0.2);
+      color: #bff1f7;
+    }
+
+    .tag.orange { background: rgba(255,122,89,0.2); color: #ffd1c5; }
+    .tag.green { background: rgba(156,204,101,0.2); color: #e2f5c8; }
+
+    .note {
+      font-size: 12px;
+      color: var(--muted);
+      margin-top: 8px;
+    }
+
+    .mono {
+      font-family: var(--mono);
+      font-size: 12px;
+      background: rgba(5,7,10,0.7);
+      padding: 10px;
+      border-radius: 12px;
+      border: 1px solid rgba(255,255,255,0.08);
+      line-height: 1.5;
+    }
+
+    @keyframes rise {
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    @media (max-width: 900px) {
+      .atlas { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="grid-overlay"></div>
+  <header>
+    <h1 class="title">Skill Atlas</h1>
+    <p class="subtitle">
+      A visual inventory of skill system architecture and governance. This compares FF-Terminal's YAML Markdown skills
+      with ClawdBot's AgentSkills + metadata gating model, then highlights upgrade paths for distribution and safety.
+    </p>
+    <div class="toolbar" id="filters">
+      <button class="chip active" data-filter="all">All</button>
+      <button class="chip" data-filter="governance">Governance</button>
+      <button class="chip" data-filter="distribution">Distribution</button>
+      <button class="chip" data-filter="workflow">Workflow</button>
+      <button class="chip" data-filter="safety">Safety</button>
+    </div>
+  </header>
+
+  <main>
+    <section class="panel">
+      <article class="card" data-group="governance">
+        <div class="pill">Governance</div>
+        <h3>Skill Policy Differences</h3>
+        <ul class="list">
+          <li>ClawdBot: metadata gates OS, gateway, and binary tools per skill.</li>
+          <li>FF-Terminal: allowed-tools enforced post skill-load per session.</li>
+          <li>Opportunity: add optional metadata for pre-flight compatibility checks.</li>
+        </ul>
+      </article>
+      <article class="card" data-group="distribution">
+        <div class="pill">Distribution</div>
+        <h3>Skill Catalog Strategy</h3>
+        <ul class="list">
+          <li>ClawdBot: curated catalog and managed local skills store.</li>
+          <li>FF-Terminal: bundled skills + optional external mounts.</li>
+          <li>Opportunity: introduce a registry.json + CLI installer.</li>
+        </ul>
+      </article>
+      <article class="card" data-group="workflow">
+        <div class="pill">Workflow</div>
+        <h3>Authoring Flow</h3>
+        <ul class="list">
+          <li>FF-Terminal: skill_draft -> skill_apply with assets.</li>
+          <li>ClawdBot: AgentSkills with workspace overrides.</li>
+          <li>Opportunity: add a "skill test harness" for validation.</li>
+        </ul>
+      </article>
+      <article class="card" data-group="safety">
+        <div class="pill">Safety</div>
+        <h3>Tool and OS Controls</h3>
+        <ul class="list">
+          <li>ClawdBot: explicit OS level and external binary gates.</li>
+          <li>FF-Terminal: allowed-tools hook for tool registry calls.</li>
+          <li>Opportunity: add a "dangerous tool" label and review workflow.</li>
+        </ul>
+      </article>
+    </section>
+
+    <section class="atlas">
+      <div class="map">
+        <svg viewBox="0 0 600 320" aria-label="Skill network map">
+          <defs>
+            <linearGradient id="glow" x1="0" x2="1">
+              <stop offset="0%" stop-color="#26c6da" />
+              <stop offset="100%" stop-color="#ff7a59" />
+            </linearGradient>
+          </defs>
+          <rect x="0" y="0" width="600" height="320" fill="none" />
+          <circle cx="140" cy="160" r="70" fill="rgba(38,198,218,0.15)" stroke="#26c6da" stroke-width="2" />
+          <circle cx="460" cy="120" r="52" fill="rgba(255,122,89,0.15)" stroke="#ff7a59" stroke-width="2" />
+          <circle cx="450" cy="240" r="52" fill="rgba(156,204,101,0.15)" stroke="#9ccc65" stroke-width="2" />
+          <line x1="210" y1="150" x2="408" y2="120" stroke="url(#glow)" stroke-width="2" />
+          <line x1="210" y1="170" x2="398" y2="240" stroke="url(#glow)" stroke-width="2" />
+          <text x="110" y="165" fill="#eef3f7" font-size="14">FF-Terminal</text>
+          <text x="418" y="125" fill="#eef3f7" font-size="12">ClawdBot</text>
+          <text x="406" y="245" fill="#eef3f7" font-size="12">Catalog</text>
+          <text x="120" y="190" fill="#9fb0bf" font-size="10">YAML skills + hooks</text>
+          <text x="400" y="145" fill="#9fb0bf" font-size="10">AgentSkills + metadata</text>
+        </svg>
+      </div>
+      <div class="skill-list" id="skill-list">
+        <div class="skill-item" data-group="governance">
+          <h4>Allowed-Tools Policy</h4>
+          <span class="tag">FF-Terminal</span>
+          <span class="tag orange">Session hook</span>
+          <p class="note">Policy injected after skill load; blocks tools not in the list.</p>
+        </div>
+        <div class="skill-item" data-group="safety">
+          <h4>Skill Metadata Gates</h4>
+          <span class="tag">ClawdBot</span>
+          <span class="tag green">Pre-flight</span>
+          <p class="note">OS, gateway, and external tools validated before run.</p>
+        </div>
+        <div class="skill-item" data-group="distribution">
+          <h4>Catalog + Install Flow</h4>
+          <span class="tag">ClawdBot</span>
+          <span class="tag orange">Curated</span>
+          <p class="note">Centralized repository of installable skills.</p>
+        </div>
+        <div class="skill-item" data-group="workflow">
+          <h4>Skill Drafting Toolchain</h4>
+          <span class="tag">FF-Terminal</span>
+          <span class="tag green">Draft/Apply</span>
+          <p class="note">Generates markdown skills + assets via tool commands.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <article class="card" data-group="governance">
+        <div class="pill">Refactor path</div>
+        <h3>Recommended Enhancements</h3>
+        <div class="mono">
+1. Add optional metadata fields: os_required, binaries, gateway_required.
+2. Run pre-flight validation during skill_loader.
+3. Emit policy summary to workspace log.
+4. Surface policy in UI skill list.
+        </div>
+      </article>
+      <article class="card" data-group="distribution">
+        <div class="pill">Delivery</div>
+        <h3>Catalog Workflow Proposal</h3>
+        <div class="mono">
+- registry.json with name, slug, version, checksum
+- ff-terminal skill install <slug>
+- workspace override wins, then ~/.ff-terminal/skills
+- optional signed manifests
+        </div>
+      </article>
+    </section>
+  </main>
+
+  <script>
+    const buttons = document.querySelectorAll(".chip");
+    const cards = document.querySelectorAll("[data-group]");
+    const listItems = document.querySelectorAll(".skill-item");
+
+    function applyFilter(group) {
+      cards.forEach(card => {
+        const show = group === "all" || card.dataset.group === group;
+        card.style.display = show ? "block" : "none";
+      });
+      listItems.forEach(item => {
+        const show = group === "all" || item.dataset.group === group;
+        item.style.display = show ? "block" : "none";
+      });
+    }
+
+    buttons.forEach(btn => {
+      btn.addEventListener("click", () => {
+        buttons.forEach(b => b.classList.remove("active"));
+        btn.classList.add("active");
+        applyFilter(btn.dataset.filter || "all");
+      });
+    });
+  </script>
+</body>
+</html>
