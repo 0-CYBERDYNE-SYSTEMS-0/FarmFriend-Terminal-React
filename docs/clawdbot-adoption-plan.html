@@ -1,0 +1,399 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ClawdBot -> FF-Terminal Adoption Plan (Agriculture-First)</title>
+  <style>
+    :root {
+      --bg: #0b0f14;
+      --bg-2: #111a22;
+      --ink: #f3f7fb;
+      --muted: #a5b4c4;
+      --accent: #75e3a0;
+      --accent-2: #f6c453;
+      --accent-3: #7aa9ff;
+      --accent-4: #ff7a8a;
+      --card: rgba(16,22,32,0.94);
+      --grid: rgba(255,255,255,0.06);
+      --shadow: 0 14px 32px rgba(0,0,0,0.45);
+      --radius: 18px;
+      --display: "Avenir Next", "Futura", "Gill Sans", "Trebuchet MS", sans-serif;
+      --mono: "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: var(--display);
+      color: var(--ink);
+      background:
+        radial-gradient(1200px 900px at 90% 10%, rgba(122,169,255,0.16), transparent 60%),
+        radial-gradient(1000px 700px at 10% 80%, rgba(117,227,160,0.16), transparent 60%),
+        linear-gradient(160deg, var(--bg), var(--bg-2));
+      min-height: 100vh;
+    }
+
+    .grid-overlay {
+      position: fixed;
+      inset: 0;
+      background-image:
+        linear-gradient(var(--grid) 1px, transparent 1px),
+        linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+      background-size: 28px 28px;
+      opacity: 0.2;
+      pointer-events: none;
+    }
+
+    header {
+      padding: 40px 6vw 18px;
+      border-bottom: 1px solid rgba(255,255,255,0.08);
+      display: grid;
+      gap: 12px;
+    }
+
+    h1 { margin: 0; font-size: clamp(28px, 3vw, 46px); }
+    .subtitle { margin: 0; color: var(--muted); line-height: 1.5; max-width: 1000px; }
+
+    main { padding: 26px 6vw 48px; display: grid; gap: 20px; }
+
+    .panel {
+      display: grid;
+      gap: 18px;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    }
+
+    .card {
+      background: var(--card);
+      border-radius: var(--radius);
+      border: 1px solid rgba(255,255,255,0.08);
+      box-shadow: var(--shadow);
+      padding: 18px;
+      opacity: 0;
+      transform: translateY(10px);
+      animation: rise 0.7s ease forwards;
+    }
+
+    .card:nth-child(2) { animation-delay: 0.1s; }
+    .card:nth-child(3) { animation-delay: 0.2s; }
+    .card:nth-child(4) { animation-delay: 0.3s; }
+
+    h2 { margin: 0 0 12px; font-size: 20px; }
+    h3 { margin: 0 0 10px; font-size: 16px; }
+
+    .pill {
+      display: inline-block;
+      font-size: 10px;
+      padding: 4px 8px;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.08);
+      color: var(--muted);
+      margin-bottom: 8px;
+    }
+
+    .list {
+      margin: 0;
+      padding-left: 16px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.55;
+    }
+
+    .mono {
+      font-family: var(--mono);
+      font-size: 12px;
+      line-height: 1.5;
+      background: rgba(6,8,12,0.7);
+      padding: 12px;
+      border-radius: 12px;
+      border: 1px solid rgba(255,255,255,0.08);
+    }
+
+    .flow {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 12px;
+    }
+
+    .flow-block {
+      background: rgba(10,14,20,0.7);
+      border-radius: 12px;
+      padding: 12px;
+      border: 1px solid rgba(255,255,255,0.08);
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    th, td {
+      text-align: left;
+      padding: 10px;
+      border-bottom: 1px solid rgba(255,255,255,0.08);
+      vertical-align: top;
+    }
+
+    th { color: var(--ink); font-weight: 600; }
+
+    .tag {
+      display: inline-block;
+      font-size: 10px;
+      padding: 2px 6px;
+      border-radius: 6px;
+      margin-right: 6px;
+      background: rgba(122,169,255,0.2);
+      color: #d3e4ff;
+    }
+
+    .tag.warn { background: rgba(246,196,83,0.2); color: #f7e4b4; }
+    .tag.risk { background: rgba(255,122,138,0.2); color: #ffd1d7; }
+
+    .phase {
+      display: grid;
+      gap: 10px;
+    }
+
+    .phase-item {
+      padding: 12px;
+      border-radius: 12px;
+      border: 1px solid rgba(255,255,255,0.1);
+      background: rgba(12,16,22,0.7);
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .refs {
+      font-size: 11px;
+      color: var(--muted);
+      line-height: 1.6;
+    }
+
+    @keyframes rise { to { opacity: 1; transform: translateY(0); } }
+  </style>
+</head>
+<body>
+  <div class="grid-overlay"></div>
+  <header>
+    <h1>ClawdBot -> FF-Terminal Adoption Plan</h1>
+    <p class="subtitle">
+      Planning-only document. Focus: agriculture-first UX, continuous sessions, and a ClawdBot-style workspace contract.
+      This plan lists what to adopt, what to modify, and what to omit from FF-Terminal to reduce friction and improve trust.
+    </p>
+  </header>
+
+  <main>
+    <section class="panel">
+      <article class="card">
+        <span class="pill">Strategic Thesis</span>
+        <h3>Why this adoption matters</h3>
+        <ul class="list">
+          <li>A single long-lived workspace + session creates continuity and trust.</li>
+          <li>Explicit, human-readable workspace files make the system inspectable.</li>
+          <li>A gateway-first runtime stabilizes multi-channel messaging and ops.</li>
+        </ul>
+      </article>
+      <article class="card">
+        <span class="pill">Agriculture User Need</span>
+        <h3>Low-tech, high-trust experience</h3>
+        <ul class="list">
+          <li>Zero-config start (WhatsApp-first), immediate practical value.</li>
+          <li>Plain language and "magic wand" defaults; no tool jargon.</li>
+          <li>Daily check-ins, reminders, and safety confirmations.</li>
+        </ul>
+      </article>
+      <article class="card">
+        <span class="pill">Adoption Principle</span>
+        <h3>One source of truth per memory layer</h3>
+        <ul class="list">
+          <li>Use file contract for human-readable state.</li>
+          <li>Keep structured stores for machines, but derive summaries.</li>
+          <li>Avoid duplicate memory files without sync policy.</li>
+        </ul>
+      </article>
+    </section>
+
+    <section class="panel">
+      <article class="card">
+        <h2>Session Model Shift</h2>
+        <div class="flow">
+          <div class="flow-block">
+            <strong>Current FF-Terminal</strong><br>
+            workspace -> per-session id -> artifacts per project
+          </div>
+          <div class="flow-block">
+            <strong>ClawdBot Model</strong><br>
+            single agent workspace -> long-lived "main" session
+          </div>
+          <div class="flow-block">
+            <strong>Target State</strong><br>
+            canonical workspace + stable session id across projects
+          </div>
+        </div>
+      </article>
+      <article class="card">
+        <h2>Gateway Model Shift</h2>
+        <div class="flow">
+          <div class="flow-block">
+            <strong>Current</strong><br>
+            daemon + embedded WhatsApp
+          </div>
+          <div class="flow-block">
+            <strong>ClawdBot</strong><br>
+            single Gateway owns all channels + WS API
+          </div>
+          <div class="flow-block">
+            <strong>Target</strong><br>
+            Gateway abstraction for WhatsApp-first onboarding
+          </div>
+        </div>
+      </article>
+    </section>
+
+    <section class="panel">
+      <article class="card">
+        <h2>Workspace Contract Mapping</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>ClawdBot File</th>
+              <th>Meaning</th>
+              <th>FF-Terminal Equivalent</th>
+              <th>Plan</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>AGENTS.md</td>
+              <td>Operating instructions + memory policy</td>
+              <td>System prompt + profile</td>
+              <td><span class="tag">Adopt</span> make primary persona source</td>
+            </tr>
+            <tr>
+              <td>SOUL.md</td>
+              <td>Persona, tone, boundaries</td>
+              <td>Prompt tone guidance</td>
+              <td><span class="tag">Adopt</span> editable by operator</td>
+            </tr>
+            <tr>
+              <td>TOOLS.md</td>
+              <td>Tool notes (not enforcement)</td>
+              <td>Allowed-tools hook</td>
+              <td><span class="tag warn">Modify</span> use as pre-session manifest</td>
+            </tr>
+            <tr>
+              <td>USER.md / IDENTITY.md</td>
+              <td>User profile + agent identity</td>
+              <td>Profile config + UI name</td>
+              <td><span class="tag">Adopt</span> new workspace files</td>
+            </tr>
+            <tr>
+              <td>MEMORY.md + memory/YYYY-MM-DD.md</td>
+              <td>Long-term + daily memory</td>
+              <td>memory_core/session_summary.md</td>
+              <td><span class="tag warn">Modify</span> replace summary with MEMORY.md + daily logs</td>
+            </tr>
+            <tr>
+              <td>PLAN.md / TASKS.md / LOG.md</td>
+              <td>Plan, tasks, audit trail</td>
+              <td>plan store / todos / logs</td>
+              <td><span class="tag">Adopt</span> generate readable summaries</td>
+            </tr>
+          </tbody>
+        </table>
+      </article>
+    </section>
+
+    <section class="panel">
+      <article class="card">
+        <h2>Adopt / Modify / Omit</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Area</th>
+              <th>Adopt</th>
+              <th>Modify</th>
+              <th>Omit / Defer</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Runtime</td>
+              <td>Gateway-first channel ownership</td>
+              <td>Session routing to "main" for direct chats</td>
+              <td>Multi-channel expansion before gateway is stable</td>
+            </tr>
+            <tr>
+              <td>Workspace</td>
+              <td>Bootstrap + contract files</td>
+              <td>Daily memory logs + long-term memory split</td>
+              <td>Parallel memory stores without sync</td>
+            </tr>
+            <tr>
+              <td>UX</td>
+              <td>WhatsApp-first onboarding</td>
+              <td>Plain language prompts + confirmations</td>
+              <td>Advanced config in first-run</td>
+            </tr>
+            <tr>
+              <td>Safety</td>
+              <td>Tool manifest guidance file</td>
+              <td>Enforce allowed tools from manifest + skills</td>
+              <td>Unbounded tool access in low-trust contexts</td>
+            </tr>
+          </tbody>
+        </table>
+      </article>
+    </section>
+
+    <section class="panel">
+      <article class="card">
+        <h2>Phased Implementation (Planning Only)</h2>
+        <div class="phase">
+          <div class="phase-item"><span class="tag">Phase 0</span> Define canonical workspace + stable session id policy.</div>
+          <div class="phase-item"><span class="tag">Phase 1</span> Add workspace contract files and bootstrap templates.</div>
+          <div class="phase-item"><span class="tag">Phase 2</span> Introduce Gateway abstraction for WhatsApp-first onboarding.</div>
+          <div class="phase-item"><span class="tag">Phase 3</span> Add daily memory logs and readable summaries.</div>
+          <div class="phase-item"><span class="tag">Phase 4</span> Add tool manifest enforcement + skill metadata gates.</div>
+          <div class="phase-item"><span class="tag">Phase 5</span> Migrate existing workspaces + UX polish for agriculture.</div>
+        </div>
+      </article>
+      <article class="card">
+        <h2>Risks & Mitigations</h2>
+        <div class="phase">
+          <div class="phase-item"><span class="tag risk">Risk</span> Duplicate memory stores -> <span class="tag">Mitigation</span> single source of truth in MEMORY.md.</div>
+          <div class="phase-item"><span class="tag risk">Risk</span> Session fragmentation -> <span class="tag">Mitigation</span> canonical workspace + stable session id.</div>
+          <div class="phase-item"><span class="tag risk">Risk</span> Ops complexity -> <span class="tag">Mitigation</span> Gateway UI + health surface.</div>
+        </div>
+      </article>
+    </section>
+
+    <section class="panel">
+      <article class="card">
+        <h2>Acceptance Criteria</h2>
+        <ul class="list">
+          <li>WhatsApp-first start works without local config.</li>
+          <li>Direct chats map to a single "main" session by default.</li>
+          <li>AGENTS/SOUL/TOOLS/USER/IDENTITY/MEMORY/PLAN/TASKS/LOG exist in workspace.</li>
+          <li>All memory and task views are readable and consistent.</li>
+        </ul>
+      </article>
+      <article class="card">
+        <h2>References (ClawdBot Docs)</h2>
+        <div class="refs">
+          <div>Agent runtime + bootstrap files: docs.clawd.bot/concepts/agent</div>
+          <div>Workspace file map + memory behavior: docs.clawd.bot/concepts/agent-workspace</div>
+          <div>Gateway architecture: docs.clawd.bot/architecture</div>
+          <div>WebChat gateway WS behavior: clawdbot.com/webchat.html</div>
+          <div>Default AGENTS guidance + main session behavior: docs.clawd.bot/reference/AGENTS.default</div>
+          <div>Template AGENTS memory loading rules: docs.clawd.bot/reference/templates/AGENTS</div>
+        </div>
+      </article>
+    </section>
+  </main>
+</body>
+</html>
