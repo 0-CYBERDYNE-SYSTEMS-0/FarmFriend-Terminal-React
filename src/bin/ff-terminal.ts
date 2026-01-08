@@ -11,7 +11,8 @@ import { findRepoRoot } from "../runtime/config/repoRoot.js";
 import { resolveConfig } from "../runtime/config/loadConfig.js";
 import { runAgentTurn } from "../runtime/agentLoop.js";
 import { toWire } from "../runtime/streamProtocol.js";
-import { newId } from "../shared/ids.js";
+import { resolveSessionId } from "../runtime/session/sessionPolicy.js";
+import { ensureCanonicalStructure } from "../runtime/workspace/migration.js";
 import { loadTaskStore, saveTaskStore, taskStorePath } from "../runtime/scheduling/taskStore.js";
 import { getSchedulerBackend } from "../runtime/scheduling/backends/index.js";
 import fs from "node:fs";
@@ -39,6 +40,7 @@ function usage(): void {
   ff-terminal web
   ff-terminal acp [--profile <name>]
   ff-terminal scheduler [--once] [--poll-interval <ms>] [--headless]
+  ff-terminal gateway status [--json]
   ff-terminal run --prompt "..." [--profile <name>] [--session <id>] [--headless]
   ff-terminal run --scheduled-task <id-or-name> [--profile <name>] [--session <id>] --headless
   ff-terminal autonomy [--profile <name>] --prompt-file <path> [--tasks-file <path>] [--completion-promise <text>]
@@ -65,6 +67,7 @@ WhatsApp Commands:
   ff-terminal whatsapp status        Show WhatsApp connection status
   ff-terminal whatsapp approve <code>  Approve a pairing request
   ff-terminal whatsapp help          Show all WhatsApp commands
+  ff-terminal gateway status         Show gateway channel status
 `);
 }
 
@@ -552,6 +555,7 @@ async function run(): Promise<void> {
       (runtimeCfg as any).workspace_dir ?? process.env.FF_WORKSPACE_DIR ?? undefined,
       { repoRoot }
     );
+    ensureCanonicalStructure(workspaceDir);
 
     if (profileName) {
       const config = readConfig();
@@ -605,6 +609,7 @@ async function run(): Promise<void> {
       (runtimeCfg as any).workspace_dir ?? process.env.FF_WORKSPACE_DIR ?? undefined,
       { repoRoot }
     );
+    ensureCanonicalStructure(workspaceDir);
     const once = hasFlag(rest, "--once");
     const pollRaw = pickArg(rest, "--poll-interval") || pickArg(rest, "--poll-interval-ms");
     const pollIntervalMs = pollRaw ? Number(pollRaw) : undefined;
@@ -622,6 +627,51 @@ async function run(): Promise<void> {
     return;
   }
 
+  if (cmd === "gateway") {
+    const repoRoot = findRepoRoot();
+    const runtimeCfg = resolveConfig({ repoRoot });
+    const workspaceDir = resolveWorkspaceDir(
+      (runtimeCfg as any).workspace_dir ?? process.env.FF_WORKSPACE_DIR ?? undefined,
+      { repoRoot }
+    );
+    ensureCanonicalStructure(workspaceDir);
+    const subcommand = rest[0] || "status";
+    if (subcommand !== "status") {
+      console.error(`Unknown gateway command: ${subcommand}`);
+      console.log("Usage: ff-terminal gateway status [--json]");
+      process.exit(1);
+    }
+    const statusPath = path.join(workspaceDir, "logs", "gateway", "status.json");
+    if (!fs.existsSync(statusPath)) {
+      console.log("Gateway status not found yet. Start the daemon to initialize.");
+      return;
+    }
+    const raw = fs.readFileSync(statusPath, "utf8");
+    if (hasFlag(rest, "--json")) {
+      console.log(raw.trim());
+      return;
+    }
+    try {
+      const parsed = JSON.parse(raw);
+      console.log("Gateway Status:");
+      console.log(`- Workspace: ${parsed.workspace_dir}`);
+      console.log(`- Timestamp: ${parsed.timestamp}`);
+      const channels = Array.isArray(parsed.channels) ? parsed.channels : [];
+      if (!channels.length) {
+        console.log("- No channels registered");
+        return;
+      }
+      for (const ch of channels) {
+        const status = `${ch.enabled ? "enabled" : "disabled"}${ch.running ? ", running" : ""}${ch.healthy ? "" : ", unhealthy"}`;
+        console.log(`- ${ch.name}: ${status}`);
+        if (ch.last_error) console.log(`  - error: ${ch.last_error}`);
+      }
+    } catch {
+      console.log(raw.trim());
+    }
+    return;
+  }
+
   if (cmd === "run") {
     applyToolAllowFlags(rest);
     const userPrompt = pickArg(rest, "--prompt") || "";
@@ -634,7 +684,7 @@ async function run(): Promise<void> {
     if (!userPrompt && !scheduledTaskRef) throw new Error("Missing --prompt or --scheduled-task\n");
     if (scheduledTaskRef && !headless) throw new Error("--scheduled-task requires --headless\n");
 
-    const sessionId = pickArg(rest, "--session") || newId("session");
+    const requestedSessionId = pickArg(rest, "--session");
 
     const repoRoot = findRepoRoot();
     const runtimeCfg = resolveConfig({ repoRoot });
@@ -642,6 +692,12 @@ async function run(): Promise<void> {
       (runtimeCfg as any).workspace_dir ?? process.env.FF_WORKSPACE_DIR ?? undefined,
       { repoRoot }
     );
+    ensureCanonicalStructure(workspaceDir);
+    const sessionId = resolveSessionId({
+      requested: requestedSessionId,
+      workspaceDir,
+      cfg: runtimeCfg
+    });
 
     let promptToRun = userPrompt;
     let scheduledTaskName: string | null = null;

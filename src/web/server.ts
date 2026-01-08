@@ -8,6 +8,8 @@ import os from "node:os";
 import Busboy from "busboy";
 
 import { findRepoRoot } from "../runtime/config/repoRoot.js";
+import { resolveConfig } from "../runtime/config/loadConfig.js";
+import { resolveWorkspaceDir } from "../runtime/config/paths.js";
 
 // File attachment from web client
 type FileAttachment = {
@@ -314,6 +316,28 @@ export async function startWebServer(): Promise<void> {
     if (req.url === "/health") {
       res.writeHead(200, { "content-type": "application/json" });
       res.end(JSON.stringify({ ok: true }) + "\n");
+      return;
+    }
+
+    if (req.method === "GET" && req.url?.startsWith("/api/gateway/status")) {
+      try {
+        const runtimeCfg = resolveConfig({ repoRoot });
+        const workspaceDir = resolveWorkspaceDir(
+          (runtimeCfg as any).workspace_dir ?? process.env.FF_WORKSPACE_DIR ?? undefined,
+          { repoRoot }
+        );
+        const statusPath = path.join(workspaceDir, "logs", "gateway", "status.json");
+        if (!fs.existsSync(statusPath)) {
+          res.writeHead(404, { "content-type": "application/json" });
+          res.end(JSON.stringify({ error: "Gateway status not available" }) + "\n");
+          return;
+        }
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(fs.readFileSync(statusPath, "utf8"));
+      } catch (err) {
+        res.writeHead(500, { "content-type": "application/json" });
+        res.end(JSON.stringify({ error: err instanceof Error ? err.message : String(err) }) + "\n");
+      }
       return;
     }
 

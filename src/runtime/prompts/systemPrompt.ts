@@ -11,13 +11,18 @@ export function buildSystemPrompt(params: {
   workingDir: string;
   parallelMode: boolean;
   skillSections?: string;
-  sessionSummary?: string;
+  memorySnapshot?: string;
+  contractSnapshot?: string;
   planContext?: string;
   availableToolNames?: string[];
 }): string {
   const repoRoot = params.repoRoot ?? findRepoRoot();
   const template = loadPromptTemplate(params.variant, repoRoot);
-  const env_context = buildEnvironmentalContext({ workingDir: params.workingDir, sessionSummary: params.sessionSummary });
+  const env_context = buildEnvironmentalContext({
+    workingDir: params.workingDir,
+    memorySnapshot: params.memorySnapshot,
+    contractSnapshot: params.contractSnapshot
+  });
   const parallel_section = loadParallelSection({ repoRoot, enabled: params.parallelMode });
   const toolSchemas = (() => {
     const all = loadToolSchemas(repoRoot);
@@ -46,7 +51,8 @@ export function buildCacheableSystemPrompt(params: {
   workingDir: string;
   parallelMode: boolean;
   skillSections?: string;
-  sessionSummary?: string;
+  memorySnapshot?: string;
+  contractSnapshot?: string;
   planContext?: string;
   availableToolNames?: string[];
   enableCaching?: boolean;
@@ -81,7 +87,8 @@ export function buildCacheableSystemPrompt(params: {
   // PART 2: Dynamic content (session summary + environmental context)
   const env_context = buildEnvironmentalContext({
     workingDir: params.workingDir,
-    sessionSummary: params.sessionSummary
+    memorySnapshot: params.memorySnapshot,
+    contractSnapshot: params.contractSnapshot
   });
   const footer = buildContextFooter({ workingDir: params.workingDir });
   const dynamicContent = interpolate(template, {

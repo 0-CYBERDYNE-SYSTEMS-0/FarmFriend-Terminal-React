@@ -2,11 +2,13 @@ import fs from "node:fs";
 import path from "node:path";
 import { ensureDir } from "../config/loadConfig.js";
 import type { ValidationIssue } from "./doctor.js";
+import { ensureWorkspaceContractFiles } from "./contract.js";
 
 const CANONICAL_DIRECTORIES = [
   "agents",
   "commands",
   "skills",
+  "memory",
   "memory_core",
   "memory_core/scheduled_tasks",
   "memory_core/workflows",
@@ -17,6 +19,7 @@ const CANONICAL_DIRECTORIES = [
   "logs",
   "logs/sessions",
   "logs/hooks",
+  "logs/gateway",
   "logs/runs",
   "logs/scheduled_runs",
   "generated-images",
@@ -81,6 +84,7 @@ export function ensureCanonicalStructure(workspaceDir: string): void {
     const fullPath = path.join(workspaceDir, dir);
     ensureDir(fullPath);
   }
+  ensureWorkspaceContractFiles(workspaceDir);
 }
 
 export function createBackup(sourcePath: string): string {

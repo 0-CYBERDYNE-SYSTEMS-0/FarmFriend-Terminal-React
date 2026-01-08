@@ -6,6 +6,7 @@ export const WORKSPACE_ALLOWED_DIRS = [
   "commands",
   "skills",
   "logs",
+  "memory",
   "memory_core",
   "projects",
   "thoughts",
@@ -17,7 +18,17 @@ export const WORKSPACE_ALLOWED_DIRS = [
 
 export const WORKSPACE_ALLOWED_ROOT_FILES = [
   "tasks.json",
-  "completion_validation.json"
+  "completion_validation.json",
+  "AGENTS.md",
+  "SOUL.md",
+  "TOOLS.md",
+  "USER.md",
+  "IDENTITY.md",
+  "MEMORY.md",
+  "PLAN.md",
+  "TASKS.md",
+  "LOG.md",
+  "tools.json"
 ];
 
 function normalizeDir(p: string): string {

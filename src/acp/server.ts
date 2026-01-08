@@ -7,7 +7,7 @@ import { withToolContext } from "../runtime/tools/context.js";
 import { newId } from "../shared/ids.js";
 import { loadSession } from "../runtime/session/sessionStore.js";
 import type { ConversationMessage } from "../runtime/session/sessionStore.js";
-import { clearSkillAllowedToolsPolicy } from "../runtime/hooks/builtin/skillAllowedToolsHook.js";
+import { clearToolPolicies } from "../runtime/hooks/builtin/skillAllowedToolsHook.js";
 
 const PROTOCOL_VERSION = "0.1";
 const MAX_HISTORY_MESSAGES = 200;
@@ -257,7 +257,7 @@ export async function startAcpServer(params: { repoRoot: string; workspaceDir: s
         session.controller = null;
         session.toolQueue = [];
       }
-      clearSkillAllowedToolsPolicy(sessionId);
+      clearToolPolicies(sessionId);
       send(okResponse(id ?? null, {}));
       continue;
     }

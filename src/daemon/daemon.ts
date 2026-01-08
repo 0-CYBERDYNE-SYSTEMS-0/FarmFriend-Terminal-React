@@ -13,65 +13,26 @@ import { withToolContext, type SubagentEvent } from "../runtime/tools/context.js
 import { resolveConfig } from "../runtime/config/loadConfig.js";
 import { loadDefaultDotenv } from "../runtime/config/dotenv.js";
 import { quickHealthCheck } from "../runtime/workspace/healthCheck.js";
+import { ensureCanonicalStructure } from "../runtime/workspace/migration.js";
+import {
+  saveLastActiveSession,
+  resolveSessionId,
+  resolveSessionMode,
+  resolveMainSessionId
+} from "../runtime/session/sessionPolicy.js";
+import { GatewayManager } from "../runtime/gateway/manager.js";
+import { WhatsAppGateway } from "../runtime/gateway/channels/whatsappGateway.js";
+import { IMessageGateway } from "../runtime/gateway/channels/imessageGateway.js";
 import {
   ClientMessage,
   ServerMessage,
   isClientMessage,
-  newSessionId,
   newTurnId,
-  safeJsonParse,
-  isValidSessionId
+  safeJsonParse
 } from "./protocol.js";
 
 const PORT = Number(process.env.FF_TERMINAL_PORT || 28888);
 const DAEMON_VERSION = "0.0.0";
-
-function loadLastActiveSession(workspaceDir: string): string | null {
-  try {
-    const filePath = path.join(workspaceDir, ".last-session-id");
-    if (!fs.existsSync(filePath)) return null;
-
-    const sessionId = fs.readFileSync(filePath, "utf8").trim();
-    if (!isValidSessionId(sessionId)) {
-      console.debug(`Invalid session ID format in ${filePath}, cleaning up`);
-      cleanupLastActiveSession(workspaceDir);
-      return null;
-    }
-
-    const sessionPath = path.join(workspaceDir, "sessions", `${sessionId}.json`);
-    if (!fs.existsSync(sessionPath)) {
-      console.debug(`Session file not found: ${sessionPath}, cleaning up`);
-      cleanupLastActiveSession(workspaceDir);
-      return null;
-    }
-
-    return sessionId;
-  } catch (err) {
-    console.debug(`Failed to load last active session: ${err}`);
-    return null;
-  }
-}
-
-function saveLastActiveSession(workspaceDir: string, sessionId: string): void {
-  try {
-    const filePath = path.join(workspaceDir, ".last-session-id");
-    fs.mkdirSync(path.dirname(filePath), { recursive: true });
-    fs.writeFileSync(filePath, sessionId, "utf8");
-  } catch (err) {
-    console.warn(`Failed to save last active session: ${err}`);
-  }
-}
-
-function cleanupLastActiveSession(workspaceDir: string): void {
-  try {
-    const filePath = path.join(workspaceDir, ".last-session-id");
-    if (fs.existsSync(filePath)) {
-      fs.unlinkSync(filePath);
-    }
-  } catch (err) {
-    console.debug(`Failed to cleanup last active session file: ${err}`);
-  }
-}
 
 function send(ws: WebSocket, msg: ServerMessage): void {
   ws.send(JSON.stringify(msg));
@@ -89,6 +50,7 @@ export async function startDaemon(): Promise<void> {
     (runtimeCfg as any).workspace_dir ?? process.env.FF_WORKSPACE_DIR ?? undefined,
     { repoRoot }
   );
+  ensureCanonicalStructure(workspaceDir);
 
   const healthIssues = await quickHealthCheck(workspaceDir);
   if (healthIssues.length > 0) {
@@ -103,34 +65,43 @@ export async function startDaemon(): Promise<void> {
   const registry = new ToolRegistry();
   registerAllTools(registry, { workspaceDir });
 
-  // Start WhatsApp integration if enabled
-  let whatsappServer: any = null;
-  const whatsappConfig = (runtimeCfg as any).whatsapp;
-  if (whatsappConfig?.enabled) {
-    try {
-      const { WhatsAppServer } = await import("../whatsapp/whatsappServer.js");
-      whatsappServer = new WhatsAppServer(whatsappConfig, registry, workspaceDir, repoRoot);
-      await whatsappServer.start();
-      // eslint-disable-next-line no-console
-      console.log("✓ WhatsApp integration started");
-    } catch (error) {
-      // eslint-disable-next-line no-console
-      console.error("Failed to start WhatsApp integration:", error);
-    }
+  const gateway = new GatewayManager({ workspaceDir });
+  gateway.register(
+    new WhatsAppGateway({
+      config: (runtimeCfg as any).whatsapp,
+      registry,
+      workspaceDir,
+      repoRoot,
+      sessionMode: resolveSessionMode(runtimeCfg),
+      mainSessionId: resolveMainSessionId(runtimeCfg)
+    })
+  );
+  gateway.register(
+    new IMessageGateway({
+      config: (runtimeCfg as any).imessage,
+      registry,
+      workspaceDir,
+      repoRoot
+    })
+  );
+
+  try {
+    await gateway.start();
+    // eslint-disable-next-line no-console
+    console.log("✓ Gateway started");
+  } catch (error) {
+    // eslint-disable-next-line no-console
+    console.error("Failed to start gateway:", error);
   }
 
   // Cleanup on process exit
   process.on("SIGINT", async () => {
-    if (whatsappServer) {
-      await whatsappServer.stop();
-    }
+    await gateway.stop();
     process.exit(0);
   });
 
   process.on("SIGTERM", async () => {
-    if (whatsappServer) {
-      await whatsappServer.stop();
-    }
+    await gateway.stop();
     process.exit(0);
   });
 
@@ -168,7 +139,11 @@ export async function startDaemon(): Promise<void> {
 
       if (msg.type === "start_turn") {
         // Determine sessionId - either from client or load/create from workspace
-        const resolvedSessionId = msg.sessionId ?? loadLastActiveSession(workspaceDir) ?? newSessionId();
+        const resolvedSessionId = resolveSessionId({
+          requested: msg.sessionId,
+          workspaceDir,
+          cfg: runtimeCfg
+        });
         // Update the session tracker and persist to workspace
         sessionId = resolvedSessionId;
         saveLastActiveSession(workspaceDir, resolvedSessionId);

@@ -1,6 +1,10 @@
 import os from "node:os";
 
-export function buildEnvironmentalContext(params: { workingDir: string; sessionSummary?: string }): string {
+export function buildEnvironmentalContext(params: {
+  workingDir: string;
+  memorySnapshot?: string;
+  contractSnapshot?: string;
+}): string {
   const now = new Date();
   const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || "unknown";
   const weekday = now.toLocaleDateString("en-US", { weekday: "long" });
@@ -25,12 +29,21 @@ export function buildEnvironmentalContext(params: { workingDir: string; sessionS
     `OS: ${osInfo}`,
     `Working Directory: ${params.workingDir}`,
     "",
-    ...(params.sessionSummary
+    ...(params.contractSnapshot
       ? [
-          "## Session Summary (auto-loaded)",
-          "This is the current `ff-terminal-workspace/memory_core/session_summary.md` content for cross-session continuity:",
+          "## Workspace Contract (auto-loaded)",
+          "This is the current workspace contract state (AGENTS/SOUL/TOOLS/USER/IDENTITY/PLAN/TASKS/LOG):",
           "",
-          params.sessionSummary.trim(),
+          params.contractSnapshot.trim(),
+          ""
+        ]
+      : []),
+    ...(params.memorySnapshot
+      ? [
+          "## Memory Snapshot (auto-loaded)",
+          "This is the current `ff-terminal-workspace/MEMORY.md` content (plus today's memory log) for continuity:",
+          "",
+          params.memorySnapshot.trim(),
           ""
         ]
       : []),

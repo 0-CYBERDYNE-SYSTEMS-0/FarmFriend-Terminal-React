@@ -2,6 +2,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import type { WhatsAppSession } from "./types.js";
+import type { SessionMode } from "../runtime/session/sessionPolicy.js";
+import { resolveMainSessionId, resolveSessionMode } from "../runtime/session/sessionPolicy.js";
 
 /**
  * Manages mapping between WhatsApp chats and FF-Terminal sessions
@@ -9,9 +11,13 @@ import type { WhatsAppSession } from "./types.js";
 export class WhatsAppSessionManager {
   private sessionsPath: string;
   private sessions: Map<string, WhatsAppSession> = new Map();
+  private sessionMode: SessionMode;
+  private mainSessionId: string;
 
-  constructor(workspaceDir: string) {
+  constructor(workspaceDir: string, opts?: { sessionMode?: SessionMode; mainSessionId?: string }) {
     this.sessionsPath = path.join(workspaceDir, "whatsapp", "sessions.json");
+    this.sessionMode = opts?.sessionMode ?? resolveSessionMode();
+    this.mainSessionId = opts?.mainSessionId ?? resolveMainSessionId();
     this.ensureFile();
     this.loadSessions();
   }
@@ -61,7 +67,7 @@ export class WhatsAppSessionManager {
     }
 
     // Create new session
-    const sessionId = randomUUID();
+    const sessionId = this.sessionMode === "main" ? this.mainSessionId : randomUUID();
     const session: WhatsAppSession = {
       sessionId,
       phoneNumber,
@@ -86,6 +92,18 @@ export class WhatsAppSessionManager {
    * Reset a session (create new session ID for phone number)
    */
   resetSession(phoneNumber: string): string {
+    if (this.sessionMode === "main") {
+      const sessionId = this.mainSessionId;
+      const session: WhatsAppSession = {
+        sessionId,
+        phoneNumber,
+        lastActivity: Date.now(),
+        messageCount: 1
+      };
+      this.sessions.set(phoneNumber, session);
+      this.saveSessions();
+      return sessionId;
+    }
     this.sessions.delete(phoneNumber);
     this.saveSessions();
     return this.getOrCreateSession(phoneNumber);

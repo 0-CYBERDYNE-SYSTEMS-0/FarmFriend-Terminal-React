@@ -351,10 +351,10 @@ Each provider supports custom configuration:
 - Rate limiting and timeout settings
 
 ### **Workspace Directory Configuration**
-The workspace directory stores sessions, logs, and project data. It defaults to `<project-root>/ff-terminal-workspace` but can be customized:
+The workspace directory stores sessions, logs, and project data. It defaults to `~/ff-terminal-workspace` but can be customized:
 
 **Default Behavior:**
-- Global mode: Uses workspace relative to the repository root
+- Global mode: Uses `~/ff-terminal-workspace` for continuity across projects
 - Local mode: Creates isolated workspace in current directory with `ff-terminal local`
 
 **Override the Workspace Path:**
@@ -372,14 +372,26 @@ The workspace directory stores sessions, logs, and project data. It defaults to 
    Add to your config file:
    ```json
    {
-     "workspace_dir": "/Users/yourusername/FarmFriend-Terminal-React/ff-terminal-workspace"
+     "workspace_dir": "/Users/yourusername/ff-terminal-workspace"
    }
    ```
 
 3. **Code Resolution** (automatic fallback):
    The system automatically uses the current user's home directory with dynamic path resolution. No hardcoded paths are used.
 
-**Note:** The workspace directory must be writable by the current user. The application automatically creates required subdirectories if missing.
+**Workspace Contract Files:**
+- `AGENTS.md`, `SOUL.md`, `TOOLS.md`, `USER.md`, `IDENTITY.md`, `MEMORY.md`, `PLAN.md`, `TASKS.md`, `LOG.md`
+
+**Session Continuity:**
+- Default session is `main` for long-lived continuity.
+- Override with `--session <id>` or `FF_SESSION_MODE` (`main`, `last`, `new`).
+- Customize the main session ID with `FF_MAIN_SESSION_ID`.
+
+**Gateway Status:**
+- CLI: `ff-terminal gateway status`
+- Web: `GET /api/gateway/status` (served by `ff-terminal web`)
+
+**Note:** The workspace directory must be writable by the current user. The application automatically creates required subdirectories and contract files if missing.
 
 ### **Skill Configuration**
 Individual skills can be enabled/disabled and customized:
@@ -392,6 +404,19 @@ Individual skills can be enabled/disabled and customized:
         "baseUrl": "http://localhost:3000"
       }
     }
+  }
+}
+```
+
+### **iMessage Gateway (macOS)**
+Use Messages as a fallback channel when WhatsApp is not available:
+```json
+{
+  "imessage": {
+    "enabled": true,
+    "watch_chats": ["Alex", "Farm Crew"],
+    "auto_reply": false,
+    "poll_interval_ms": 8000
   }
 }
 ```

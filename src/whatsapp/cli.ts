@@ -6,6 +6,7 @@ import { registerAllTools } from "../runtime/registerDefaultTools.js";
 import { resolveWorkspaceDir } from "../runtime/config/paths.js";
 import { findRepoRoot } from "../runtime/config/repoRoot.js";
 import { resolveConfig } from "../runtime/config/loadConfig.js";
+import { resolveMainSessionId, resolveSessionMode } from "../runtime/session/sessionPolicy.js";
 import type { WhatsAppConfig } from "./types.js";
 
 /**
@@ -134,7 +135,10 @@ async function handleLogin(workspaceDir: string, config: any): Promise<void> {
     autoReconnect: false // Don't auto-reconnect during login
   };
 
-  const server = new WhatsAppServer(whatsappConfig, registry, workspaceDir, repoRoot);
+  const server = new WhatsAppServer(whatsappConfig, registry, workspaceDir, repoRoot, {
+    sessionMode: resolveSessionMode(config),
+    mainSessionId: resolveMainSessionId(config)
+  });
 
   let connected = false;
 
@@ -323,7 +327,10 @@ async function handleStart(workspaceDir: string, repoRoot: string, config: any):
   const registry = new ToolRegistry();
   registerAllTools(registry, { workspaceDir });
 
-  const server = new WhatsAppServer(whatsappConfig, registry, workspaceDir, repoRoot);
+  const server = new WhatsAppServer(whatsappConfig, registry, workspaceDir, repoRoot, {
+    sessionMode: resolveSessionMode(config),
+    mainSessionId: resolveMainSessionId(config)
+  });
 
   try {
     await server.start();

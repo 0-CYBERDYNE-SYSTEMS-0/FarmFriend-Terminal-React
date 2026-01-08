@@ -4,11 +4,13 @@ import { ffHomeDir } from "../config/ffHome.js";
 import type { ValidationIssue } from "./doctor.js";
 
 const CRITICAL_DIRECTORIES = [
+  "memory",
   "memory_core",
   "memory_core/scheduled_tasks",
   "logs",
   "logs/sessions",
   "logs/hooks",
+  "logs/gateway",
   "sessions"
 ];
 

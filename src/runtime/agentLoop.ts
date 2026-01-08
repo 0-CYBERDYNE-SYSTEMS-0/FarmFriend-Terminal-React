@@ -13,7 +13,11 @@ import path from "node:path";
 import { getToolContext } from "./tools/context.js";
 import { listSkillStubs } from "./tools/implementations/skills.js";
 import { HookRegistry } from "./hooks/registry.js";
-import { createSkillAllowedToolsHooks } from "./hooks/builtin/skillAllowedToolsHook.js";
+import {
+  createSkillAllowedToolsHooks,
+  setWorkspaceAllowedToolsPolicy,
+  ALWAYS_ALLOWED_TOOLS
+} from "./hooks/builtin/skillAllowedToolsHook.js";
 import { StructuredLogger, parseLogLevel, redactValue, truncateForLog } from "./logging/structuredLogger.js";
 import { newId } from "../shared/ids.js";
 import { resolveWorkspaceDir } from "./config/paths.js";
@@ -22,6 +26,16 @@ import { loadPlanStore, savePlanStore, getActivePlan, addPlan } from "./planning
 import { createPlanValidationStopHook } from "./hooks/builtin/planValidationStopHook.js";
 import { createTodoStopHook } from "./hooks/builtin/todoStopHook.js";
 import type { ExecutionPlan, PlanStore } from "./planning/types.js";
+import {
+  appendWorkspaceLog,
+  formatWorkspaceContractForPrompt,
+  loadMemorySnapshot,
+  loadToolManifest,
+  loadWorkspaceContractSnapshot,
+  writePlanSnapshot,
+  writeTasksSnapshot
+} from "./workspace/contract.js";
+import { ensureCanonicalStructure } from "./workspace/migration.js";
 
 function smartTruncate(text: string, maxLen: number): string {
   if (text.length <= maxLen) return text;
@@ -78,7 +92,7 @@ function getToolContextMessage(toolName: string, args: unknown): string {
     // Thinking & updates
     think: (a) => `Thinking...`,
     quick_update: (a) => `Update: ${smartTruncate(String(a?.message || "Updating"), 70)}...`,
-    session_summary: (a) => `Generating summary...`
+    session_summary: (a) => `Updating memory...`
   };
 
   const formatter = toolMessages[toolName];
@@ -209,6 +223,7 @@ export async function* runAgentTurn(params: {
   const toolCtx = getToolContext();
   const workspaceDir = resolveWorkspaceDir(toolCtx?.workspaceDir ?? process.env.FF_WORKSPACE_DIR ?? undefined);
   const sessionDir = path.join(workspaceDir, "sessions");
+  ensureCanonicalStructure(workspaceDir);
 
   const session = loadSession(sessionId, sessionDir) ?? createSession(sessionId);
 
@@ -229,24 +244,26 @@ export async function* runAgentTurn(params: {
   const logBaseDir = workspaceDir;
   const sessionLogPath = path.join(logBaseDir, "logs", "sessions", `${sessionId}.jsonl`);
   const logger = new StructuredLogger({ filePath: sessionLogPath, level: logLevel, maxBytes: logMaxBytes, retention: logRetention });
-  const workspaceDirForSummary = workspaceDir;
-  const sessionSummary = (() => {
-    if (!workspaceDirForSummary) return undefined;
-    const p = path.join(workspaceDirForSummary, "memory_core", "session_summary.md");
+  const memorySnapshot = (() => {
     try {
-      if (!fs.existsSync(p) || !fs.statSync(p).isFile()) return undefined;
-      const raw = fs.readFileSync(p, "utf8");
-      const trimmed = raw.trim();
-      if (!trimmed) return undefined;
-      const MAX = 8000;
-      return trimmed.length > MAX ? trimmed.slice(0, MAX) + "\n\n...(truncated)" : trimmed;
+      return loadMemorySnapshot(workspaceDir);
     } catch (err) {
-      // Session summary loading failed - log but continue without summary
-      logger.log("warn", "session_summary_load_failed", {
-        path: p,
+      logger.log("warn", "memory_snapshot_load_failed", {
         error: err instanceof Error ? err.message : String(err)
       });
       return undefined;
+    }
+  })();
+
+  const contractSnapshot = (() => {
+    try {
+      const snapshot = loadWorkspaceContractSnapshot(workspaceDir);
+      return formatWorkspaceContractForPrompt(snapshot);
+    } catch (err) {
+      logger.log("warn", "workspace_contract_load_failed", {
+        error: err instanceof Error ? err.message : String(err)
+      });
+      return "";
     }
   })();
 
@@ -312,6 +329,35 @@ export async function* runAgentTurn(params: {
     return `\n## Relevant Skills\nIf helpful, call \`skill_loader\` with \`skill_slug\` to load one of these skills:\n${ranked.join("\n")}\n`;
   })();
 
+  const toolManifest = loadToolManifest(workspaceDir);
+  const manifestChanged = setWorkspaceAllowedToolsPolicy(sessionId, toolManifest?.tools ?? null);
+  if (toolManifest?.tools?.length) {
+    logger.log("info", "tool_manifest_loaded", {
+      session_id: sessionId,
+      source: toolManifest.source,
+      tools_count: toolManifest.tools.length,
+      changed: manifestChanged
+    });
+    if (manifestChanged) {
+      try {
+        appendWorkspaceLog({
+          workspaceDir,
+          sessionId,
+          note: `Tool policy loaded from ${toolManifest.source} (${toolManifest.tools.length} tools)`
+        });
+      } catch {
+        // ignore log write failures
+      }
+    }
+  }
+
+  const availableToolNames = (() => {
+    if (!toolManifest?.tools?.length) return registry.listNames();
+    const allowed = new Set<string>(toolManifest.tools);
+    for (const t of ALWAYS_ALLOWED_TOOLS) allowed.add(t);
+    return Array.from(allowed);
+  })();
+
   const planValidationEnabled = (cfg as any).plan_validation_enabled ?? false;
   let activePlan: ExecutionPlan | null = null;
   if (planValidationEnabled) {
@@ -329,9 +375,10 @@ export async function* runAgentTurn(params: {
         workingDir,
         parallelMode: (cfg.parallel_mode as any) ?? true,
         skillSections,
-        sessionSummary,
+        memorySnapshot,
+        contractSnapshot,
         planContext,
-        availableToolNames: registry.listNames(),
+        availableToolNames,
         enableCaching: true
       })
     : [{ type: "text" as const, text: buildSystemPrompt({
@@ -340,16 +387,18 @@ export async function* runAgentTurn(params: {
         workingDir,
         parallelMode: (cfg.parallel_mode as any) ?? true,
         skillSections,
-        sessionSummary,
+        memorySnapshot,
+        contractSnapshot,
         planContext,
-        availableToolNames: registry.listNames()
+        availableToolNames
       }) }];
 
   const { provider, model } = createProvider({ repoRoot, modelOverride: params.modelOverride });
   // Load schemas with strict mode for structured outputs (guarantees valid tool calls)
   const allSchemas = loadToolSchemas(repoRoot, { strict: true });
   // Only advertise tools we can actually execute (prevents the model from calling unimplemented tools).
-  const tools = allSchemas.filter((t) => registry.has(t.function.name));
+  const availableToolSet = new Set(availableToolNames);
+  const tools = allSchemas.filter((t) => registry.has(t.function.name) && availableToolSet.has(t.function.name));
   const messages: OpenAIMessage[] = [{ role: "system", content: systemPromptBlocks }];
   for (const m of session.conversation.slice(-40)) {
     if (m.role === "user") {
@@ -462,7 +511,9 @@ export async function* runAgentTurn(params: {
     );
   }
 
-  if (String(process.env.FF_SKILLS_ENFORCE_ALLOWED_TOOLS || "") === "1") {
+  const enforceToolPolicies =
+    Boolean(toolManifest?.tools?.length) || String(process.env.FF_SKILLS_ENFORCE_ALLOWED_TOOLS || "") === "1";
+  if (enforceToolPolicies) {
     for (const hook of createSkillAllowedToolsHooks()) hookRegistry.register(hook);
   }
 
@@ -1079,6 +1130,25 @@ export async function* runAgentTurn(params: {
       aborted: signal.aborted,
       final_content_preview: smartTruncate(finalAssistantContent, 800)
     });
+
+    try {
+      writePlanSnapshot(workspaceDir, sessionId);
+      writeTasksSnapshot(workspaceDir, sessionId);
+      appendWorkspaceLog({
+        workspaceDir,
+        sessionId,
+        turnId,
+        userInput: contentForHistory,
+        assistantContent: finalAssistantContent,
+        toolCallsExecuted: toolCallsExecuted
+      });
+    } catch (err) {
+      logger.log("warn", "workspace_contract_update_failed", {
+        session_id: sessionId,
+        turn_id: turnId,
+        error: err instanceof Error ? err.message : String(err)
+      });
+    }
 
     yield { kind: "task_completed" };
   }

@@ -41,6 +41,7 @@ const CANONICAL_DIRECTORIES = [
   "agents",
   "commands",
   "skills",
+  "memory",
   "memory_core",
   "memory_core/scheduled_tasks",
   "memory_core/workflows",
@@ -51,6 +52,7 @@ const CANONICAL_DIRECTORIES = [
   "logs",
   "logs/sessions",
   "logs/hooks",
+  "logs/gateway",
   "logs/runs",
   "logs/scheduled_runs",
   "generated-images",
@@ -140,7 +142,7 @@ export function checkLegacyWorkspace(workspaceDir: string): ValidationIssue[] {
 
   const legacySessionSummary = path.join(legacyHome, 'session_summary.md');
   if (fs.existsSync(legacySessionSummary)) {
-    const expectedPath = path.join(workspaceDir, 'memory_core', 'session_summary.md');
+    const expectedPath = path.join(workspaceDir, 'MEMORY.md');
     issues.push({
       type: 'legacy_data',
       severity: 'warning',
@@ -152,16 +154,26 @@ export function checkLegacyWorkspace(workspaceDir: string): ValidationIssue[] {
 
   const workspaceSessionSummary = path.join(workspaceDir, 'session_summary.md');
   if (fs.existsSync(workspaceSessionSummary)) {
-    const expectedPath = path.join(workspaceDir, 'memory_core', 'session_summary.md');
-    if (workspaceSessionSummary !== expectedPath) {
-      issues.push({
-        type: 'misplaced_file',
-        severity: 'warning',
-        path: workspaceSessionSummary,
-        message: `session_summary.md should be in memory_core/`,
-        expectedPath
-      });
-    }
+    const expectedPath = path.join(workspaceDir, 'MEMORY.md');
+    issues.push({
+      type: 'legacy_data',
+      severity: 'warning',
+      path: workspaceSessionSummary,
+      message: `Found legacy session_summary.md in workspace root`,
+      expectedPath
+    });
+  }
+
+  const workspaceSessionSummaryCore = path.join(workspaceDir, 'memory_core', 'session_summary.md');
+  if (fs.existsSync(workspaceSessionSummaryCore)) {
+    const expectedPath = path.join(workspaceDir, 'MEMORY.md');
+    issues.push({
+      type: 'legacy_data',
+      severity: 'warning',
+      path: workspaceSessionSummaryCore,
+      message: `Found legacy session summary in memory_core`,
+      expectedPath
+    });
   }
 
   return issues;

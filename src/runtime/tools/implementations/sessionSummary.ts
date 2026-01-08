@@ -15,7 +15,7 @@ type Args = {
 function buildSummary(args: Args): string {
   const now = new Date().toISOString();
   const project = (args.project_name || "").trim();
-  const header = `# Session Summary${project ? ` — ${project}` : ""}\n\n_Last updated: ${now}_\n`;
+  const header = `# Memory Summary${project ? ` — ${project}` : ""}\n\n_Last updated: ${now}_\n`;
 
   const sections: Array<[string, string]> = [
     ["Accomplishments", String(args.accomplishments || "").trim()],
@@ -39,7 +39,10 @@ export async function sessionSummaryTool(argsRaw: unknown): Promise<string> {
 
   const ctx = getToolContext();
   const workspaceDir = resolveWorkspaceDir(ctx?.workspaceDir ?? process.env.FF_WORKSPACE_DIR ?? undefined);
-  const filePath = path.join(workspaceDir, "memory_core", "session_summary.md");
+  const filePath = path.join(workspaceDir, "MEMORY.md");
+  const dailyDir = path.join(workspaceDir, "memory");
+  const day = new Date().toISOString().slice(0, 10);
+  const dailyPath = path.join(dailyDir, `${day}.md`);
 
   if (action === "read") {
     if (!fs.existsSync(filePath)) return "";
@@ -50,6 +53,12 @@ export async function sessionSummaryTool(argsRaw: unknown): Promise<string> {
     fs.mkdirSync(path.dirname(filePath), { recursive: true });
     const content = buildSummary(args);
     fs.writeFileSync(filePath, content, "utf8");
+    const now = new Date().toISOString();
+    fs.mkdirSync(dailyDir, { recursive: true });
+    if (!fs.existsSync(dailyPath)) {
+      fs.writeFileSync(dailyPath, `# Memory Log - ${day}\n\n`, "utf8");
+    }
+    fs.appendFileSync(dailyPath, `\n---\n${now}\n\nUpdated MEMORY.md\n`, "utf8");
     return JSON.stringify({ ok: true, action, path: filePath }, null, 2);
   }
 
@@ -63,6 +72,11 @@ export async function sessionSummaryTool(argsRaw: unknown): Promise<string> {
     if (args.context) parts.push(`### Context\n${String(args.context).trim()}`);
     const block = `\n\n---\n${now}\n\n${parts.join("\n\n")}\n`;
     fs.appendFileSync(filePath, block, "utf8");
+    fs.mkdirSync(dailyDir, { recursive: true });
+    if (!fs.existsSync(dailyPath)) {
+      fs.writeFileSync(dailyPath, `# Memory Log - ${day}\n\n`, "utf8");
+    }
+    fs.appendFileSync(dailyPath, block, "utf8");
     return JSON.stringify({ ok: true, action, path: filePath }, null, 2);
   }
 

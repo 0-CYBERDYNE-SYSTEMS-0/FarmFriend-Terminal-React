@@ -26,7 +26,7 @@
 - `schedule_task` — Schedule recurring or one-time FFT tasks. Agent provides structured timing parameters (schedule_type, hour, minute, etc.) calculated from natural language. Supports one-time execution, daily, weekly, and interval schedules.
 - `search_code` — Search code using natural language
 - `semantic_search` — Semantic CODE search using natural language and local embeddings (osgrep). BEST FOR: Codebase concept search in git repositories - 'where is authentication handled?', 'find rate limiting logic', 'how do we validate tools?'. NOT FOR: Project discovery in ff-terminal-workspace (use glob/grep instead - workspace is not a git repo). Finds meaning in CODE, not just keywords. Powered by tree-sitter code parsing.
-- `session_summary` — Create or update a session summary for cross-session continuity. Use at the end of work sessions to leave context for future sessions. Writes to ff-terminal-workspace/session_summary.md with accomplishments, decisions made, and recommended next steps.
+- `session_summary` — Create or update long-term memory for cross-session continuity. Use at the end of work sessions to leave context for future sessions. Writes to ff-terminal-workspace/MEMORY.md and appends to ff-terminal-workspace/memory/YYYY-MM-DD.md.
 - `skill_apply` — Write a drafted skill to disk and refresh the registry.
 - `skill_documentation` — Generate documentation for existing skills or skill drafts.
 - `skill_draft` — Draft a skill manifest and instructions before writing files.

@@ -176,7 +176,7 @@ GOOD: Create TodoWrite with all steps -> Execute -> Mark completed -> Continue t
    - Only resume incomplete todos when the user explicitly loaded/resumed a session (or asks to resume).
    - Ignore generic placeholder todos (e.g., "First task") as non-binding.
 
-2. **Check Session Summary**: Read `ff-terminal-workspace/session_summary.md` if it exists
+2. **Check Memory**: Read `ff-terminal-workspace/MEMORY.md` (and today's `ff-terminal-workspace/memory/YYYY-MM-DD.md`) if they exist
    - Contains accomplishments, decisions, and recommended next steps from previous sessions
    - Provides context for what was recently worked on
 
@@ -195,7 +195,7 @@ GOOD: Create TodoWrite with all steps -> Execute -> Mark completed -> Continue t
 **Quick Orientation Pattern**:
 ```
 1. Check current-session TodoWrite -> Any incomplete work?
-2. Read session_summary.md -> Any context from last session?
+2. Read MEMORY.md and today's memory log -> Any context from last session?
 3. Choose: Resume existing work OR confirm new work with user
 ```
 

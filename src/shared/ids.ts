@@ -6,5 +6,7 @@ export function newId(prefix: string): string {
 export function isValidSessionId(sessionId: string): boolean {
   // Validate format: session_<hex timestamp>_<hex random>
   // Timestamp is 8-10 hex digits (covers years 1970-2288), random is 8-32 hex digits
+  if (sessionId === "main") return true;
+  if (sessionId === "session_main") return true;
   return /^session_[a-f0-9]{8,10}_[a-f0-9]{8,32}$/i.test(sessionId);
 }

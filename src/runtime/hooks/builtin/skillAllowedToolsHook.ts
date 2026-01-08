@@ -1,8 +1,9 @@
 import { Hook } from "../types.js";
 
-const sessionPolicies = new Map<string, string[]>();
+const skillPolicies = new Map<string, string[]>();
+const workspacePolicies = new Map<string, string[]>();
 
-const ALWAYS_ALLOWED = new Set([
+export const ALWAYS_ALLOWED_TOOLS = new Set([
   "skill_loader",
   "skill_documentation",
   "skill_sequencer",
@@ -28,17 +29,51 @@ function parseAllowedTools(output: string): string[] | null {
   }
 }
 
+function intersect(a: string[], b: string[]): string[] {
+  const bSet = new Set(b);
+  return a.filter((t) => bSet.has(t));
+}
+
+function getEffectiveAllowedTools(sessionId: string): string[] | null {
+  const workspace = workspacePolicies.get(sessionId);
+  const skill = skillPolicies.get(sessionId);
+  if (workspace && skill) return intersect(workspace, skill);
+  return skill || workspace || null;
+}
+
+export function setWorkspaceAllowedToolsPolicy(sessionId: string, tools: string[] | null): boolean {
+  if (!tools || tools.length === 0) {
+    const had = workspacePolicies.has(sessionId);
+    workspacePolicies.delete(sessionId);
+    return had;
+  }
+  const normalized = tools.map((t) => String(t).trim()).filter(Boolean);
+  const prev = workspacePolicies.get(sessionId) || [];
+  const changed = prev.join(",") !== normalized.join(",");
+  workspacePolicies.set(sessionId, normalized);
+  return changed;
+}
+
+export function setSkillAllowedToolsPolicy(sessionId: string, tools: string[] | null): void {
+  if (!tools || tools.length === 0) {
+    skillPolicies.delete(sessionId);
+    return;
+  }
+  const normalized = tools.map((t) => String(t).trim()).filter(Boolean);
+  skillPolicies.set(sessionId, normalized);
+}
+
 export function createSkillAllowedToolsHooks(): Hook[] {
   const preHook: Hook = {
     type: "pre_tool_execution",
     name: "skill_allowed_tools_enforcer",
     priority: 20,
     run: async (ctx) => {
-      const allowed = sessionPolicies.get(ctx.sessionId);
+      const allowed = getEffectiveAllowedTools(ctx.sessionId);
       if (!allowed || allowed.length === 0) return { action: "allow" };
-      if (ALWAYS_ALLOWED.has(ctx.call.name)) return { action: "allow" };
+      if (ALWAYS_ALLOWED_TOOLS.has(ctx.call.name)) return { action: "allow" };
       if (allowed.includes(ctx.call.name)) return { action: "allow" };
-      return { action: "block", reason: `Tool not allowed by active skill policy: ${ctx.call.name}` };
+      return { action: "block", reason: `Tool not allowed by active tool policy: ${ctx.call.name}` };
     }
   };
 
@@ -50,17 +85,14 @@ export function createSkillAllowedToolsHooks(): Hook[] {
       if (ctx.call.name !== "skill_loader") return;
       if (!ctx.ok) return;
       const tools = parseAllowedTools(ctx.output);
-      if (!tools || tools.length === 0) {
-        sessionPolicies.delete(ctx.sessionId);
-        return;
-      }
-      sessionPolicies.set(ctx.sessionId, tools);
+      setSkillAllowedToolsPolicy(ctx.sessionId, tools);
     }
   };
 
   return [preHook, postHook];
 }
 
-export function clearSkillAllowedToolsPolicy(sessionId: string): void {
-  sessionPolicies.delete(sessionId);
+export function clearToolPolicies(sessionId: string): void {
+  skillPolicies.delete(sessionId);
+  workspacePolicies.delete(sessionId);
 }
