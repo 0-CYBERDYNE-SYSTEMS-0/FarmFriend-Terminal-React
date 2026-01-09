@@ -13,6 +13,7 @@ import { defaultConfigPath, resolveWorkspaceDir } from "../runtime/config/paths.
 import { loadWorkspaceContractSnapshot } from "../runtime/workspace/contract.js";
 import { loadTaskStore } from "../runtime/scheduling/taskStore.js";
 import { quickHealthCheck } from "../runtime/workspace/healthCheck.js";
+import { listSkillStubs } from "../runtime/tools/implementations/skills.js";
 
 // File attachment from web client
 type FileAttachment = {
@@ -263,6 +264,103 @@ function requireAdmin(req: IncomingMessage, res: ServerResponse, url: URL, contr
   if (provided && provided === controlToken) return true;
   sendJson(res, 401, { error: "Unauthorized", hint: "Provide control token via Authorization: Bearer <token>" });
   return false;
+}
+
+const WORKSPACE_FILES = [
+  "AGENTS.md",
+  "SOUL.md",
+  "TOOLS.md",
+  "USER.md",
+  "IDENTITY.md",
+  "MEMORY.md",
+  "PLAN.md",
+  "TASKS.md",
+  "LOG.md",
+  "commands.md"
+];
+
+function resolveWorkspaceFilePath(workspaceDir: string, name: string): string | null {
+  if (!WORKSPACE_FILES.includes(name)) return null;
+  return path.join(workspaceDir, name);
+}
+
+function isPathInside(baseDir: string, targetPath: string): boolean {
+  const rel = path.relative(baseDir, targetPath);
+  return rel === "" || (!rel.startsWith("..") && !path.isAbsolute(rel));
+}
+
+function parseFrontmatterSlug(text: string): string | null {
+  const trimmed = text.trimStart();
+  if (!trimmed.startsWith("---")) return null;
+  const lines = trimmed.split(/\r?\n/);
+  if (lines.length < 2) return null;
+  for (let i = 1; i < lines.length; i += 1) {
+    const line = lines[i];
+    if (line.trim() === "---") break;
+    const match = line.match(/^\s*slug:\s*(.+)$/i);
+    if (match) return match[1].trim();
+  }
+  return null;
+}
+
+function safeSlug(slugRaw: string): string | null {
+  const s = slugRaw.trim().toLowerCase();
+  if (!/^[a-z0-9-]{2,64}$/.test(s)) return null;
+  return s;
+}
+
+function copyDirectory(srcDir: string, destDir: string): void {
+  fs.mkdirSync(destDir, { recursive: true });
+  for (const ent of fs.readdirSync(srcDir, { withFileTypes: true })) {
+    if (ent.name === "node_modules" || ent.name === ".git") continue;
+    const src = path.join(srcDir, ent.name);
+    const dest = path.join(destDir, ent.name);
+    if (ent.isDirectory()) {
+      copyDirectory(src, dest);
+    } else if (ent.isFile()) {
+      fs.mkdirSync(path.dirname(dest), { recursive: true });
+      fs.copyFileSync(src, dest);
+    }
+  }
+}
+
+function registryBaseUrl(): string {
+  const raw = process.env.CLAWDHUB_REGISTRY_URL || "https://clawdhub.com";
+  return raw.trim().replace(/\/$/, "") || "https://clawdhub.com";
+}
+
+async function registryFetchJson<T>(pathName: string, searchParams?: Record<string, string | number | undefined>): Promise<T> {
+  const base = registryBaseUrl();
+  const url = new URL(pathName, base);
+  if (searchParams) {
+    for (const [key, value] of Object.entries(searchParams)) {
+      if (value === undefined || value === null || value === "") continue;
+      url.searchParams.set(key, String(value));
+    }
+  }
+  const res = await fetch(url.toString());
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(text || `Registry request failed (${res.status})`);
+  }
+  return (await res.json()) as T;
+}
+
+async function registryFetchText(pathName: string, searchParams?: Record<string, string | number | undefined>): Promise<string> {
+  const base = registryBaseUrl();
+  const url = new URL(pathName, base);
+  if (searchParams) {
+    for (const [key, value] of Object.entries(searchParams)) {
+      if (value === undefined || value === null || value === "") continue;
+      url.searchParams.set(key, String(value));
+    }
+  }
+  const res = await fetch(url.toString());
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(text || `Registry request failed (${res.status})`);
+  }
+  return await res.text();
 }
 
 function parseWebClientMessage(raw: string): WebClientMessage | null {
@@ -588,6 +686,328 @@ export async function startWebServer(): Promise<void> {
     if (req.method === "POST" && url.pathname === "/api/control/config/apply") {
       if (!requireAdmin(req, res, url, controlToken)) return;
       sendJson(res, 200, { ok: true, message: "Config saved. Restart the daemon to apply changes." });
+      return;
+    }
+
+    if (req.method === "GET" && url.pathname === "/api/control/workspace/files") {
+      const files = WORKSPACE_FILES.map((name) => {
+        const filePath = resolveWorkspaceFilePath(workspaceDir, name);
+        if (!filePath) return { name, exists: false };
+        const exists = fs.existsSync(filePath);
+        const size = exists && fs.statSync(filePath).isFile() ? fs.statSync(filePath).size : 0;
+        return { name, exists, size };
+      });
+      sendJson(res, 200, { files });
+      return;
+    }
+
+    if (req.method === "GET" && url.pathname === "/api/control/workspace/file") {
+      const name = url.searchParams.get("name") || "";
+      const filePath = resolveWorkspaceFilePath(workspaceDir, name);
+      if (!filePath) {
+        sendJson(res, 400, { error: "Unknown file name" });
+        return;
+      }
+      if (!fs.existsSync(filePath)) {
+        sendJson(res, 404, { error: "File not found", name });
+        return;
+      }
+      try {
+        const content = fs.readFileSync(filePath, "utf8");
+        sendJson(res, 200, { name, path: filePath, content });
+      } catch (err) {
+        sendJson(res, 500, { error: err instanceof Error ? err.message : String(err) });
+      }
+      return;
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/control/workspace/file") {
+      if (!requireAdmin(req, res, url, controlToken)) return;
+      try {
+        const body = await readJsonBody(req);
+        const name = typeof body?.name === "string" ? body.name.trim() : "";
+        const content = typeof body?.content === "string" ? body.content : "";
+        const filePath = resolveWorkspaceFilePath(workspaceDir, name);
+        if (!filePath) {
+          sendJson(res, 400, { error: "Unknown file name" });
+          return;
+        }
+        fs.mkdirSync(path.dirname(filePath), { recursive: true });
+        fs.writeFileSync(filePath, content, "utf8");
+        sendJson(res, 200, { ok: true, name, path: filePath });
+      } catch (err) {
+        sendJson(res, 500, { error: err instanceof Error ? err.message : String(err) });
+      }
+      return;
+    }
+
+    if (req.method === "GET" && url.pathname === "/api/control/skills/installed") {
+      try {
+        const skills = listSkillStubs({ workspaceDir, repoRoot }).map((skill) => ({
+          ...skill,
+          editable:
+            isPathInside(path.join(workspaceDir, "skills"), skill.path) ||
+            isPathInside(path.join(workspaceDir, "commands"), skill.path)
+        }));
+        sendJson(res, 200, { skills });
+      } catch (err) {
+        sendJson(res, 500, { error: err instanceof Error ? err.message : String(err) });
+      }
+      return;
+    }
+
+    if (req.method === "GET" && url.pathname === "/api/control/skills/read") {
+      try {
+        const pathParam = url.searchParams.get("path") || "";
+        if (!pathParam) {
+          sendJson(res, 400, { error: "Missing path" });
+          return;
+        }
+        const abs = path.resolve(pathParam);
+        const installed = listSkillStubs({ workspaceDir, repoRoot });
+        const match = installed.find((skill) => path.resolve(skill.path) === abs);
+        if (!match) {
+          sendJson(res, 403, { error: "Skill not registered" });
+          return;
+        }
+        if (!fs.existsSync(abs) || !fs.statSync(abs).isFile()) {
+          sendJson(res, 404, { error: "Skill file not found" });
+          return;
+        }
+        const content = fs.readFileSync(abs, "utf8");
+        const slug =
+          safeSlug(parseFrontmatterSlug(content) || "") ||
+          safeSlug(path.basename(path.dirname(abs))) ||
+          safeSlug(path.basename(abs, path.extname(abs))) ||
+          null;
+
+        let files: string[] = [];
+        if (path.basename(abs).toLowerCase() === "skill.md") {
+          const dir = path.dirname(abs);
+          files = fs
+            .readdirSync(dir, { withFileTypes: true })
+            .filter((ent) => ent.isFile())
+            .map((ent) => ent.name);
+        }
+        const editable =
+          isPathInside(path.join(workspaceDir, "skills"), abs) ||
+          isPathInside(path.join(workspaceDir, "commands"), abs);
+        sendJson(res, 200, { path: abs, slug, content, files, editable });
+      } catch (err) {
+        sendJson(res, 500, { error: err instanceof Error ? err.message : String(err) });
+      }
+      return;
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/control/skills/write") {
+      if (!requireAdmin(req, res, url, controlToken)) return;
+      try {
+        const body = await readJsonBody(req);
+        const pathParam = typeof body?.path === "string" ? body.path.trim() : "";
+        const content = typeof body?.content === "string" ? body.content : "";
+        if (!pathParam) {
+          sendJson(res, 400, { error: "Missing path" });
+          return;
+        }
+        const abs = path.resolve(pathParam);
+        const wsSkills = path.join(workspaceDir, "skills");
+        const wsCommands = path.join(workspaceDir, "commands");
+        if (!isPathInside(wsSkills, abs) && !isPathInside(wsCommands, abs)) {
+          sendJson(res, 403, { error: "Writes are limited to workspace skills or commands" });
+          return;
+        }
+        fs.mkdirSync(path.dirname(abs), { recursive: true });
+        fs.writeFileSync(abs, content, "utf8");
+        sendJson(res, 200, { ok: true, path: abs });
+      } catch (err) {
+        sendJson(res, 500, { error: err instanceof Error ? err.message : String(err) });
+      }
+      return;
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/control/skills/copy") {
+      if (!requireAdmin(req, res, url, controlToken)) return;
+      try {
+        const body = await readJsonBody(req);
+        const pathParam = typeof body?.path === "string" ? body.path.trim() : "";
+        const overwrite = Boolean(body?.overwrite);
+        if (!pathParam) {
+          sendJson(res, 400, { error: "Missing path" });
+          return;
+        }
+        const abs = path.resolve(pathParam);
+        const installed = listSkillStubs({ workspaceDir, repoRoot });
+        const match = installed.find((skill) => path.resolve(skill.path) === abs);
+        if (!match) {
+          sendJson(res, 403, { error: "Skill not registered" });
+          return;
+        }
+        if (!fs.existsSync(abs)) {
+          sendJson(res, 404, { error: "Skill not found" });
+          return;
+        }
+        const content = fs.readFileSync(abs, "utf8");
+        const slug =
+          safeSlug(parseFrontmatterSlug(content) || "") ||
+          safeSlug(path.basename(path.dirname(abs))) ||
+          safeSlug(path.basename(abs, path.extname(abs)));
+        if (!slug) {
+          sendJson(res, 400, { error: "Unable to determine skill slug" });
+          return;
+        }
+
+        const destDir = path.join(workspaceDir, "skills", slug);
+        if (fs.existsSync(destDir)) {
+          if (!overwrite) {
+            sendJson(res, 409, { error: "Skill already exists in workspace", slug });
+            return;
+          }
+          fs.rmSync(destDir, { recursive: true, force: true });
+        }
+        fs.mkdirSync(destDir, { recursive: true });
+
+        if (path.basename(abs).toLowerCase() === "skill.md") {
+          copyDirectory(path.dirname(abs), destDir);
+        } else {
+          fs.writeFileSync(path.join(destDir, "SKILL.md"), content, "utf8");
+        }
+
+        sendJson(res, 200, { ok: true, slug, path: destDir });
+      } catch (err) {
+        sendJson(res, 500, { error: err instanceof Error ? err.message : String(err) });
+      }
+      return;
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/control/skills/create") {
+      if (!requireAdmin(req, res, url, controlToken)) return;
+      try {
+        const body = await readJsonBody(req);
+        const slugRaw = typeof body?.slug === "string" ? body.slug.trim() : "";
+        const slug = safeSlug(slugRaw || "");
+        const name = typeof body?.name === "string" ? body.name.trim() : "";
+        const summary = typeof body?.summary === "string" ? body.summary.trim() : "";
+        const instructions = typeof body?.instructions === "string" ? body.instructions.trim() : "";
+        if (!slug) {
+          sendJson(res, 400, { error: "Invalid slug (use lowercase letters, numbers, and dashes)" });
+          return;
+        }
+        if (!summary || !instructions) {
+          sendJson(res, 400, { error: "Summary and instructions are required" });
+          return;
+        }
+        const destDir = path.join(workspaceDir, "skills", slug);
+        if (fs.existsSync(destDir)) {
+          sendJson(res, 409, { error: "Skill already exists in workspace", slug });
+          return;
+        }
+        fs.mkdirSync(destDir, { recursive: true });
+        const skillName = name || slug.replace(/-/g, " ").replace(/\b\w/g, (m) => m.toUpperCase());
+        const content = [
+          "---",
+          `name: ${skillName}`,
+          `slug: ${slug}`,
+          `summary: ${summary}`,
+          "version: 0.1.0",
+          "---",
+          "",
+          instructions,
+          ""
+        ].join("\n");
+        fs.writeFileSync(path.join(destDir, "SKILL.md"), content, "utf8");
+        sendJson(res, 200, { ok: true, slug, path: destDir });
+      } catch (err) {
+        sendJson(res, 500, { error: err instanceof Error ? err.message : String(err) });
+      }
+      return;
+    }
+
+    if (req.method === "GET" && url.pathname === "/api/control/skills/registry/search") {
+      try {
+        const query = url.searchParams.get("q")?.trim() ?? "";
+        const limit = url.searchParams.get("limit")?.trim() ?? "";
+        const result = await registryFetchJson("/api/v1/search", {
+          q: query,
+          limit
+        });
+        sendJson(res, 200, result);
+      } catch (err) {
+        sendJson(res, 500, { error: err instanceof Error ? err.message : String(err) });
+      }
+      return;
+    }
+
+    if (req.method === "GET" && url.pathname === "/api/control/skills/registry/skill") {
+      try {
+        const slug = url.searchParams.get("slug")?.trim().toLowerCase() || "";
+        if (!slug) {
+          sendJson(res, 400, { error: "Missing slug" });
+          return;
+        }
+        const skillMeta = await registryFetchJson(`/api/v1/skills/${encodeURIComponent(slug)}`);
+        sendJson(res, 200, skillMeta);
+      } catch (err) {
+        sendJson(res, 500, { error: err instanceof Error ? err.message : String(err) });
+      }
+      return;
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/control/skills/registry/install") {
+      if (!requireAdmin(req, res, url, controlToken)) return;
+      try {
+        const body = await readJsonBody(req);
+        const slug = typeof body?.slug === "string" ? body.slug.trim().toLowerCase() : "";
+        const version = typeof body?.version === "string" ? body.version.trim() : "";
+        const tag = typeof body?.tag === "string" ? body.tag.trim() : "";
+        const overwrite = Boolean(body?.overwrite);
+        if (!slug) {
+          sendJson(res, 400, { error: "Missing slug" });
+          return;
+        }
+
+        const meta = await registryFetchJson<any>(`/api/v1/skills/${encodeURIComponent(slug)}`);
+        const resolvedVersion = version || meta?.latestVersion?.version;
+        if (!resolvedVersion && !tag) {
+          sendJson(res, 400, { error: "Unable to resolve version" });
+          return;
+        }
+        const versionInfo = resolvedVersion
+          ? await registryFetchJson<any>(`/api/v1/skills/${encodeURIComponent(slug)}/versions/${encodeURIComponent(resolvedVersion)}`)
+          : null;
+        const files = versionInfo?.version?.files ?? [];
+        if (!files.length) {
+          sendJson(res, 404, { error: "No files in version" });
+          return;
+        }
+
+        const destDir = path.join(workspaceDir, "skills", slug);
+        if (fs.existsSync(destDir)) {
+          if (!overwrite) {
+            sendJson(res, 409, { error: "Skill already exists in workspace", slug });
+            return;
+          }
+          fs.rmSync(destDir, { recursive: true, force: true });
+        }
+        fs.mkdirSync(destDir, { recursive: true });
+
+        for (const file of files) {
+          const filePath = String(file.path || "").trim();
+          if (!filePath) continue;
+          if (filePath.includes("..")) continue;
+          const text = await registryFetchText(`/api/v1/skills/${encodeURIComponent(slug)}/file`, {
+            path: filePath,
+            version: resolvedVersion,
+            tag
+          });
+          const target = path.join(destDir, filePath);
+          fs.mkdirSync(path.dirname(target), { recursive: true });
+          fs.writeFileSync(target, text, "utf8");
+        }
+
+        sendJson(res, 200, { ok: true, slug, path: destDir, version: resolvedVersion || tag || "latest" });
+      } catch (err) {
+        sendJson(res, 500, { error: err instanceof Error ? err.message : String(err) });
+      }
       return;
     }
 

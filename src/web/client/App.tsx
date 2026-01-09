@@ -83,6 +83,33 @@ type SchedulerTask = {
   schedule: { schedule_type: string }
 }
 
+type WorkspaceFileEntry = {
+  name: string
+  exists: boolean
+  size?: number
+}
+
+type SkillsInstalledEntry = {
+  slug: string
+  name?: string
+  summary?: string
+  description?: string
+  tags?: string[]
+  path: string
+  source: string
+  kind: string
+  editable: boolean
+}
+
+type RegistrySearchEntry = {
+  score: number
+  slug?: string
+  displayName?: string
+  summary?: string | null
+  version?: string | null
+  updatedAt?: number
+}
+
 const DEFAULT_SESSION = 'main'
 
 function resolveWsUrl(sessionId: string): string {
@@ -144,7 +171,7 @@ function useControlOverview(refreshMs = 15000) {
   return { data, error, loading }
 }
 
-function useControlData<T>(path: string, token: string, refreshMs = 20000) {
+function useControlData<T>(path: string, token: string, refreshMs = 20000, deps: unknown[] = []) {
   const [data, setData] = useState<T | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
@@ -172,7 +199,7 @@ function useControlData<T>(path: string, token: string, refreshMs = 20000) {
       active = false
       if (timer) clearInterval(timer)
     }
-  }, [path, token, refreshMs])
+  }, [path, token, refreshMs, ...deps])
 
   return { data, error, loading }
 }
@@ -961,10 +988,305 @@ function FieldView({ showControl, onOpenControl, onOpenChat }: { showControl: bo
   )
 }
 
+function SkillsManager({ token }: { token: string }) {
+  const [skillsTab, setSkillsTab] = useState<'installed' | 'registry' | 'create'>('installed')
+  const [refreshKey, setRefreshKey] = useState(0)
+  const installed = useControlData<{ skills: SkillsInstalledEntry[] }>(
+    `/api/control/skills/installed?ts=${refreshKey}`,
+    token,
+    20000,
+    [refreshKey]
+  )
+
+  const [selectedSkill, setSelectedSkill] = useState<SkillsInstalledEntry | null>(null)
+  const [skillContent, setSkillContent] = useState('')
+  const [skillStatus, setSkillStatus] = useState<string | null>(null)
+
+  const openSkill = async (skill: SkillsInstalledEntry) => {
+    try {
+      const data = await fetchJson<{ content: string }>(`/api/control/skills/read?path=${encodeURIComponent(skill.path)}`, token)
+      setSelectedSkill(skill)
+      setSkillContent(data.content)
+      setSkillStatus(null)
+    } catch (err) {
+      setSkillStatus(err instanceof Error ? err.message : String(err))
+    }
+  }
+
+  const saveSkill = async () => {
+    if (!selectedSkill) return
+    try {
+      setSkillStatus('Saving...')
+      const res = await fetch('/api/control/skills/write', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify({ path: selectedSkill.path, content: skillContent })
+      })
+      if (!res.ok) throw new Error(await res.text())
+      setSkillStatus('Saved.')
+      setRefreshKey((k) => k + 1)
+    } catch (err) {
+      setSkillStatus(err instanceof Error ? err.message : String(err))
+    }
+  }
+
+  const copyToWorkspace = async () => {
+    if (!selectedSkill) return
+    try {
+      setSkillStatus('Copying...')
+      const res = await fetch('/api/control/skills/copy', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify({ path: selectedSkill.path })
+      })
+      if (!res.ok) throw new Error(await res.text())
+      setSkillStatus('Copied to workspace.')
+      setRefreshKey((k) => k + 1)
+    } catch (err) {
+      setSkillStatus(err instanceof Error ? err.message : String(err))
+    }
+  }
+
+  const [registryQuery, setRegistryQuery] = useState('')
+  const [registryResults, setRegistryResults] = useState<RegistrySearchEntry[]>([])
+  const [registryStatus, setRegistryStatus] = useState<string | null>(null)
+
+  const searchRegistry = async () => {
+    try {
+      setRegistryStatus('Searching...')
+      const data = await fetchJson<{ results: RegistrySearchEntry[] }>(
+        `/api/control/skills/registry/search?q=${encodeURIComponent(registryQuery)}&limit=20`,
+        token
+      )
+      setRegistryResults(data.results || [])
+      setRegistryStatus(null)
+    } catch (err) {
+      setRegistryStatus(err instanceof Error ? err.message : String(err))
+    }
+  }
+
+  const installFromRegistry = async (slug: string) => {
+    try {
+      setRegistryStatus(`Installing ${slug}...`)
+      const res = await fetch('/api/control/skills/registry/install', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify({ slug })
+      })
+      if (!res.ok) throw new Error(await res.text())
+      setRegistryStatus(`Installed ${slug}.`)
+      setRefreshKey((k) => k + 1)
+    } catch (err) {
+      setRegistryStatus(err instanceof Error ? err.message : String(err))
+    }
+  }
+
+  const [createSlug, setCreateSlug] = useState('')
+  const [createName, setCreateName] = useState('')
+  const [createSummary, setCreateSummary] = useState('')
+  const [createInstructions, setCreateInstructions] = useState('')
+  const [createStatus, setCreateStatus] = useState<string | null>(null)
+
+  const createSkill = async () => {
+    try {
+      setCreateStatus('Creating...')
+      const res = await fetch('/api/control/skills/create', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify({
+          slug: createSlug,
+          name: createName,
+          summary: createSummary,
+          instructions: createInstructions
+        })
+      })
+      if (!res.ok) throw new Error(await res.text())
+      setCreateStatus('Skill created.')
+      setCreateSlug('')
+      setCreateName('')
+      setCreateSummary('')
+      setCreateInstructions('')
+      setRefreshKey((k) => k + 1)
+      setSkillsTab('installed')
+    } catch (err) {
+      setCreateStatus(err instanceof Error ? err.message : String(err))
+    }
+  }
+
+  return (
+    <div className="control-card lg:col-span-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="text-sm font-semibold text-slate-200">Skills Manager</h2>
+          <p className="text-xs text-slate-400">Installed skills, registry search, and quick creation.</p>
+        </div>
+        <div className="flex gap-2 text-xs">
+          {['installed', 'registry', 'create'].map((tab) => (
+            <button
+              key={tab}
+              onClick={() => setSkillsTab(tab as any)}
+              className={`px-3 py-1.5 rounded-full ${skillsTab === tab ? 'bg-emerald-600 text-white' : 'bg-slate-900 text-slate-300 hover:bg-slate-800'}`}
+            >
+              {tab === 'installed' ? 'Installed' : tab === 'registry' ? 'Registry' : 'Create'}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {skillsTab === 'installed' && (
+        <div className="mt-4 grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
+          <div className="space-y-2 text-sm text-slate-300">
+            {installed.loading && <p>Loading skills...</p>}
+            {installed.error && <p className="text-rose-300">{installed.error}</p>}
+            {!installed.loading && installed.data?.skills?.length === 0 && <p>No skills found.</p>}
+            {installed.data?.skills?.map((skill) => (
+              <button
+                key={skill.path}
+                onClick={() => openSkill(skill)}
+                className={`w-full text-left px-3 py-2 rounded-lg border ${selectedSkill?.path === skill.path ? 'border-emerald-500/60 bg-slate-900/80' : 'border-slate-800 bg-slate-900/50 hover:bg-slate-900'}`}
+              >
+                <div className="flex items-center justify-between">
+                  <span className="font-semibold text-slate-200">{skill.slug}</span>
+                  <span className="text-xs text-slate-500">{skill.source}</span>
+                </div>
+                <p className="text-xs text-slate-400 mt-1">{skill.summary || skill.description || 'No summary'}</p>
+                {!skill.editable && <span className="text-[10px] text-amber-300">read-only</span>}
+              </button>
+            ))}
+          </div>
+          <div className="space-y-2">
+            {selectedSkill ? (
+              <>
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-semibold text-slate-200">Edit {selectedSkill.slug}</h3>
+                  {!selectedSkill.editable && (
+                    <button
+                      onClick={copyToWorkspace}
+                      className="px-2 py-1 rounded-full bg-amber-500 text-xs text-slate-900 font-semibold"
+                    >
+                      Copy to workspace
+                    </button>
+                  )}
+                </div>
+                <textarea
+                  value={skillContent}
+                  onChange={(e) => setSkillContent(e.target.value)}
+                  className="w-full h-56 rounded-lg bg-slate-950 border border-slate-800 text-xs text-slate-200 p-3 font-mono"
+                  disabled={!selectedSkill.editable}
+                />
+                {selectedSkill.editable && (
+                  <button
+                    onClick={saveSkill}
+                    className="px-3 py-2 rounded-lg bg-emerald-600 text-white text-xs font-semibold hover:bg-emerald-500"
+                  >
+                    Save Skill
+                  </button>
+                )}
+                {skillStatus && <p className="text-xs text-slate-400">{skillStatus}</p>}
+              </>
+            ) : (
+              <p className="text-xs text-slate-400">Select a skill to view or edit.</p>
+            )}
+          </div>
+        </div>
+      )}
+
+      {skillsTab === 'registry' && (
+        <div className="mt-4 space-y-3 text-sm text-slate-300">
+          <div className="flex gap-2">
+            <input
+              value={registryQuery}
+              onChange={(e) => setRegistryQuery(e.target.value)}
+              placeholder="Search registry skills..."
+              className="flex-1 px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 text-sm text-slate-200"
+            />
+            <button
+              onClick={searchRegistry}
+              className="px-3 py-2 rounded-lg bg-emerald-600 text-white text-xs font-semibold hover:bg-emerald-500"
+            >
+              Search
+            </button>
+          </div>
+          {registryStatus && <p className="text-xs text-slate-400">{registryStatus}</p>}
+          <div className="space-y-2 max-h-64 overflow-y-auto">
+            {registryResults.map((entry) => (
+              <div key={entry.slug} className="flex items-center justify-between gap-3 border border-slate-800 rounded-lg px-3 py-2 bg-slate-900/60">
+                <div>
+                  <p className="text-sm font-semibold text-slate-200">{entry.displayName || entry.slug}</p>
+                  <p className="text-xs text-slate-400">{entry.summary || 'No summary'}</p>
+                </div>
+                {entry.slug && (
+                  <button
+                    onClick={() => installFromRegistry(entry.slug!)}
+                    className="px-2 py-1 rounded-full bg-amber-500 text-xs text-slate-900 font-semibold"
+                  >
+                    Install
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {skillsTab === 'create' && (
+        <div className="mt-4 space-y-3 text-sm text-slate-300">
+          <input
+            value={createSlug}
+            onChange={(e) => setCreateSlug(e.target.value)}
+            placeholder="Skill slug (e.g., crop-scout)"
+            className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 text-sm text-slate-200"
+          />
+          <input
+            value={createName}
+            onChange={(e) => setCreateName(e.target.value)}
+            placeholder="Skill name (optional)"
+            className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 text-sm text-slate-200"
+          />
+          <input
+            value={createSummary}
+            onChange={(e) => setCreateSummary(e.target.value)}
+            placeholder="Short summary"
+            className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 text-sm text-slate-200"
+          />
+          <textarea
+            value={createInstructions}
+            onChange={(e) => setCreateInstructions(e.target.value)}
+            placeholder="Instructions..."
+            className="w-full h-40 rounded-lg bg-slate-900 border border-slate-800 text-sm text-slate-200 p-3 font-mono"
+          />
+          <button
+            onClick={createSkill}
+            className="px-3 py-2 rounded-lg bg-emerald-600 text-white text-xs font-semibold hover:bg-emerald-500"
+          >
+            Create Skill
+          </button>
+          {createStatus && <p className="text-xs text-slate-400">{createStatus}</p>}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function ControlBarn({ onClose }: { onClose: () => void }) {
   const [token, setToken] = useState(() => localStorage.getItem('ff-control-token') || '')
   const [configText, setConfigText] = useState('')
   const [configStatus, setConfigStatus] = useState<string | null>(null)
+  const [workspaceFileName, setWorkspaceFileName] = useState('AGENTS.md')
+  const [workspaceFileContent, setWorkspaceFileContent] = useState('')
+  const [workspaceFileStatus, setWorkspaceFileStatus] = useState<string | null>(null)
 
   useEffect(() => {
     localStorage.setItem('ff-control-token', token)
@@ -977,12 +1299,46 @@ function ControlBarn({ onClose }: { onClose: () => void }) {
   const gatewayLogs = useControlData<{ events: any[] }>('/api/control/logs/gateway?limit=60', token, 12000)
   const schedulerLogs = useControlData<{ events: any[] }>('/api/control/logs/scheduler?limit=60', token, 12000)
   const config = useControlData<{ path: string; authorized: boolean; config: any }>('/api/control/config', token, 0)
+  const workspaceFiles = useControlData<{ files: WorkspaceFileEntry[] }>('/api/control/workspace/files', token, 20000)
 
   useEffect(() => {
     if (config.data?.config) {
       setConfigText(JSON.stringify(config.data.config, null, 2))
     }
   }, [config.data])
+
+  useEffect(() => {
+    const loadWorkspaceFile = async () => {
+      if (!workspaceFileName) return
+      try {
+        const data = await fetchJson<{ content: string }>(`/api/control/workspace/file?name=${encodeURIComponent(workspaceFileName)}`, token)
+        setWorkspaceFileContent(data.content)
+        setWorkspaceFileStatus(null)
+      } catch (err) {
+        setWorkspaceFileContent('')
+        setWorkspaceFileStatus(err instanceof Error ? err.message : String(err))
+      }
+    }
+    loadWorkspaceFile()
+  }, [workspaceFileName, token])
+
+  const saveWorkspaceFile = async () => {
+    try {
+      setWorkspaceFileStatus('Saving...')
+      const res = await fetch('/api/control/workspace/file', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify({ name: workspaceFileName, content: workspaceFileContent })
+      })
+      if (!res.ok) throw new Error(await res.text())
+      setWorkspaceFileStatus('Saved.')
+    } catch (err) {
+      setWorkspaceFileStatus(err instanceof Error ? err.message : String(err))
+    }
+  }
 
   const saveConfig = async () => {
     try {
@@ -1102,6 +1458,35 @@ function ControlBarn({ onClose }: { onClose: () => void }) {
           </button>
           {configStatus && <p className="mt-2 text-xs text-slate-400">{configStatus}</p>}
         </section>
+
+        <section className="control-card lg:col-span-2">
+          <h2 className="text-sm font-semibold text-slate-200">Workspace files</h2>
+          <div className="mt-3 flex flex-wrap gap-2 text-xs text-slate-300">
+            {workspaceFiles.data?.files?.map((file) => (
+              <button
+                key={file.name}
+                onClick={() => setWorkspaceFileName(file.name)}
+                className={`px-3 py-1.5 rounded-full ${workspaceFileName === file.name ? 'bg-emerald-600 text-white' : 'bg-slate-900 text-slate-300 hover:bg-slate-800'}`}
+              >
+                {file.name}
+              </button>
+            ))}
+          </div>
+          <textarea
+            value={workspaceFileContent}
+            onChange={(e) => setWorkspaceFileContent(e.target.value)}
+            className="mt-3 w-full h-56 rounded-lg bg-slate-950 border border-slate-800 text-xs text-slate-200 p-3 font-mono"
+          />
+          <button
+            onClick={saveWorkspaceFile}
+            className="mt-3 px-3 py-2 rounded-lg bg-emerald-600 text-white text-xs font-semibold hover:bg-emerald-500"
+          >
+            Save File
+          </button>
+          {workspaceFileStatus && <p className="mt-2 text-xs text-slate-400">{workspaceFileStatus}</p>}
+        </section>
+
+        <SkillsManager token={token} />
 
         <section className="control-card lg:col-span-3">
           <h2 className="text-sm font-semibold text-slate-200">Logs</h2>
