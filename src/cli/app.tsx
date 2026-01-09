@@ -918,6 +918,7 @@ const HELP_ROWS: HelpRow[] = [
   { command: "/session [info|reset|mode|list|model]", description: "Inspect or manage session (persistent main mode)" },
   { command: "/compact", description: "Summarize older history for the current session" },
   { command: "/status", description: "Show session + workspace status" },
+  { command: "/system", description: "Show the assembled system prompt (debug)" },
   { command: "/clear", description: "Clear transcript" },
   { command: "/doctor", description: "Check workspace health and fix issues" },
   { command: "/theme (/colors)", description: "Print color-role samples" },
@@ -4313,6 +4314,17 @@ Use skill_draft first to create the draft, then skill_apply to create the final 
             if (!connected) {
               pushLines({ kind: "system", text: "Daemon not connected. Start ff-terminal to query live sessions." });
             }
+            setInputValue("");
+            return;
+          }
+
+          if (command === "system") {
+            if (!connected) {
+              pushLines({ kind: "error", text: "Daemon not connected. Start ff-terminal to fetch the system prompt." });
+              setInputValue("");
+              return;
+            }
+            sendTurn("/system", { echoUser: false });
             setInputValue("");
             return;
           }

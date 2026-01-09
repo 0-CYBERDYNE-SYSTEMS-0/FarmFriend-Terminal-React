@@ -14,6 +14,7 @@ import { resolveConfig, type RuntimeConfig } from "../runtime/config/loadConfig.
 import { loadDefaultDotenv } from "../runtime/config/dotenv.js";
 import { quickHealthCheck } from "../runtime/workspace/healthCheck.js";
 import { ensureCanonicalStructure } from "../runtime/workspace/migration.js";
+import { loadMemorySnapshot, loadWorkspaceContractSnapshot, formatWorkspaceContractForPrompt, loadToolManifest } from "../runtime/workspace/contract.js";
 import {
   saveLastActiveSession,
   resolveSessionId,
@@ -23,6 +24,10 @@ import {
 import { resetSessionWithArchive, compactSessionWithSummary } from "../runtime/session/resetHelpers.js";
 import { listSessionIndex, getOrCreateSessionIdForKey } from "../runtime/session/sessionIndex.js";
 import { patchSessionOverrides, getSessionOverrides } from "../runtime/session/sessionOverrides.js";
+import { buildSystemPrompt } from "../runtime/prompts/systemPrompt.js";
+import { ALWAYS_ALLOWED_TOOLS } from "../runtime/hooks/builtin/skillAllowedToolsHook.js";
+import { loadPlanStore, getActivePlan } from "../runtime/planning/planStore.js";
+import { formatPlanForPrompt } from "../runtime/planning/planExtractor.js";
 import { GatewayManager } from "../runtime/gateway/manager.js";
 import { WhatsAppGateway } from "../runtime/gateway/channels/whatsappGateway.js";
 import { IMessageGateway } from "../runtime/gateway/channels/imessageGateway.js";
@@ -106,6 +111,58 @@ function listSessions(workspaceDir: string, limit = 50, activeMinutes?: number, 
   rows.push(...extraRows);
   rows.sort((a, b) => String(b.updatedAt || "").localeCompare(String(a.updatedAt || "")));
   return rows.slice(0, Math.max(1, Math.min(200, limit)));
+}
+
+function buildSystemPromptForDebug(params: {
+  sessionId: string;
+  sessionMode: string;
+  workspaceDir: string;
+  repoRoot: string;
+  cfg: RuntimeConfig;
+  registry: ToolRegistry;
+}): string {
+  const snapshot = loadWorkspaceContractSnapshot(params.workspaceDir);
+  const bootstrapActive = Boolean(snapshot.bootstrap?.trim());
+  const contractSnapshot = formatWorkspaceContractForPrompt(snapshot);
+  const memorySnapshot = loadMemorySnapshot(params.workspaceDir);
+
+  const toolManifest = loadToolManifest(params.workspaceDir);
+  const availableToolNames = (() => {
+    if (!toolManifest?.tools?.length) return params.registry.listNames();
+    const allowed = new Set<string>(toolManifest.tools);
+    for (const t of ALWAYS_ALLOWED_TOOLS) allowed.add(t);
+    return Array.from(allowed);
+  })();
+  const availableToolSet = new Set(availableToolNames);
+  const enabledTools = Array.from(availableToolSet).sort((a, b) => a.localeCompare(b));
+  const disabledTools = params.registry.listNames().filter((name) => !availableToolSet.has(name)).sort((a, b) => a.localeCompare(b));
+
+  const planValidationEnabled = (params.cfg as any).plan_validation_enabled ?? false;
+  let planContext = "";
+  if (planValidationEnabled) {
+    const planStore = loadPlanStore({ workspaceDir: params.workspaceDir, sessionId: params.sessionId });
+    const plan = getActivePlan(planStore);
+    if (plan) planContext = formatPlanForPrompt(plan);
+  }
+
+  const workingDir = process.cwd();
+
+  return buildSystemPrompt({
+    variant: (params.cfg.system_message_variant as any) ?? "a",
+    repoRoot: params.repoRoot,
+    workingDir,
+    parallelMode: (params.cfg.parallel_mode as any) ?? true,
+    skillSections: "",
+    memorySnapshot,
+    contractSnapshot,
+    bootstrapActive,
+    sessionId: params.sessionId,
+    sessionMode: params.sessionMode,
+    enabledTools,
+    disabledTools,
+    planContext,
+    availableToolNames
+  });
 }
 
 async function applyResetTrigger(params: {
@@ -347,6 +404,7 @@ export async function startDaemon(): Promise<void> {
         let resetRemainder = "";
         let compactTriggered = false;
         let compactRemainder = "";
+        let systemTriggered = false;
         if (typeof input === "string") {
           const trimmed = input.trim();
           if (/^\/(reset|new)\b/i.test(trimmed)) {
@@ -355,6 +413,8 @@ export async function startDaemon(): Promise<void> {
           } else if (/^\/compact\b/i.test(trimmed)) {
             compactTriggered = true;
             compactRemainder = trimmed.replace(/^\/compact\b/i, "").trim();
+          } else if (/^\/system\b/i.test(trimmed)) {
+            systemTriggered = true;
           }
         }
 
@@ -392,6 +452,23 @@ export async function startDaemon(): Promise<void> {
             return;
           }
           input = compactRemainder;
+        }
+
+        if (systemTriggered) {
+          const systemPrompt = buildSystemPromptForDebug({
+            sessionId: resolvedSessionId,
+            sessionMode,
+            workspaceDir,
+            repoRoot,
+            cfg: runtimeCfg,
+            registry
+          });
+          const sysTurnId = newTurnId();
+          send(ws, { type: "turn_started", sessionId: resolvedSessionId, turnId: sysTurnId });
+          let seq = 0;
+          send(ws, { type: "chunk", turnId: sysTurnId, seq: (seq += 1), chunk: toWire({ kind: "content", delta: systemPrompt }) });
+          send(ws, { type: "turn_finished", turnId: sysTurnId, ok: true });
+          return;
         }
 
         currentTurn?.controller.abort();
