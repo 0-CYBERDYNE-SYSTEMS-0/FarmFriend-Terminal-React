@@ -742,9 +742,20 @@ async function run(): Promise<void> {
         store.tasks.find((t) => t.id === scheduledTaskRef) ||
         store.tasks.find((t) => t.name === scheduledTaskRef);
       if (!task) throw new Error(`No such scheduled task: ${scheduledTaskRef}\n`);
-      if (!task.prompt && !task.workflow) throw new Error(`Scheduled task ${task.name} has no prompt/workflow\n`);
-      if (task.workflow) throw new Error("workflows are not implemented yet in TS runner\n");
-      promptToRun = task.prompt || "";
+
+      if (task.payload) {
+        if (task.payload.kind === "systemEvent") {
+          promptToRun = task.payload.text;
+        } else if (task.payload.kind === "agentTurn") {
+          promptToRun = task.payload.prompt || "";
+          if (task.payload.workflow) throw new Error("workflows not implemented yet\n");
+        }
+      } else {
+        if (!task.prompt && !task.workflow) throw new Error(`Scheduled task ${task.name} has no prompt/workflow\n`);
+        if (task.workflow) throw new Error("workflows are not implemented yet in TS runner\n");
+        promptToRun = task.prompt || "";
+      }
+
       scheduledTaskName = task.name;
       scheduledTaskId = task.id;
       scheduledTaskProfile = task.profile;
@@ -944,6 +955,21 @@ async function run(): Promise<void> {
         task.state.last_duration_ms = durationMs;
 
         saveTaskStore(workspaceDir, store);
+
+        // Append to run history
+        const { appendRunHistory } = await import("../runtime/scheduling/runHistory.js");
+        appendRunHistory(workspaceDir, {
+          id: newId("run"),
+          taskId: task.id,
+          taskName: task.name,
+          startedAt: task.last_run.started_at,
+          finishedAt: task.last_run.finished_at,
+          status: ok ? "ok" : "error",
+          durationMs: durationMs,
+          error,
+          sessionId,
+          outputSummary: assistantText.slice(0, 500)
+        });
 
         if (task.schedule) {
           try {

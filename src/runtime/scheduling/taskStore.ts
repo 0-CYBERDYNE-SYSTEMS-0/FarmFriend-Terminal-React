@@ -2,9 +2,14 @@ import fs from "node:fs";
 import path from "node:path";
 import { ensureDir, writeJson } from "../config/loadConfig.js";
 
+export type PayloadType =
+  | { kind: "agentTurn"; prompt?: string; workflow?: string }
+  | { kind: "systemEvent"; text: string };
+
 export type ScheduledTask = {
   id: string;
   name: string;
+  payload?: PayloadType;
   prompt?: string;
   workflow?: string;
   profile?: string;

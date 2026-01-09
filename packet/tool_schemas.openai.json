@@ -881,7 +881,7 @@
         "properties": {
           "action": {
             "type": "string",
-            "description": "Action: 'add' (create task), 'list' (show all), 'remove' (delete), 'enable' (activate), 'disable' (pause), 'status' (check), 'run' (manually trigger)"
+            "description": "Action: 'add' (create task), 'list' (show all), 'remove' (delete), 'enable' (activate), 'disable' (pause), 'status' (check), 'run' (manually trigger), 'update' (modify existing task), 'history' (view past runs)"
           },
           "name": {
             "type": "string",
@@ -894,6 +894,14 @@
           "workflow": {
             "type": "string",
             "description": "Workflow name to replay instead of prompt"
+          },
+          "payload_kind": {
+            "type": "string",
+            "description": "Payload type: 'agentTurn' (full agent execution) or 'systemEvent' (text injection into session)"
+          },
+          "payload_text": {
+            "type": "string",
+            "description": "Text content for systemEvent payload"
           },
           "profile": {
             "type": "string",
@@ -981,6 +989,10 @@
           "open_result": {
             "type": "boolean",
             "description": "Auto-open generated files (default: True)"
+          },
+          "limit": {
+            "type": "integer",
+            "description": "For 'history' action: max number of runs to return (default: 50)"
           }
         },
         "required": [

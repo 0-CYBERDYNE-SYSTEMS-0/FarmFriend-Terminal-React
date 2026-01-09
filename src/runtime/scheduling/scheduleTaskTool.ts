@@ -1,5 +1,5 @@
 import { newId } from "../../shared/ids.js";
-import { loadTaskStore, saveTaskStore, ScheduledTask } from "./taskStore.js";
+import { loadTaskStore, saveTaskStore, ScheduledTask, type PayloadType } from "./taskStore.js";
 import { getSchedulerBackend } from "./backends/index.js";
 import { computeNextRRuleExecutionTimestamp, resolveScheduleTimeZone } from "./rrule.js";
 import { computeNextRunAt } from "./scheduler.js";
@@ -10,10 +10,12 @@ import path from "node:path";
 import { spawn } from "node:child_process";
 
 type Args = {
-  action: "add" | "list" | "remove" | "enable" | "disable" | "status" | "run";
+  action: "add" | "list" | "remove" | "enable" | "disable" | "status" | "run" | "update" | "history";
   name?: string;
   prompt?: string;
   workflow?: string;
+  payload_kind?: "agentTurn" | "systemEvent";
+  payload_text?: string;
   profile?: string;
   model?: string;
   session_target?: "main" | "isolated" | "new";
@@ -35,6 +37,7 @@ type Args = {
   dry_run?: boolean;
   open_result?: boolean;
   force?: boolean;
+  limit?: number;
 };
 
 type ParsedTime =
@@ -220,6 +223,52 @@ export async function scheduleTaskTool(argsRaw: unknown, workspaceDir: string): 
     return `${ok ? "Ran" : "Failed"} task ${task.name} (${task.id})`;
   }
 
+  if (args.action === "history") {
+    const { loadRunHistory } = await import("./runHistory.js");
+    const taskId = existingIndex !== -1 ? store.tasks[existingIndex].id : undefined;
+    const limit = typeof args.limit === "number" ? args.limit : 50;
+    const entries = loadRunHistory(workspaceDir, taskId, limit);
+    return JSON.stringify(entries, null, 2);
+  }
+
+  if (args.action === "update") {
+    if (existingIndex === -1) return `No such task: ${name}`;
+    const task = store.tasks[existingIndex];
+
+    if (args.description !== undefined) task.description = args.description;
+    if (args.model !== undefined) task.model = args.model;
+    if (args.thinking !== undefined) task.thinking = args.thinking;
+    if (args.timeout_seconds !== undefined) task.timeout_seconds = args.timeout_seconds;
+    if (args.prompt !== undefined) task.prompt = args.prompt;
+    if (args.workflow !== undefined) task.workflow = args.workflow;
+    if (args.profile !== undefined) task.profile = args.profile;
+    if (args.session_target !== undefined) task.session_target = args.session_target;
+    if (args.post_to_main_prefix !== undefined) task.post_to_main_prefix = args.post_to_main_prefix;
+
+    if (args.schedule_type || args.hour !== undefined || args.minute !== undefined || args.weekdays !== undefined || args.interval_seconds !== undefined || args.execution_timestamp !== undefined || args.schedule_rule !== undefined || args.timezone !== undefined || args.start_datetime !== undefined) {
+      const hourMinute = resolveHourMinute(args);
+      task.schedule = {
+        schedule_type: args.schedule_type || task.schedule.schedule_type,
+        hour: hourMinute?.hour ?? args.hour ?? task.schedule.hour,
+        minute: hourMinute?.minute ?? args.minute ?? task.schedule.minute,
+        weekdays: args.weekdays ?? task.schedule.weekdays,
+        interval_seconds: args.interval_seconds ?? task.schedule.interval_seconds,
+        execution_timestamp: args.execution_timestamp ?? task.schedule.execution_timestamp,
+        schedule_rule: args.schedule_rule ?? task.schedule.schedule_rule,
+        timezone: args.timezone ?? task.schedule.timezone,
+        start_datetime: args.start_datetime ?? task.schedule.start_datetime
+      };
+
+      const nextRunAt = computeNextRunAt(task, DateTime.now());
+      task.next_run_at = nextRunAt ?? undefined;
+    }
+
+    task.updated_at = new Date().toISOString();
+    saveTaskStore(workspaceDir, store);
+
+    return `Updated task ${task.name} (${task.id})`;
+  }
+
   // add
   if (args.action === "add") {
     let schedule_type = args.schedule_type;
@@ -304,9 +353,16 @@ export async function scheduleTaskTool(argsRaw: unknown, workspaceDir: string): 
       throw new Error("schedule_task: interval_seconds must be >= 60");
     }
 
+    const payload: PayloadType | undefined = args.payload_kind
+      ? args.payload_kind === "systemEvent"
+        ? { kind: "systemEvent", text: args.payload_text || "" }
+        : { kind: "agentTurn", prompt: args.prompt, workflow: args.workflow }
+      : undefined;
+
     const task: ScheduledTask = {
       id: newId("task"),
       name,
+      payload,
       prompt: args.prompt,
       workflow: args.workflow,
       profile: args.profile,
