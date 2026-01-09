@@ -288,6 +288,21 @@ npm install
 npm run dev  # Starts Vite dev server on port 5173
 ```
 
+**Web UI surfaces**
+- **FieldView** (default): agriculture-first dashboard + embedded chat.
+- **Control Barn** (admin): deep configuration and operations panel.
+
+**Open Control Barn**
+1. Start the web server (`ff-terminal start --web` or `npm run dev:web`).
+2. Open `http://127.0.0.1:8787/?admin=1` once to unlock it locally.
+3. Use the **Control Barn** button in the UI header.
+
+**Secure Control Barn** (recommended for remote access)
+```bash
+export FF_CONTROL_BARN_TOKEN="your-secret-token"
+```
+The UI will prompt for a token before admin write actions.
+
 **Important:** If the web UI shows a blank page, it usually means the frontend hasn't been built:
 ```bash
 cd src/web/client
@@ -390,6 +405,7 @@ The workspace directory stores sessions, logs, and project data. It defaults to 
 **Gateway Status:**
 - CLI: `ff-terminal gateway status`
 - Web: `GET /api/gateway/status` (served by `ff-terminal web`)
+- Control APIs: `GET /api/control/overview`, `/api/control/health`, `/api/control/scheduler/tasks`
 
 **Note:** The workspace directory must be writable by the current user. The application automatically creates required subdirectories and contract files if missing.
 

@@ -1,5 +1,5 @@
 /**
- * Color Theme System for FF-Terminal Web Client
+ * Color Theme System for FarmFriend Terminal Web Client
  * Maps semantic color roles to Tailwind CSS classes
  * Inspired by CLI colorTheme.ts but adapted for web
  */

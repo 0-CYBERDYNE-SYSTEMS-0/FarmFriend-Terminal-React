@@ -170,3 +170,45 @@ code {
 .animate-fade-in {
   animation: fade-in 0.2s ease-out;
 }
+
+/* FieldView / Control Barn styles */
+.fieldview-shell {
+  background:
+    radial-gradient(circle at 10% 10%, rgba(16, 185, 129, 0.18), transparent 40%),
+    radial-gradient(circle at 80% 0%, rgba(251, 191, 36, 0.18), transparent 45%),
+    linear-gradient(135deg, #fef3c7 0%, #ecfdf5 45%, #f0fdf4 100%);
+  font-family: "Iowan Old Style", "Palatino", "Georgia", serif;
+}
+
+.fieldview-title {
+  letter-spacing: -0.02em;
+}
+
+.field-card {
+  background: rgba(255, 255, 255, 0.86);
+  border: 1px solid rgba(16, 185, 129, 0.18);
+  border-radius: 18px;
+  padding: 20px;
+  box-shadow: 0 10px 30px rgba(16, 185, 129, 0.08);
+}
+
+.field-chat {
+  background: #0f172a;
+  border: 1px solid rgba(148, 163, 184, 0.3);
+}
+
+.controlbarn-shell {
+  background:
+    radial-gradient(circle at 20% 20%, rgba(59, 130, 246, 0.12), transparent 45%),
+    radial-gradient(circle at 85% 5%, rgba(148, 163, 184, 0.12), transparent 50%),
+    #0b1120;
+  font-family: "Space Grotesk", "Avenir Next", "Helvetica Neue", sans-serif;
+}
+
+.control-card {
+  background: rgba(15, 23, 42, 0.8);
+  border: 1px solid rgba(51, 65, 85, 0.6);
+  border-radius: 16px;
+  padding: 18px;
+  box-shadow: 0 10px 24px rgba(2, 6, 23, 0.4);
+}

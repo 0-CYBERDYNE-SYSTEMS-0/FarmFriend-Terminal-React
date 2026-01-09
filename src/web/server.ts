@@ -9,7 +9,10 @@ import Busboy from "busboy";
 
 import { findRepoRoot } from "../runtime/config/repoRoot.js";
 import { resolveConfig } from "../runtime/config/loadConfig.js";
-import { resolveWorkspaceDir } from "../runtime/config/paths.js";
+import { defaultConfigPath, resolveWorkspaceDir } from "../runtime/config/paths.js";
+import { loadWorkspaceContractSnapshot } from "../runtime/workspace/contract.js";
+import { loadTaskStore } from "../runtime/scheduling/taskStore.js";
+import { quickHealthCheck } from "../runtime/workspace/healthCheck.js";
 
 // File attachment from web client
 type FileAttachment = {
@@ -151,6 +154,115 @@ async function parseFileUpload(req: IncomingMessage): Promise<FileUploadResult> 
       reject(err);
     }
   });
+}
+
+function sendJson(res: ServerResponse, status: number, payload: unknown): void {
+  res.writeHead(status, { "content-type": "application/json" });
+  res.end(JSON.stringify(payload, null, 2) + "\n");
+}
+
+function resolveRuntimeContext(repoRoot: string) {
+  const runtimeCfg = resolveConfig({ repoRoot });
+  const workspaceDir = resolveWorkspaceDir(
+    (runtimeCfg as any).workspace_dir ?? process.env.FF_WORKSPACE_DIR ?? undefined,
+    { repoRoot }
+  );
+  const configPath = process.env.FF_CONFIG_PATH?.trim() || defaultConfigPath();
+  const controlToken =
+    process.env.FF_CONTROL_BARN_TOKEN ||
+    (runtimeCfg as any).control_barn_token ||
+    (runtimeCfg as any).controlBarnToken ||
+    "";
+
+  return { runtimeCfg, workspaceDir, configPath, controlToken };
+}
+
+function readJsonFileSafe(p: string): any | null {
+  try {
+    if (!fs.existsSync(p)) return null;
+    const raw = fs.readFileSync(p, "utf8");
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+function tailLines(raw: string, limit: number): string[] {
+  if (!raw) return [];
+  const lines = raw.split(/\r?\n/).filter(Boolean);
+  if (lines.length <= limit) return lines;
+  return lines.slice(lines.length - limit);
+}
+
+function tailJsonLines(filePath: string, limit: number): Array<Record<string, any> | { raw: string }> {
+  if (!fs.existsSync(filePath)) return [];
+  const raw = fs.readFileSync(filePath, "utf8");
+  const lines = tailLines(raw, limit);
+  return lines.map((line) => {
+    try {
+      return JSON.parse(line);
+    } catch {
+      return { raw: line };
+    }
+  });
+}
+
+function redactConfig(value: any): any {
+  if (Array.isArray(value)) {
+    return value.map((item) => redactConfig(item));
+  }
+  if (value && typeof value === "object") {
+    const out: Record<string, any> = {};
+    for (const [key, val] of Object.entries(value)) {
+      if (/(key|token|secret|password)/i.test(key)) {
+        out[key] = typeof val === "string" && val.length ? "••••••••" : val;
+      } else {
+        out[key] = redactConfig(val);
+      }
+    }
+    return out;
+  }
+  return value;
+}
+
+async function readJsonBody(req: IncomingMessage): Promise<any> {
+  return await new Promise((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    req.on("data", (chunk) => chunks.push(Buffer.from(chunk)));
+    req.on("end", () => {
+      const raw = Buffer.concat(chunks).toString("utf8");
+      if (!raw.trim()) {
+        resolve(null);
+        return;
+      }
+      try {
+        resolve(JSON.parse(raw));
+      } catch (err) {
+        reject(err);
+      }
+    });
+    req.on("error", reject);
+  });
+}
+
+function extractAuthToken(req: IncomingMessage, url: URL): string {
+  const header = req.headers.authorization || "";
+  if (header.toLowerCase().startsWith("bearer ")) {
+    return header.slice(7).trim();
+  }
+  const direct = req.headers["x-ff-control-token"];
+  if (typeof direct === "string" && direct.trim()) return direct.trim();
+  const query = url.searchParams.get("token");
+  if (query && query.trim()) return query.trim();
+  return "";
+}
+
+function requireAdmin(req: IncomingMessage, res: ServerResponse, url: URL, controlToken: string): boolean {
+  if (!controlToken) return true;
+  const provided = extractAuthToken(req, url);
+  if (provided && provided === controlToken) return true;
+  sendJson(res, 401, { error: "Unauthorized", hint: "Provide control token via Authorization: Bearer <token>" });
+  return false;
 }
 
 function parseWebClientMessage(raw: string): WebClientMessage | null {
@@ -311,33 +423,171 @@ export async function startWebServer(): Promise<void> {
     "dist"
   );
 
-  const server = http.createServer((req: IncomingMessage, res: ServerResponse) => {
+  const server = http.createServer(async (req: IncomingMessage, res: ServerResponse) => {
+    const url = new URL(req.url ?? "/", "http://localhost");
+
     // Health endpoint
-    if (req.url === "/health") {
-      res.writeHead(200, { "content-type": "application/json" });
-      res.end(JSON.stringify({ ok: true }) + "\n");
+    if (url.pathname === "/health") {
+      sendJson(res, 200, { ok: true });
       return;
     }
 
-    if (req.method === "GET" && req.url?.startsWith("/api/gateway/status")) {
+    const { workspaceDir, configPath, controlToken } = resolveRuntimeContext(repoRoot);
+
+    if (req.method === "GET" && url.pathname === "/api/control/overview") {
       try {
-        const runtimeCfg = resolveConfig({ repoRoot });
-        const workspaceDir = resolveWorkspaceDir(
-          (runtimeCfg as any).workspace_dir ?? process.env.FF_WORKSPACE_DIR ?? undefined,
-          { repoRoot }
-        );
+        const statusPath = path.join(workspaceDir, "logs", "gateway", "status.json");
+        const gatewayStatus = readJsonFileSafe(statusPath);
+        const store = loadTaskStore(workspaceDir);
+        const healthIssues = await quickHealthCheck(workspaceDir);
+        const contract = {
+          files: [
+            "AGENTS.md",
+            "SOUL.md",
+            "TOOLS.md",
+            "USER.md",
+            "IDENTITY.md",
+            "MEMORY.md",
+            "PLAN.md",
+            "TASKS.md",
+            "LOG.md"
+          ].map((name) => ({
+            name,
+            exists: fs.existsSync(path.join(workspaceDir, name))
+          }))
+        };
+
+        sendJson(res, 200, {
+          timestamp: new Date().toISOString(),
+          workspace_dir: workspaceDir,
+          gateway: gatewayStatus,
+          scheduler: {
+            task_count: store.tasks.length,
+            enabled_count: store.tasks.filter((t) => t.enabled).length,
+            next_run_at:
+              store.tasks
+                .map((t) => t.next_run_at)
+                .filter((v): v is number => typeof v === "number")
+                .sort((a, b) => a - b)[0] ?? null
+          },
+          health: {
+            ok: healthIssues.length === 0,
+            issues: healthIssues
+          },
+          contract
+        });
+      } catch (err) {
+        sendJson(res, 500, { error: err instanceof Error ? err.message : String(err) });
+      }
+      return;
+    }
+
+    if (req.method === "GET" && (url.pathname === "/api/gateway/status" || url.pathname === "/api/control/gateway/status")) {
+      try {
         const statusPath = path.join(workspaceDir, "logs", "gateway", "status.json");
         if (!fs.existsSync(statusPath)) {
-          res.writeHead(404, { "content-type": "application/json" });
-          res.end(JSON.stringify({ error: "Gateway status not available" }) + "\n");
+          sendJson(res, 404, { error: "Gateway status not available" });
           return;
         }
         res.writeHead(200, { "content-type": "application/json" });
         res.end(fs.readFileSync(statusPath, "utf8"));
       } catch (err) {
-        res.writeHead(500, { "content-type": "application/json" });
-        res.end(JSON.stringify({ error: err instanceof Error ? err.message : String(err) }) + "\n");
+        sendJson(res, 500, { error: err instanceof Error ? err.message : String(err) });
       }
+      return;
+    }
+
+    if (req.method === "GET" && url.pathname === "/api/control/health") {
+      try {
+        const issues = await quickHealthCheck(workspaceDir);
+        sendJson(res, 200, { ok: issues.length === 0, issues });
+      } catch (err) {
+        sendJson(res, 500, { error: err instanceof Error ? err.message : String(err) });
+      }
+      return;
+    }
+
+    if (req.method === "GET" && url.pathname === "/api/control/scheduler/tasks") {
+      try {
+        const store = loadTaskStore(workspaceDir);
+        sendJson(res, 200, { tasks: store.tasks });
+      } catch (err) {
+        sendJson(res, 500, { error: err instanceof Error ? err.message : String(err) });
+      }
+      return;
+    }
+
+    if (req.method === "GET" && url.pathname === "/api/control/workspace/contract") {
+      try {
+        const snapshot = loadWorkspaceContractSnapshot(workspaceDir, 8000);
+        sendJson(res, 200, { workspace_dir: workspaceDir, snapshot });
+      } catch (err) {
+        sendJson(res, 500, { error: err instanceof Error ? err.message : String(err) });
+      }
+      return;
+    }
+
+    if (req.method === "GET" && url.pathname === "/api/control/logs/gateway") {
+      const limit = Math.min(500, Math.max(10, Number(url.searchParams.get("limit") || 120)));
+      const eventsPath = path.join(workspaceDir, "logs", "gateway", "events.jsonl");
+      const events = tailJsonLines(eventsPath, limit);
+      sendJson(res, 200, { path: eventsPath, events });
+      return;
+    }
+
+    if (req.method === "GET" && url.pathname === "/api/control/logs/scheduler") {
+      const limit = Math.min(500, Math.max(10, Number(url.searchParams.get("limit") || 120)));
+      const logPath = path.join(workspaceDir, "logs", "scheduler", "scheduler.jsonl");
+      const events = tailJsonLines(logPath, limit);
+      sendJson(res, 200, { path: logPath, events });
+      return;
+    }
+
+    if (req.method === "GET" && url.pathname === "/api/control/config") {
+      try {
+        const rawConfig = readJsonFileSafe(configPath) ?? {};
+        const authorized = !controlToken || extractAuthToken(req, url) === controlToken;
+        const payload = authorized ? rawConfig : redactConfig(rawConfig);
+        sendJson(res, 200, {
+          path: configPath,
+          authorized,
+          config: payload
+        });
+      } catch (err) {
+        sendJson(res, 500, { error: err instanceof Error ? err.message : String(err) });
+      }
+      return;
+    }
+
+    if (req.method === "GET" && url.pathname === "/api/control/config/schema") {
+      sendJson(res, 200, {
+        schema: null,
+        message: "Config schema endpoint not yet wired. Use raw JSON editing for now."
+      });
+      return;
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/control/config") {
+      if (!requireAdmin(req, res, url, controlToken)) return;
+      try {
+        const body = await readJsonBody(req);
+        const nextConfig = body?.config ?? body;
+        if (!nextConfig || typeof nextConfig !== "object") {
+          sendJson(res, 400, { error: "Missing config payload" });
+          return;
+        }
+        fs.mkdirSync(path.dirname(configPath), { recursive: true });
+        fs.writeFileSync(configPath, JSON.stringify(nextConfig, null, 2) + "\n", "utf8");
+        sendJson(res, 200, { ok: true, path: configPath });
+      } catch (err) {
+        sendJson(res, 500, { error: err instanceof Error ? err.message : String(err) });
+      }
+      return;
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/control/config/apply") {
+      if (!requireAdmin(req, res, url, controlToken)) return;
+      sendJson(res, 200, { ok: true, message: "Config saved. Restart the daemon to apply changes." });
       return;
     }
 
@@ -441,14 +691,14 @@ export async function startWebServer(): Promise<void> {
   });
 
   wss.on("connection", async (webWs: WebSocket, _req: IncomingMessage, info: any) => {
-    const sessionId = String(info?.sessionId || "default-session");
+    const sessionId = String(info?.sessionId || "main");
     let daemonWs: WebSocket | null = null;
     let currentTurnId: string | null = null;
 
     // Send initial connection message
     sendWebMessage(webWs, {
       type: "system",
-      content: `Connected to FF-Terminal (TS) session ${sessionId}`,
+      content: `Connected to FarmFriend Terminal session ${sessionId}`,
       session_id: sessionId,
       timestamp: Date.now() / 1000
     });

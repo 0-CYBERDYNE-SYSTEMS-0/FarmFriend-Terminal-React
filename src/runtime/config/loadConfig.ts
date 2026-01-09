@@ -16,6 +16,8 @@ export type RuntimeConfig = Record<string, unknown> & {
   workspace_dir?: string;
   session_mode?: "main" | "last" | "new";
   main_session_id?: string;
+  control_barn_token?: string;
+  controlBarnToken?: string;
 
   // Forced tool calling configuration
   // force_tool_calls: Enable/disable forced tool calling behavior

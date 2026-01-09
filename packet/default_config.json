@@ -51,6 +51,7 @@
   "hooks_log_directory": "logs/hooks",
   "hooks_plan_validation": true,
   "hooks_plan_validation_max_attempts": 3,
+  "control_barn_token": "",
   "plan_auto_extraction": true,
   "enable_state_machine": false,
   "state_db_relative_path": "db/state.db",

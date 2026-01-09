@@ -1,5 +1,135 @@
 # FF-Terminal Web UI Implementation Plan
 
+## FarmFriend Repository Glean Plan (Clawdbot Reference)
+
+Planning-only. This section captures what to adapt from the Clawdbot repo so the
+FarmFriend Terminal overhaul has full runtime coverage before we design the Control Center UI.
+
+### Principles (FarmFriend-only)
+- Use Clawdbot as an architectural reference only; do not copy naming, tone, or UI language.
+- Keep proprietary FF-Terminal architecture; adapt patterns that strengthen reliability and ops.
+- Control Center must surface every adopted capability from this plan (no hidden runtime gaps).
+
+### What to Glean + Adapt
+
+1) **Gateway-first control plane**
+   - Single long-lived Gateway process owns provider connections + event stream.
+   - One transport (WS) for all clients (CLI, web UI, automations).
+   - Hot reload behavior with safe config reload + restart for critical changes.
+   - Adopt in FF-Terminal: make the Gateway the only message ingress/egress layer.
+
+2) **Deterministic provider routing**
+   - Replies always go back to origin provider; no model routing.
+   - Canonical direct session per agent; group/thread sessions isolated by provider.
+   - Group activation policies (mention-only vs always) + allowlists.
+   - Adopt with FarmFriend naming and defaults for agricultural group operations.
+
+3) **Workspace vs config/state separation**
+   - Workspace: human-readable operator context + memory files (already implemented).
+   - Config/state: credentials, sessions, provider auth, runtime metadata.
+   - Add stronger migration/repair tooling to keep these in sync.
+
+4) **Automation primitives**
+   - Gateway-owned scheduler with cron jobs + wakeups.
+   - Webhook ingress for external triggers (sensors, alerts, dashboards).
+   - Poll support for quick field confirmations (where supported).
+
+5) **Health + Doctor toolchain**
+   - Structured health snapshots (status/health/models) for ops.
+   - File log tailing + filtering for Control Center.
+   - Doctor-style repair/migration flow with safe defaults and deeper diagnostics.
+
+6) **Security + remote access**
+   - Loopback bind by default; auth required for non-loopback.
+   - Optional tailnet proxying (serve/funnel) with explicit auth.
+   - Control Barn (admin) gated behind token/password handshake.
+
+7) **Nodes & device pairing**
+   - Node pairing workflow (approve/reject) owned by the Gateway.
+   - Extendable to cameras, location, and future field sensors.
+
+8) **Model policy + reliability**
+   - Model failover policy, retries, queue controls, session pruning.
+   - Usage tracking + rate/usage boundaries.
+   - Typing indicators + streaming policy in gateways/clients.
+
+9) **Presence + multi-agent readiness**
+   - Presence list + heartbeat to know which surfaces are alive.
+   - Multi-agent structure (agentId isolation) to support multiple farms/operators.
+
+### Adoption Phases (before Control Center)
+
+- **Phase A: Runtime reliability**
+  - Harden Gateway ownership, provider routing, and policy controls.
+  - Add health snapshots + file logs + doctor diagnostics.
+
+- **Phase B: Automation + external triggers**
+  - Cron scheduler, webhooks, poll commands, wakeups.
+  - FarmFriend defaults for daily check-ins and reminder flows.
+
+- **Phase C: Nodes + pairing**
+  - Pairing approval pipeline in Gateway.
+  - Minimal device registry for cameras/location; extend later.
+
+- **Phase D: Config schema + UI hints**
+  - Provide config schema endpoint with UI metadata.
+  - This is a prerequisite for a deep admin panel.
+
+### Control Center Requirements (derived)
+- Must expose Gateway health, providers, sessions, group policy, automation, webhooks, logs, skills, nodes, config, and updates.
+- Must keep a simple FieldView surface for agricultural users.
+- Must hide deep configuration behind Control Barn auth.
+
+---
+
+## FarmFriend Control Center Plan (FieldView + Control Barn)
+
+### Goals
+- FieldView: clean, agriculture-first view for daily use with zero jargon.
+- Control Barn: deep admin panel for full configuration and operational control.
+- Gateway-first: every surface is powered by a single control plane.
+
+### FieldView (simple user-facing UI)
+- Daily check-in prompt + quick actions (report, ask, schedule).
+- Status tiles: connectivity, alerts, upcoming tasks, last sync.
+- Activity feed: recent runs, reminders sent, farm notes.
+- Chat dock: minimal assistant panel for quick questions.
+
+### Control Barn (admin panel)
+- **Gateway & Channels**: health, connected accounts, QR/login status, error details.
+- **Sessions & Routing**: main session, group policies, allowlists, auto-reply toggles.
+- **Automation**: scheduled jobs, last run status, run-now, enable/disable.
+- **Skills & Tools**: allowed tool set (manifest), per-skill status, OS/binary requirements.
+- **Logs**: tail gateway logs + scheduler logs; filters and export.
+- **Config**: schema-driven form + raw JSON fallback, apply/restart workflow.
+- **Devices** (future-ready): paired nodes, camera/location capability summaries.
+
+### Control API Plan (backend)
+- `GET /api/control/overview` (aggregated status for UI landing)
+- `GET /api/control/gateway/status` (existing gateway status)
+- `GET /api/control/health` (workspace + gateway health)
+- `GET /api/control/scheduler/tasks` (scheduled tasks list + next run)
+- `GET /api/control/logs/gateway` (tail events.jsonl)
+- `GET /api/control/logs/scheduler` (tail scheduler log)
+- `GET /api/control/workspace/contract` (AGENTS/SOUL/TOOLS/USER/IDENTITY/MEMORY summary)
+- `GET /api/control/config` (read config)
+- `POST /api/control/config` (write config with auth)
+- `POST /api/control/config/apply` (apply/reload hook stub)
+
+### Auth & Access
+- Default: loopback only, Control Barn hidden.
+- `FF_CONTROL_BARN_TOKEN` or config key enables admin access.
+- Token required for write actions (config apply, enable/disable, run-now).
+
+### Build + Serve
+- Single web server serves both views.
+- Base path support for admin panel (future).
+- Asset build detection for Control Barn (dev fallback and build warnings).
+
+---
+
+## Legacy OpenCode Analysis (superseded by FarmFriend plan above)
+
 ## Executive Summary
 
 Based on my analysis of the OpenCode repository (sst/opencode), I've designed a plan to create a comprehensive web UI for ff-terminal. OpenCode is an open-source AI coding agent with a sophisticated web/desktop UI built on **SolidJS + Kobalte + Vite + TailwindCSS**.
