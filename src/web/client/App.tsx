@@ -74,6 +74,12 @@ type ControlOverview = {
   }
 }
 
+type ControlOverviewState = {
+  data: ControlOverview | null
+  loading: boolean
+  error: string | null
+}
+
 type SchedulerTask = {
   id: string
   name: string
@@ -289,7 +295,13 @@ function MessageContent({ content, role }: { content: string; role: string }) {
   return <p className={`whitespace-pre-wrap break-words text-sm leading-relaxed ${colorClass}`}>{content}</p>
 }
 
-function AppContent({ layout = 'full' }: { layout?: 'full' | 'embedded' }) {
+function AppContent({
+  layout = 'full',
+  gatewayIndicator,
+}: {
+  layout?: 'full' | 'embedded'
+  gatewayIndicator?: GatewayIndicator
+}) {
   const { theme } = useTheme();
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [input, setInput] = useState('')
@@ -615,6 +627,7 @@ function AppContent({ layout = 'full' }: { layout?: 'full' | 'embedded' }) {
             <span className="text-xs text-neutral-500">
               {isConnected ? 'Connected' : 'Connecting...'}
             </span>
+            {gatewayIndicator && <StatusLight indicator={gatewayIndicator} variant="dark" />}
             <button
               onClick={() => setShowConsole(!showConsole)}
               className={`
@@ -862,24 +875,163 @@ function AppContent({ layout = 'full' }: { layout?: 'full' | 'embedded' }) {
   )
 }
 
-function FieldView({ showControl, onOpenControl, onOpenChat }: { showControl: boolean; onOpenControl: () => void; onOpenChat: () => void }) {
-  const { data, loading, error } = useControlOverview()
-  const channels = data?.gateway?.channels ?? []
-  const healthyCount = channels.filter((c) => c.healthy && c.enabled).length
-  const unhealthy = channels.filter((c) => c.enabled && !c.healthy)
-  const contractFiles = data?.contract?.files ?? []
-  const contractCoverage = contractFiles.length
-    ? Math.round((contractFiles.filter((f) => f.exists).length / contractFiles.length) * 100)
-    : 0
+
+function statusToneClass(tone: 'good' | 'warn' | 'bad' | 'muted') {
+  if (tone === 'good') return 'bg-emerald-100 text-emerald-900 border-emerald-200'
+  if (tone === 'warn') return 'bg-amber-100 text-amber-950 border-amber-200'
+  if (tone === 'bad') return 'bg-rose-100 text-rose-900 border-rose-200'
+  return 'bg-slate-100 text-slate-600 border-slate-200'
+}
+
+type GatewayIndicator = { tone: 'good' | 'warn' | 'bad' | 'muted'; label: string; detail: string }
+
+function statusDotClass(tone: GatewayIndicator['tone']) {
+  if (tone === 'good') return 'bg-emerald-500 shadow-emerald-400/50'
+  if (tone === 'warn') return 'bg-amber-400 shadow-amber-300/50'
+  if (tone === 'bad') return 'bg-rose-500 shadow-rose-400/50'
+  return 'bg-slate-400 shadow-slate-300/50'
+}
+
+function deriveGatewayIndicator(input: {
+  loading?: boolean
+  error?: string | null
+  channels?: GatewayChannelStatus[] | null
+}): GatewayIndicator {
+  if (input.loading) {
+    return { tone: 'muted', label: 'Gateway', detail: 'checking' }
+  }
+  if (input.error) {
+    return { tone: 'bad', label: 'Gateway', detail: 'offline' }
+  }
+  const channels = input.channels ?? []
+  const enabled = channels.filter((c) => c.enabled)
+  if (enabled.length === 0) {
+    return { tone: 'warn', label: 'Gateway', detail: 'no channels' }
+  }
+  const healthy = enabled.filter((c) => c.healthy && c.running)
+  if (healthy.length !== enabled.length) {
+    return { tone: 'bad', label: 'Gateway', detail: `${healthy.length}/${enabled.length} healthy` }
+  }
+  return { tone: 'good', label: 'Gateway', detail: 'healthy' }
+}
+
+type FieldViewMode = 'classic' | 'mission' | 'guided'
+
+type StatusPillData = { label: string; value: string; tone: 'good' | 'warn' | 'bad' | 'muted' }
+
+type FieldViewShared = {
+  data: ControlOverview | null
+  loading: boolean
+  error: string | null
+  channels: GatewayChannelStatus[]
+  healthyCount: number
+  unhealthy: GatewayChannelStatus[]
+  contractCoverage: number
+  contractFiles: Array<{ name: string; exists: boolean }>
+  statusPills: StatusPillData[]
+  gatewayIndicator: GatewayIndicator
+}
+
+type FieldViewProps = {
+  showControl: boolean
+  onOpenControl: () => void
+  onOpenChat: () => void
+  mode: FieldViewMode
+  onModeChange: (mode: FieldViewMode) => void
+  overview: ControlOverviewState
+}
+
+const FIELDVIEW_MODES: Array<{ id: FieldViewMode; label: string }> = [
+  { id: 'classic', label: 'FieldView' },
+  { id: 'mission', label: 'Mission' },
+  { id: 'guided', label: 'Guided Day' },
+]
+
+function FieldModeToggle({ mode, onModeChange }: { mode: FieldViewMode; onModeChange: (mode: FieldViewMode) => void }) {
+  return (
+    <div className="flex items-center gap-2 rounded-full bg-white/70 border border-emerald-200/60 px-2 py-1 text-[11px] font-semibold text-emerald-900 shadow-sm">
+      <span className="px-2 uppercase tracking-[0.28em] text-[10px] text-emerald-700">Mode</span>
+      {FIELDVIEW_MODES.map((option) => (
+        <button
+          key={option.id}
+          onClick={() => onModeChange(option.id)}
+          className={`px-2.5 py-1 rounded-full transition ${
+            mode === option.id
+              ? 'bg-emerald-600 text-white shadow-sm'
+              : 'text-emerald-900/80 hover:bg-emerald-100'
+          }`}
+        >
+          {option.label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+function StatusPills({ pills }: { pills: StatusPillData[] }) {
+  return (
+    <div className="flex flex-wrap gap-2">
+      {pills.map((pill) => (
+        <div
+          key={pill.label}
+          className={`px-3 py-1 rounded-full border text-xs font-semibold ${statusToneClass(pill.tone)}`}
+        >
+          <span className="uppercase tracking-[0.2em] text-[10px] mr-2">{pill.label}</span>
+          {pill.value}
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function StatusLight({
+  indicator,
+  variant = 'light'
+}: {
+  indicator: GatewayIndicator
+  variant?: 'light' | 'dark'
+}) {
+  const base = variant === 'dark'
+    ? 'bg-slate-900/70 border-slate-700 text-slate-200'
+    : 'bg-white/70 border-emerald-200 text-emerald-900'
+  const detailClass = variant === 'dark' ? 'text-slate-400' : 'text-emerald-700'
+
+  return (
+    <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full border text-[11px] font-semibold ${base}`}>
+      <span className={`h-2.5 w-2.5 rounded-full shadow ${statusDotClass(indicator.tone)}`} />
+      <span className="uppercase tracking-[0.2em] text-[10px]">{indicator.label}</span>
+      <span className={detailClass}>{indicator.detail}</span>
+    </div>
+  )
+}
+
+function FieldViewClassic({
+  shared,
+  showControl,
+  onOpenControl,
+  onOpenChat,
+  mode,
+  onModeChange,
+}: {
+  shared: FieldViewShared
+  showControl: boolean
+  onOpenControl: () => void
+  onOpenChat: () => void
+  mode: FieldViewMode
+  onModeChange: (mode: FieldViewMode) => void
+}) {
+  const { data, loading, channels, healthyCount, unhealthy, contractCoverage, statusPills } = shared
 
   return (
     <div className="min-h-screen fieldview-shell text-slate-900">
-      <header className="flex items-center justify-between px-6 py-5">
+      <header className="flex flex-col gap-4 px-6 py-5 md:flex-row md:items-center md:justify-between">
         <div className="flex flex-col">
           <span className="text-xs uppercase tracking-[0.25em] text-emerald-700">FarmFriend FieldView</span>
           <h1 className="text-3xl md:text-4xl font-semibold fieldview-title">Today on the farm</h1>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <FieldModeToggle mode={mode} onModeChange={onModeChange} />
+          <StatusLight indicator={shared.gatewayIndicator} />
           <button
             onClick={onOpenChat}
             className="px-4 py-2 rounded-full bg-emerald-600 text-white text-sm font-semibold shadow-sm shadow-emerald-600/30 hover:bg-emerald-700 transition"
@@ -898,6 +1050,16 @@ function FieldView({ showControl, onOpenControl, onOpenChat }: { showControl: bo
       </header>
 
       <main className="px-6 pb-10">
+        <div className="mb-6 field-card">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-semibold text-emerald-900">Live status rail</h2>
+            <span className="text-xs text-emerald-700">Gateway + automation snapshot</span>
+          </div>
+          <div className="mt-3">
+            <StatusPills pills={statusPills} />
+          </div>
+        </div>
+
         <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
           <section className="space-y-6">
             <div className="field-card">
@@ -921,70 +1083,441 @@ function FieldView({ showControl, onOpenControl, onOpenChat }: { showControl: bo
               </div>
             </div>
 
-            <div className="grid gap-4 md:grid-cols-2">
+            <div className="grid gap-4 sm:grid-cols-2">
               <div className="field-card">
                 <h3 className="text-sm font-semibold text-emerald-900">Connectivity</h3>
                 {loading && <p className="text-xs text-emerald-700 mt-2">Checking gateway...</p>}
                 {!loading && (
-                  <div className="mt-3 space-y-2 text-sm">
-                    <p className="text-emerald-800">
+                  <div className="mt-2 space-y-1 text-sm text-emerald-900/80">
+                    <p>
                       {healthyCount}/{channels.length || 0} channels healthy
                     </p>
                     {channels.length === 0 && <p className="text-emerald-700">No channels configured yet.</p>}
-                    {unhealthy.map((ch) => (
-                      <p key={ch.name} className="text-rose-700">
-                        {ch.name}: {ch.last_error || 'Needs attention'}
-                      </p>
-                    ))}
+                    {unhealthy.length > 0 && (
+                      <ul className="text-xs text-rose-600 list-disc ml-4">
+                        {unhealthy.map((channel) => (
+                          <li key={channel.name}>{channel.name}: {channel.last_error || 'Needs attention'}</li>
+                        ))}
+                      </ul>
+                    )}
                   </div>
                 )}
               </div>
-
               <div className="field-card">
                 <h3 className="text-sm font-semibold text-emerald-900">Automation</h3>
-                <div className="mt-3 text-sm text-emerald-800">
+                <div className="mt-2 text-sm text-emerald-900/80">
                   <p>Scheduled tasks: {data?.scheduler?.enabled_count ?? 0}</p>
                   <p className="text-xs text-emerald-700 mt-1">Next run: {formatNextRun(data?.scheduler?.next_run_at)}</p>
                 </div>
               </div>
-            </div>
-
-            <div className="grid gap-4 md:grid-cols-2">
               <div className="field-card">
                 <h3 className="text-sm font-semibold text-emerald-900">Workspace readiness</h3>
-                <div className="mt-3 text-sm text-emerald-800">
+                <div className="mt-2 text-sm text-emerald-900/80">
                   <p>{contractCoverage}% of contract files present</p>
-                  <p className="text-xs text-emerald-700 mt-1">Operator notes and memory stay consistent.</p>
+                  <p className="text-xs text-emerald-700 mt-1">
+                    Operator notes and memory stay consistent.
+                  </p>
                 </div>
               </div>
-
               <div className="field-card">
                 <h3 className="text-sm font-semibold text-emerald-900">Health alerts</h3>
-                <div className="mt-3 text-sm text-emerald-800">
-                  {error && <p className="text-rose-700">{error}</p>}
-                  {!error && (
-                    <p>{data?.health?.ok ? 'All systems normal.' : `${data?.health?.issues?.length || 0} issues need review.`}</p>
-                  )}
+                <div className="mt-2 text-sm text-emerald-900/80">
+                  <p>{data?.health?.issues?.length ? `${data?.health?.issues?.length} items need review` : 'All systems normal.'}</p>
+                  <p className="text-xs text-emerald-700 mt-1">Watch for connectivity drops.</p>
                 </div>
               </div>
             </div>
           </section>
 
-          <section className="field-card field-chat">
-            <div className="flex items-center justify-between mb-3">
+          <section className="field-chat rounded-2xl p-5 text-slate-100 shadow-lg">
+            <div className="flex items-center justify-between">
               <div>
-                <h2 className="text-lg font-semibold text-neutral-100">Field chat</h2>
-                <p className="text-xs text-neutral-400">Quick questions, quick answers.</p>
+                <h2 className="text-lg font-semibold">Field chat</h2>
+                <p className="text-xs text-slate-400">Quick questions, quick answers.</p>
               </div>
-              <span className="text-xs text-neutral-400">{DEFAULT_SESSION}</span>
+              <span className="text-xs uppercase tracking-[0.2em] text-slate-400">{DEFAULT_SESSION}</span>
             </div>
-            <div className="h-[70vh] min-h-[480px]">
+            <div className="mt-4 h-[70vh] min-h-[480px]">
               <AppContent layout="embedded" />
             </div>
           </section>
         </div>
       </main>
     </div>
+  )
+}
+
+function FieldViewMission({
+  shared,
+  showControl,
+  onOpenControl,
+  onOpenChat,
+  mode,
+  onModeChange,
+}: {
+  shared: FieldViewShared
+  showControl: boolean
+  onOpenControl: () => void
+  onOpenChat: () => void
+  mode: FieldViewMode
+  onModeChange: (mode: FieldViewMode) => void
+}) {
+  const { data, loading, channels, unhealthy, statusPills } = shared
+  const healthIssues = data?.health?.issues ?? []
+
+  return (
+    <div className="min-h-screen mission-shell text-slate-900">
+      <header className="px-6 py-6 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div>
+          <span className="text-xs uppercase tracking-[0.4em] text-slate-700">FarmFriend Mission Control</span>
+          <h1 className="text-3xl md:text-4xl font-semibold mission-title">Operations horizon</h1>
+        </div>
+        <div className="flex flex-wrap items-center gap-3">
+          <FieldModeToggle mode={mode} onModeChange={onModeChange} />
+          <StatusLight indicator={shared.gatewayIndicator} />
+          <button
+            onClick={onOpenChat}
+            className="px-4 py-2 rounded-full bg-slate-900 text-amber-100 text-sm font-semibold shadow-sm hover:bg-slate-800"
+          >
+            Open Chat
+          </button>
+          {showControl && (
+            <button
+              onClick={onOpenControl}
+              className="px-4 py-2 rounded-full border border-slate-700 text-slate-900 text-sm font-semibold hover:bg-white/40"
+            >
+              Control Barn
+            </button>
+          )}
+        </div>
+      </header>
+
+      <main className="px-6 pb-12">
+        <div className="mission-card">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-semibold text-slate-900">Live status strip</h2>
+            <span className="text-xs text-slate-600">Gateway + automation + health</span>
+          </div>
+          <div className="mt-3">
+            <StatusPills pills={statusPills} />
+          </div>
+        </div>
+
+        <div className="mt-6 grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
+          <section className="space-y-6">
+            <div className="mission-card">
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-semibold text-slate-900">Active incidents</h3>
+                <span className="text-xs text-slate-600">{unhealthy.length + healthIssues.length} open items</span>
+              </div>
+              <div className="mt-4 space-y-3 text-sm text-slate-800">
+                {loading && <p className="text-slate-600">Checking gateway...</p>}
+                {!loading && unhealthy.length === 0 && healthIssues.length === 0 && (
+                  <p className="text-emerald-700">All clear. No incidents reported.</p>
+                )}
+                {unhealthy.map((channel) => (
+                  <div key={channel.name} className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3">
+                    <p className="font-semibold text-rose-900">{channel.name} channel needs attention</p>
+                    <p className="text-xs text-rose-700 mt-1">{channel.last_error || 'Investigate connectivity or credentials.'}</p>
+                  </div>
+                ))}
+                {healthIssues.map((issue, index) => (
+                  <div key={index} className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+                    <p className="font-semibold text-amber-900">{issue.type || 'System alert'}</p>
+                    <p className="text-xs text-amber-700 mt-1">{issue.message || 'Review required.'}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="mission-card">
+              <h3 className="text-lg font-semibold text-slate-900">Priority queue</h3>
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                <div className="rounded-xl border border-slate-200 bg-white/70 px-4 py-3">
+                  <p className="text-xs uppercase tracking-[0.24em] text-slate-500">Now</p>
+                  <p className="text-sm font-semibold text-slate-900 mt-1">Scan irrigation pressure</p>
+                  <p className="text-xs text-slate-600 mt-1">Confirm north line pressure + auto‑log status.</p>
+                </div>
+                <div className="rounded-xl border border-slate-200 bg-white/70 px-4 py-3">
+                  <p className="text-xs uppercase tracking-[0.24em] text-slate-500">Next</p>
+                  <p className="text-sm font-semibold text-slate-900 mt-1">Calibrate greenhouse climate</p>
+                  <p className="text-xs text-slate-600 mt-1">Review temp & humidity drift.</p>
+                </div>
+                <div className="rounded-xl border border-slate-200 bg-white/70 px-4 py-3">
+                  <p className="text-xs uppercase tracking-[0.24em] text-slate-500">Later</p>
+                  <p className="text-sm font-semibold text-slate-900 mt-1">Send daily update</p>
+                  <p className="text-xs text-slate-600 mt-1">Draft summary for the team.</p>
+                </div>
+                <div className="rounded-xl border border-slate-200 bg-white/70 px-4 py-3">
+                  <p className="text-xs uppercase tracking-[0.24em] text-slate-500">Optional</p>
+                  <p className="text-sm font-semibold text-slate-900 mt-1">Equipment roll‑up</p>
+                  <p className="text-xs text-slate-600 mt-1">Quick check of fleet utilization.</p>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <aside className="space-y-6">
+            <div className="mission-card">
+              <h3 className="text-sm font-semibold text-slate-900">Gateway snapshot</h3>
+              <div className="mt-3 space-y-2 text-sm text-slate-700">
+                <p>Channels online: {channels.filter((c) => c.healthy && c.enabled).length}/{channels.filter((c) => c.enabled).length}</p>
+                <p>Enabled channels: {channels.filter((c) => c.enabled).length}</p>
+                <p>Scheduled tasks: {data?.scheduler?.enabled_count ?? 0}</p>
+              </div>
+              <button className="mt-4 w-full rounded-full border border-slate-900/20 bg-slate-900 text-amber-100 text-xs font-semibold py-2">
+                Run quick diagnostics
+              </button>
+            </div>
+
+            <div className="mission-card">
+              <h3 className="text-sm font-semibold text-slate-900">Comms hub</h3>
+              <div className="mt-3 space-y-2 text-sm text-slate-700">
+                <p>Broadcast: Daily update to crew</p>
+                <p>Escalation: Request on‑call tech</p>
+              </div>
+              <div className="mt-4 flex flex-col gap-2">
+                <button className="rounded-full bg-amber-200 text-amber-900 text-xs font-semibold py-2">Send update</button>
+                <button className="rounded-full border border-slate-900/20 text-slate-900 text-xs font-semibold py-2">Request support</button>
+              </div>
+            </div>
+          </aside>
+        </div>
+      </main>
+    </div>
+  )
+}
+
+function FieldViewGuided({
+  shared,
+  showControl,
+  onOpenControl,
+  onOpenChat,
+  mode,
+  onModeChange,
+}: {
+  shared: FieldViewShared
+  showControl: boolean
+  onOpenControl: () => void
+  onOpenChat: () => void
+  mode: FieldViewMode
+  onModeChange: (mode: FieldViewMode) => void
+}) {
+  const { data, statusPills } = shared
+  const steps = [
+    {
+      time: 'Dawn check‑in',
+      title: 'Connectivity sweep',
+      detail: 'Confirm gateway channels and update crew status.',
+      action: 'Start sweep',
+    },
+    {
+      time: 'Mid‑morning',
+      title: 'Automation review',
+      detail: `Review ${data?.scheduler?.enabled_count ?? 0} scheduled tasks and confirm next run.`,
+      action: 'Review schedule',
+    },
+    {
+      time: 'Midday',
+      title: 'Field notes',
+      detail: 'Capture a quick voice note; FarmFriend will summarize.',
+      action: 'Record note',
+    },
+    {
+      time: 'Afternoon',
+      title: 'Health & risk review',
+      detail: data?.health?.issues?.length
+        ? `${data?.health?.issues?.length} system alerts need attention.`
+        : 'All systems normal. Review optional checks.',
+      action: 'Review alerts',
+    },
+    {
+      time: 'End of day',
+      title: 'Daily report',
+      detail: 'Send a wrap‑up update to the team.',
+      action: 'Draft report',
+    },
+  ]
+
+  return (
+    <div className="min-h-screen guided-shell text-slate-900">
+      <header className="px-6 py-6 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div>
+          <span className="text-xs uppercase tracking-[0.35em] text-emerald-700">FarmFriend Guided Day</span>
+          <h1 className="text-3xl md:text-4xl font-semibold guided-title">Today’s flow</h1>
+        </div>
+        <div className="flex flex-wrap items-center gap-3">
+          <FieldModeToggle mode={mode} onModeChange={onModeChange} />
+          <StatusLight indicator={shared.gatewayIndicator} />
+          <button
+            onClick={onOpenChat}
+            className="px-4 py-2 rounded-full bg-emerald-700 text-white text-sm font-semibold shadow-sm"
+          >
+            Open Chat
+          </button>
+          {showControl && (
+            <button
+              onClick={onOpenControl}
+              className="px-4 py-2 rounded-full border border-emerald-700/40 text-emerald-900 text-sm font-semibold hover:bg-emerald-100"
+            >
+              Control Barn
+            </button>
+          )}
+        </div>
+      </header>
+
+      <main className="px-6 pb-12">
+        <div className="guided-card">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-semibold text-emerald-900">Daily readiness</h2>
+            <span className="text-xs text-emerald-700">Smart checklist</span>
+          </div>
+          <div className="mt-3">
+            <StatusPills pills={statusPills} />
+          </div>
+        </div>
+
+        <div className="mt-6 grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
+          <section className="guided-card">
+            <h3 className="text-lg font-semibold text-emerald-900">Guided plan</h3>
+            <div className="mt-4 space-y-4">
+              {steps.map((step, index) => (
+                <div key={step.title} className="flex gap-4">
+                  <div className="flex flex-col items-center">
+                    <div className="h-8 w-8 rounded-full bg-emerald-600 text-white flex items-center justify-center text-xs font-semibold">
+                      {index + 1}
+                    </div>
+                    {index < steps.length - 1 && <div className="flex-1 w-px bg-emerald-200" />}
+                  </div>
+                  <div className="flex-1 pb-6">
+                    <p className="text-xs uppercase tracking-[0.28em] text-emerald-600">{step.time}</p>
+                    <h4 className="text-base font-semibold text-emerald-900 mt-1">{step.title}</h4>
+                    <p className="text-sm text-emerald-900/80 mt-1">{step.detail}</p>
+                    <button className="mt-3 px-3 py-1.5 rounded-full bg-emerald-100 text-emerald-900 text-xs font-semibold">
+                      {step.action}
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          <aside className="space-y-6">
+            <div className="guided-card">
+              <h3 className="text-sm font-semibold text-emerald-900">AI co‑pilot</h3>
+              <p className="mt-2 text-sm text-emerald-900/80">
+                FarmFriend will summarize notes, suggest next actions, and keep your crew aligned.
+              </p>
+              <div className="mt-4 flex flex-col gap-2">
+                <button className="rounded-full bg-emerald-600 text-white text-xs font-semibold py-2">Ask for summary</button>
+                <button className="rounded-full border border-emerald-700/40 text-emerald-900 text-xs font-semibold py-2">Add quick note</button>
+              </div>
+            </div>
+
+            <div className="guided-card">
+              <h3 className="text-sm font-semibold text-emerald-900">Weather + risk</h3>
+              <p className="mt-2 text-sm text-emerald-900/80">Mostly clear. Heat stress risk low.</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <span className="rounded-full bg-amber-100 text-amber-900 text-xs font-semibold px-3 py-1">Wind: light</span>
+                <span className="rounded-full bg-emerald-100 text-emerald-900 text-xs font-semibold px-3 py-1">Irrigation: steady</span>
+              </div>
+            </div>
+          </aside>
+        </div>
+      </main>
+    </div>
+  )
+}
+
+function FieldView({ showControl, onOpenControl, onOpenChat, mode, onModeChange, overview }: FieldViewProps) {
+  const { data, loading, error } = overview
+  const channels = data?.gateway?.channels ?? []
+  const enabledChannels = channels.filter((c) => c.enabled)
+  const healthyCount = enabledChannels.filter((c) => c.healthy && c.running).length
+  const unhealthy = enabledChannels.filter((c) => !c.healthy || !c.running)
+  const contractFiles = data?.contract?.files ?? []
+  const contractCoverage = contractFiles.length
+    ? Math.round((contractFiles.filter((f) => f.exists).length / contractFiles.length) * 100)
+    : 0
+
+  const gatewayIndicator = deriveGatewayIndicator({ loading, error, channels })
+
+  const gatewayPill: StatusPillData = loading
+    ? { label: 'Gateway', value: 'checking…', tone: 'muted' }
+    : enabledChannels.length === 0
+      ? { label: 'Gateway', value: 'no channels', tone: 'warn' }
+      : unhealthy.length
+        ? { label: 'Gateway', value: `${healthyCount}/${enabledChannels.length} healthy`, tone: 'bad' }
+        : { label: 'Gateway', value: `${healthyCount}/${enabledChannels.length} healthy`, tone: 'good' }
+
+  const automationCount = data?.scheduler?.enabled_count ?? 0
+  const automationPill: StatusPillData = {
+    label: 'Automation',
+    value: automationCount ? `${automationCount} scheduled` : 'idle',
+    tone: automationCount ? 'good' : 'warn',
+  }
+
+  const healthIssues = data?.health?.issues?.length ?? 0
+  const healthPill: StatusPillData = {
+    label: 'Health',
+    value: healthIssues ? `${healthIssues} alerts` : 'clear',
+    tone: healthIssues ? 'warn' : 'good',
+  }
+
+  const contractPill: StatusPillData = {
+    label: 'Contract',
+    value: `${contractCoverage}% ready`,
+    tone: contractCoverage >= 100 ? 'good' : 'warn',
+  }
+
+  const shared: FieldViewShared = {
+    data: data ?? null,
+    loading,
+    error,
+    channels,
+    healthyCount,
+    unhealthy,
+    contractCoverage,
+    contractFiles,
+    statusPills: [gatewayPill, automationPill, healthPill, contractPill],
+    gatewayIndicator,
+  }
+
+  if (mode === 'mission') {
+    return (
+      <FieldViewMission
+        shared={shared}
+        showControl={showControl}
+        onOpenControl={onOpenControl}
+        onOpenChat={onOpenChat}
+        mode={mode}
+        onModeChange={onModeChange}
+      />
+    )
+  }
+
+  if (mode === 'guided') {
+    return (
+      <FieldViewGuided
+        shared={shared}
+        showControl={showControl}
+        onOpenControl={onOpenControl}
+        onOpenChat={onOpenChat}
+        mode={mode}
+        onModeChange={onModeChange}
+      />
+    )
+  }
+
+  return (
+    <FieldViewClassic
+      shared={shared}
+      showControl={showControl}
+      onOpenControl={onOpenControl}
+      onOpenChat={onOpenChat}
+      mode={mode}
+      onModeChange={onModeChange}
+    />
   )
 }
 
@@ -1298,6 +1831,11 @@ function ControlBarn({ onClose }: { onClose: () => void }) {
   const contract = useControlData<{ snapshot: Record<string, string | undefined> }>('/api/control/workspace/contract', token, 30000)
   const gatewayLogs = useControlData<{ events: any[] }>('/api/control/logs/gateway?limit=60', token, 12000)
   const schedulerLogs = useControlData<{ events: any[] }>('/api/control/logs/scheduler?limit=60', token, 12000)
+  const gatewayIndicator = deriveGatewayIndicator({
+    loading: gateway.loading,
+    error: gateway.error,
+    channels: gateway.data?.channels
+  })
   const config = useControlData<{ path: string; authorized: boolean; config: any }>('/api/control/config', token, 0)
   const workspaceFiles = useControlData<{ files: WorkspaceFileEntry[] }>('/api/control/workspace/files', token, 20000)
 
@@ -1369,6 +1907,7 @@ function ControlBarn({ onClose }: { onClose: () => void }) {
           <h1 className="text-3xl font-semibold">Admin configuration</h1>
         </div>
         <div className="flex items-center gap-3">
+          <StatusLight indicator={gatewayIndicator} variant="dark" />
           <input
             value={token}
             onChange={(e) => setToken(e.target.value)}
@@ -1522,6 +2061,13 @@ export default function App() {
     if (hash.includes('chat')) return 'chat'
     return 'field'
   })
+  const [fieldMode, setFieldMode] = useState<FieldViewMode>(() => {
+    if (typeof window === 'undefined') return 'classic'
+    const stored = localStorage.getItem('ff-fieldview-mode')
+    if (stored === 'mission' || stored === 'guided' || stored === 'classic') return stored
+    return 'classic'
+  })
+  const overview = useControlOverview()
   const [controlUnlocked, setControlUnlocked] = useState(() => {
     if (typeof window === 'undefined') return false
     const params = new URLSearchParams(window.location.search)
@@ -1543,6 +2089,17 @@ export default function App() {
     window.location.hash = view === 'field' ? '' : `#${view}`
   }, [view])
 
+  const appGatewayIndicator = deriveGatewayIndicator({
+    loading: overview.loading,
+    error: overview.error,
+    channels: overview.data?.gateway?.channels
+  })
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    localStorage.setItem('ff-fieldview-mode', fieldMode)
+  }, [fieldMode])
+
   return (
     <ThemeProvider>
       {view === 'field' && (
@@ -1550,10 +2107,13 @@ export default function App() {
           showControl={controlUnlocked}
           onOpenControl={() => setView('control')}
           onOpenChat={() => setView('chat')}
+          mode={fieldMode}
+          onModeChange={setFieldMode}
+          overview={overview}
         />
       )}
       {view === 'control' && <ControlBarn onClose={() => setView('field')} />}
-      {view === 'chat' && <AppContent layout="full" />}
+      {view === 'chat' && <AppContent layout="full" gatewayIndicator={appGatewayIndicator} />}
     </ThemeProvider>
   )
 }

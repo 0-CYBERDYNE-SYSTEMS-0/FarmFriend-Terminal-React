@@ -15,10 +15,10 @@ function expandHome(p: string): string {
 }
 
 /**
- * Normalize any workspace hint to the canonical workspace directory under the user's home.
+ * Normalize any workspace hint to the canonical workspace directory (defaults to repo root / cwd).
  *
  * Accepted inputs:
- * - undefined / empty  → defaults to ~/ff-terminal-workspace
+ * - undefined / empty  → defaults to repoRoot/cwd
  * - "~/ff-terminal-workspace" → expanded
  * - "ff-terminal-workspace/..." (relative) → resolved under repoRoot/cwd
  * - any other relative path → resolved under repoRoot/cwd
@@ -30,9 +30,13 @@ export function resolveWorkspaceDir(
 ): string {
   const base = path.resolve(opts?.repoRoot || opts?.cwd || process.cwd());
   const hint = String(raw ?? "").trim();
-  if (!hint) return path.join(os.homedir(), "ff-terminal-workspace");
+  if (!hint) return base;
 
   const expanded = expandHome(hint);
+  const legacyDefault = path.join(os.homedir(), "ff-terminal-workspace");
+  if (expanded === legacyDefault) {
+    return base;
+  }
 
   // If user wrote "ff-terminal-workspace" (or subpath) without a leading slash, treat it as the canonical local workspace.
   if (!path.isAbsolute(expanded)) {
@@ -60,7 +64,7 @@ export function defaultConfigPath(): string {
 
 export function defaultWorkspaceDir(opts?: { repoRoot?: string; cwd?: string }): string {
   /**
-   * Default workspace lives under the user's home for continuity across projects.
+   * Default workspace lives at repo root / cwd so project files live alongside the app.
    */
-  return path.join(os.homedir(), "ff-terminal-workspace");
+  return path.resolve(opts?.repoRoot || opts?.cwd || process.cwd());
 }
