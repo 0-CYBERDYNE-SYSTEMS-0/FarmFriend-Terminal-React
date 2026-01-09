@@ -22,7 +22,7 @@ import {
   resolveMainSessionId
 } from "../runtime/session/sessionPolicy.js";
 import { resetSessionWithArchive, compactSessionWithSummary } from "../runtime/session/resetHelpers.js";
-import { listSessionIndex, getOrCreateSessionIdForKey } from "../runtime/session/sessionIndex.js";
+import { listSessionIndex, getOrCreateSessionIdForKey, upsertSessionIndexEntry } from "../runtime/session/sessionIndex.js";
 import { patchSessionOverrides, getSessionOverrides } from "../runtime/session/sessionOverrides.js";
 import { buildSystemPrompt } from "../runtime/prompts/systemPrompt.js";
 import { ALWAYS_ALLOWED_TOOLS } from "../runtime/hooks/builtin/skillAllowedToolsHook.js";
@@ -54,8 +54,11 @@ function listSessions(workspaceDir: string, limit = 50, activeMinutes?: number, 
   const indexedIds = new Set(indexEntries.map((e) => e.sessionId));
   const rows = (indexEntries.length ? indexEntries.map((entry) => {
     const p = path.join(sessionDir, `${entry.sessionId}.json`);
-    const session = fs.existsSync(p) ? JSON.parse(fs.readFileSync(p, "utf8")) : null;
-    const updatedAt = entry.updatedAt || session?.stats?.lastActiveAt || session?.updated_at || session?.created_at;
+    const needsSession = typeof messageLimit === "number" && messageLimit > 0
+      ? true
+      : typeof entry.totalMessages !== "number" || typeof entry.totalTokens !== "number" || !entry.overrides;
+    const session = needsSession && fs.existsSync(p) ? JSON.parse(fs.readFileSync(p, "utf8")) : null;
+    const updatedAt = entry.updatedAt || entry.lastActiveAt || session?.stats?.lastActiveAt || session?.updated_at || session?.created_at;
     const updatedMs = Date.parse(updatedAt || "");
     if (cutoff && (!Number.isFinite(updatedMs) || updatedMs < cutoff)) return null;
     const messages =
@@ -69,9 +72,9 @@ function listSessions(workspaceDir: string, limit = 50, activeMinutes?: number, 
       chatType: entry.chatType,
       displayName: entry.displayName,
       updatedAt,
-      totalMessages: session?.stats?.totalMessages ?? session?.conversation?.length ?? 0,
-      totalTokens: session?.stats?.totalTokens ?? undefined,
-      overrides: session?.meta?.overrides,
+      totalMessages: entry.totalMessages ?? session?.stats?.totalMessages ?? session?.conversation?.length ?? 0,
+      totalTokens: entry.totalTokens ?? session?.stats?.totalTokens ?? undefined,
+      overrides: entry.overrides ?? session?.meta?.overrides,
       transcriptPath: p,
       messages
     };
@@ -93,6 +96,17 @@ function listSessions(workspaceDir: string, limit = 50, activeMinutes?: number, 
           typeof messageLimit === "number" && messageLimit > 0 && Array.isArray(session?.conversation)
             ? session.conversation.slice(-messageLimit)
             : undefined;
+        upsertSessionIndexEntry({
+          workspaceDir,
+          sessionId: session?.session_id || sessionId,
+          sessionKey: session?.session_id || sessionId,
+          updatedAt,
+          lastActiveAt: session?.stats?.lastActiveAt,
+          createdAt: session?.stats?.createdAt,
+          totalMessages: session?.stats?.totalMessages ?? session?.conversation?.length ?? 0,
+          totalTokens: session?.stats?.totalTokens ?? undefined,
+          overrides: session?.meta?.overrides as Record<string, unknown> | undefined
+        });
         return {
           sessionId: session?.session_id || sessionId,
           updatedAt,
@@ -344,6 +358,17 @@ export async function startDaemon(): Promise<void> {
             sessionId: resolved.sessionId,
             sessionDir,
             patch: msg.overrides || {}
+          });
+          upsertSessionIndexEntry({
+            workspaceDir,
+            sessionId: updated.session_id,
+            sessionKey: resolved.sessionKey,
+            updatedAt: updated.updated_at,
+            lastActiveAt: updated.stats?.lastActiveAt,
+            createdAt: updated.stats?.createdAt,
+            totalMessages: updated.stats?.totalMessages,
+            totalTokens: updated.stats?.totalTokens,
+            overrides: updated.meta?.overrides as Record<string, unknown> | undefined
           });
           const overrides = getSessionOverrides(updated);
           send(ws, {

@@ -7,7 +7,8 @@ import { getSessionOverrides } from "./session/sessionOverrides.js";
 import { handleIdleExpiry, ensureSessionStats } from "./session/sessionLifecycle.js";
 import { estimateConversationTokens, summarizeSessionHistory } from "./session/summarization.js";
 import { pruneToolMessages } from "./session/contextPruning.js";
-import { resolveSessionMode } from "./session/sessionPolicy.js";
+import { resolveMainSessionId, resolveSessionMode } from "./session/sessionPolicy.js";
+import { upsertSessionIndexEntry } from "./session/sessionIndex.js";
 import { findRepoRoot } from "./config/repoRoot.js";
 import { resolveConfig } from "./config/loadConfig.js";
 import { loadToolSchemas, validateToolArgs } from "./tools/toolSchemas.js";
@@ -213,6 +214,10 @@ export async function* runAgentTurn(params: {
   userInput: string | any[];
   registry: ToolRegistry;
   sessionId: string;
+  sessionKey?: string;
+  provider?: string;
+  chatType?: "direct" | "group" | "unknown";
+  displayName?: string;
   repoRoot?: string;
   modelOverride?: string;
   signal: AbortSignal;
@@ -231,8 +236,31 @@ export async function* runAgentTurn(params: {
   ensureCanonicalStructure(workspaceDir);
   const cfg = resolveConfig({ repoRoot });
   const sessionMode = resolveSessionMode(cfg);
+  const mainSessionId = resolveMainSessionId(cfg);
+  const explicitSessionKey = String(params.sessionKey || "").trim();
+  const sessionKey = explicitSessionKey || (sessionId === mainSessionId ? "main" : "");
+  const sessionProvider = params.provider;
+  const sessionChatType = params.chatType;
+  const sessionDisplayName = params.displayName;
   let session = loadSession(sessionId, sessionDir) ?? createSession(sessionId);
   ensureSessionStats(session);
+
+  const syncSessionIndex = (): void => {
+    upsertSessionIndexEntry({
+      workspaceDir,
+      sessionId: session.session_id,
+      sessionKey: sessionKey || undefined,
+      provider: sessionProvider,
+      chatType: sessionChatType,
+      displayName: sessionDisplayName,
+      updatedAt: session.updated_at,
+      lastActiveAt: session.stats?.lastActiveAt,
+      createdAt: session.stats?.createdAt,
+      totalMessages: session.stats?.totalMessages,
+      totalTokens: session.stats?.totalTokens,
+      overrides: session.meta?.overrides as Record<string, unknown> | undefined
+    });
+  };
 
   const logLevel = parseLogLevel((cfg as any).log_level);
   const logMaxBytes = Number((cfg as any).log_max_bytes ?? 5 * 1024 * 1024);
@@ -277,6 +305,7 @@ export async function* runAgentTurn(params: {
               created_at: new Date().toISOString()
             });
             saveSession(session, sessionDir);
+            syncSessionIndex();
             logger.log("info", "session_idle_summary", {
               session_id: sessionId,
               summarized_count: summarized.summarizedCount
@@ -304,6 +333,7 @@ export async function* runAgentTurn(params: {
       if (summarized.summarizedCount > 0) {
         session = summarized.session;
         saveSession(session, sessionDir);
+        syncSessionIndex();
         logger.log("info", "session_auto_summarize", {
           session_id: sessionId,
           summarized_count: summarized.summarizedCount,
@@ -324,6 +354,7 @@ export async function* runAgentTurn(params: {
   const userCreatedAt = new Date().toISOString();
   session.conversation.push({ role: "user", content: contentForHistory, created_at: userCreatedAt });
   saveSession(session, sessionDir);
+  syncSessionIndex();
   logger.log("info", "session_message", {
     session_id: sessionId,
     role: "user",
@@ -792,6 +823,7 @@ export async function* runAgentTurn(params: {
       created_at: assistantCreatedAt
     });
     saveSession(session, sessionDir);
+    syncSessionIndex();
     logger.log("info", "session_message", {
       session_id: sessionId,
       role: "assistant",

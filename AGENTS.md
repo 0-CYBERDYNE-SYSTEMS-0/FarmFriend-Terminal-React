@@ -28,3 +28,6 @@ EOT
 
 ### Log location
 - Truth source: `~/ff-terminal-workspace/logs/sessions/session_<session_id>.jsonl`
+
+## Reference repository snapshot
+- `clawdbot-clawdbot.txt` is the full Clawdbot GitHub repository snapshot (entire codebase + file tree) captured in a single large file for reference.

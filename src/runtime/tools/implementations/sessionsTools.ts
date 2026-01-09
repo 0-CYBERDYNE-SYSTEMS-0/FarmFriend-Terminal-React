@@ -9,7 +9,7 @@ import { resolveConfig } from "../../config/loadConfig.js";
 import { findRepoRoot } from "../../config/repoRoot.js";
 import { resolveMainSessionId } from "../../session/sessionPolicy.js";
 import { loadSession, type SessionFile } from "../../session/sessionStore.js";
-import { listSessionIndex } from "../../session/sessionIndex.js";
+import { listSessionIndex, upsertSessionIndexEntry } from "../../session/sessionIndex.js";
 
 type ListArgs = {
   limit?: number;
@@ -62,8 +62,9 @@ export async function sessionsListTool(argsRaw: unknown): Promise<string> {
   const rows = (indexEntries.length ? indexEntries
     .map((entry) => {
       const p = path.join(sessionDir, `${entry.sessionId}.json`);
-      const session = safeLoadSession(p);
-      const updatedAt = entry.updatedAt || session?.stats?.lastActiveAt || session?.updated_at || session?.created_at;
+      const needsSession = messageLimit > 0 || typeof entry.totalMessages !== "number" || typeof entry.totalTokens !== "number" || !entry.overrides;
+      const session = needsSession ? safeLoadSession(p) : null;
+      const updatedAt = entry.updatedAt || entry.lastActiveAt || session?.stats?.lastActiveAt || session?.updated_at || session?.created_at;
       const updatedMs = Date.parse(updatedAt || "");
       if (cutoff && (!Number.isFinite(updatedMs) || updatedMs < cutoff)) return null;
       const messages = messageLimit > 0 ? session?.conversation?.slice(-messageLimit) : undefined;
@@ -75,9 +76,9 @@ export async function sessionsListTool(argsRaw: unknown): Promise<string> {
         displayName: entry.displayName,
         kind: entry.sessionId === mainSessionId ? "main" : "other",
         updatedAt,
-        totalMessages: session?.stats?.totalMessages ?? session?.conversation?.length ?? 0,
-        totalTokens: session?.stats?.totalTokens ?? undefined,
-        overrides: session?.meta?.overrides,
+        totalMessages: entry.totalMessages ?? session?.stats?.totalMessages ?? session?.conversation?.length ?? 0,
+        totalTokens: entry.totalTokens ?? session?.stats?.totalTokens ?? undefined,
+        overrides: entry.overrides ?? session?.meta?.overrides,
         transcriptPath: p,
         messages
       };
@@ -97,6 +98,17 @@ export async function sessionsListTool(argsRaw: unknown): Promise<string> {
       const updatedMs = Date.parse(updatedAt || "");
       if (cutoff && (!Number.isFinite(updatedMs) || updatedMs < cutoff)) return null;
       const messages = messageLimit > 0 ? session.conversation.slice(-messageLimit) : undefined;
+      upsertSessionIndexEntry({
+        workspaceDir,
+        sessionId: session.session_id,
+        sessionKey: session.session_id,
+        updatedAt,
+        lastActiveAt: session.stats?.lastActiveAt,
+        createdAt: session.stats?.createdAt,
+        totalMessages: session.stats?.totalMessages ?? session.conversation.length,
+        totalTokens: session.stats?.totalTokens,
+        overrides: session.meta?.overrides as Record<string, unknown> | undefined
+      });
       return {
         sessionId: session.session_id,
         kind: session.session_id === mainSessionId ? "main" : "other",

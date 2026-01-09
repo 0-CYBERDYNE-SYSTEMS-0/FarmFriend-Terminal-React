@@ -5,6 +5,7 @@ import { resetSessionFile } from "./sessionLifecycle.js";
 import { saveSession } from "./sessionStore.js";
 import { extractMemoryFromConversation, appendMemoryBlock } from "../workspace/memoryExtraction.js";
 import { summarizeSessionHistory } from "./summarization.js";
+import { upsertSessionIndexEntry } from "./sessionIndex.js";
 
 export async function resetSessionWithArchive(params: {
   sessionId: string;
@@ -28,7 +29,17 @@ export async function resetSessionWithArchive(params: {
       // Best-effort extraction; ignore failures.
     }
   }
-  resetSessionFile({ sessionId: params.sessionId, sessionDir, archive: true, reason: "manual" });
+  const reset = resetSessionFile({ sessionId: params.sessionId, sessionDir, archive: true, reason: "manual" });
+  upsertSessionIndexEntry({
+    workspaceDir: params.workspaceDir,
+    sessionId: reset.session.session_id,
+    updatedAt: reset.session.updated_at,
+    lastActiveAt: reset.session.stats?.lastActiveAt,
+    createdAt: reset.session.stats?.createdAt,
+    totalMessages: reset.session.stats?.totalMessages,
+    totalTokens: reset.session.stats?.totalTokens,
+    overrides: reset.session.meta?.overrides as Record<string, unknown> | undefined
+  });
 }
 
 export async function compactSessionWithSummary(params: {
@@ -52,6 +63,16 @@ export async function compactSessionWithSummary(params: {
   });
   if (summarized.summarizedCount > 0) {
     saveSession(summarized.session, sessionDir);
+    upsertSessionIndexEntry({
+      workspaceDir: params.workspaceDir,
+      sessionId: summarized.session.session_id,
+      updatedAt: summarized.session.updated_at,
+      lastActiveAt: summarized.session.stats?.lastActiveAt,
+      createdAt: summarized.session.stats?.createdAt,
+      totalMessages: summarized.session.stats?.totalMessages,
+      totalTokens: summarized.session.stats?.totalTokens,
+      overrides: summarized.session.meta?.overrides as Record<string, unknown> | undefined
+    });
   }
   return { summarizedCount: summarized.summarizedCount, summary: summarized.summary };
 }

@@ -90,6 +90,19 @@ type SchedulerTask = {
   schedule: { schedule_type: string }
 }
 
+type SessionListEntry = {
+  sessionId: string
+  sessionKey?: string
+  kind?: string
+  provider?: string
+  chatType?: string
+  displayName?: string
+  updatedAt?: string
+  totalMessages?: number
+  totalTokens?: number
+  overrides?: Record<string, any>
+}
+
 type WorkspaceFileEntry = {
   name: string
   exists: boolean
@@ -332,6 +345,7 @@ function AppContent({
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const messagesContainerRef = useRef<HTMLDivElement>(null)
   const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const draftRestoredRef = useRef(false)
 
   // Streaming optimization: buffer content and update smoothly
   const streamBufferRef = useRef<string>('')
@@ -374,12 +388,14 @@ function AppContent({
   // Restore draft input from localStorage
   useEffect(() => {
     if (typeof window === 'undefined') return
+    if (draftRestoredRef.current) return
+    draftRestoredRef.current = true
     const draftKey = `ff-chat-draft:${DEFAULT_SESSION}`
     const draft = localStorage.getItem(draftKey)
     if (draft && !input) {
       setInput(draft)
     }
-  }, [input, setInput])
+  }, [setInput])
 
   // Persist draft input to localStorage
   useEffect(() => {
@@ -2127,6 +2143,9 @@ function ControlBarn({ onClose }: { onClose: () => void }) {
   })
   const config = useControlData<{ path: string; authorized: boolean; config: any }>('/api/control/config', token, 0)
   const workspaceFiles = useControlData<{ files: WorkspaceFileEntry[] }>('/api/control/workspace/files', token, 20000)
+  const [sessionsRefreshTick, setSessionsRefreshTick] = useState(0)
+  const sessions = useControlData<{ sessions: SessionListEntry[] }>('/api/control/sessions?limit=60', token, 15000, [sessionsRefreshTick])
+  const [sessionActionStatus, setSessionActionStatus] = useState<string | null>(null)
 
   useEffect(() => {
     if (config.data?.config) {
@@ -2185,6 +2204,25 @@ function ControlBarn({ onClose }: { onClose: () => void }) {
       setConfigStatus('Saved. Restart the daemon to apply changes.')
     } catch (err) {
       setConfigStatus(err instanceof Error ? err.message : String(err))
+    }
+  }
+
+  const runSessionAction = async (sessionId: string, action: 'reset' | 'compact') => {
+    try {
+      setSessionActionStatus(`${action} in progress...`)
+      const res = await fetch(`/api/control/sessions/${action}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify({ sessionId })
+      })
+      if (!res.ok) throw new Error(await res.text())
+      setSessionActionStatus(`${action} requested for ${sessionId}`)
+      setSessionsRefreshTick((tick) => tick + 1)
+    } catch (err) {
+      setSessionActionStatus(err instanceof Error ? err.message : String(err))
     }
   }
 
@@ -2254,6 +2292,69 @@ function ControlBarn({ onClose }: { onClose: () => void }) {
               <p key={idx} className="text-amber-300">{issue.message || 'Issue detected'}</p>
             ))}
           </div>
+        </section>
+
+        <section className="control-card lg:col-span-3">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-semibold text-slate-200">Sessions</h2>
+            {sessionActionStatus && <span className="text-xs text-slate-400">{sessionActionStatus}</span>}
+          </div>
+          <div className="mt-3 text-xs text-slate-300">
+            {sessions.loading && <p>Loading sessions...</p>}
+            {sessions.error && <p className="text-rose-300">{sessions.error}</p>}
+            {!sessions.loading && !sessions.error && (sessions.data?.sessions?.length ?? 0) === 0 && (
+              <p>No sessions found</p>
+            )}
+          </div>
+          {(sessions.data?.sessions?.length ?? 0) > 0 && (
+            <div className="mt-4 overflow-x-auto">
+              <table className="min-w-full text-xs text-slate-300">
+                <thead className="text-[0.6rem] uppercase tracking-[0.2em] text-slate-500">
+                  <tr>
+                    <th className="text-left py-2 pr-4">Session</th>
+                    <th className="text-left py-2 pr-4">Provider</th>
+                    <th className="text-left py-2 pr-4">Updated</th>
+                    <th className="text-left py-2 pr-4">Messages</th>
+                    <th className="text-left py-2 pr-4">Tokens</th>
+                    <th className="text-right py-2">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sessions.data?.sessions?.map((session) => (
+                    <tr key={session.sessionId} className="border-t border-slate-800">
+                      <td className="py-2 pr-4">
+                        <div className="font-medium text-slate-100">{session.sessionKey || session.sessionId}</div>
+                        <div className="text-[0.65rem] text-slate-500">{session.sessionId}</div>
+                      </td>
+                      <td className="py-2 pr-4">
+                        <div>{session.provider || 'internal'}</div>
+                        <div className="text-[0.65rem] text-slate-500">
+                          {session.kind || session.chatType || 'direct'}
+                        </div>
+                      </td>
+                      <td className="py-2 pr-4">{session.updatedAt ? new Date(session.updatedAt).toLocaleString() : '—'}</td>
+                      <td className="py-2 pr-4">{session.totalMessages ?? 0}</td>
+                      <td className="py-2 pr-4">{session.totalTokens ?? '—'}</td>
+                      <td className="py-2 text-right space-x-2">
+                        <button
+                          onClick={() => runSessionAction(session.sessionId, 'compact')}
+                          className="px-2 py-1 rounded bg-slate-800 text-slate-200 hover:bg-slate-700"
+                        >
+                          Compact
+                        </button>
+                        <button
+                          onClick={() => runSessionAction(session.sessionId, 'reset')}
+                          className="px-2 py-1 rounded bg-rose-600/70 text-white hover:bg-rose-500"
+                        >
+                          Reset
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </section>
 
         <section className="control-card lg:col-span-2">

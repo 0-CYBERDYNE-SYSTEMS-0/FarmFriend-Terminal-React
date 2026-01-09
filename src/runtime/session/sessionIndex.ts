@@ -8,9 +8,14 @@ export type SessionIndexEntry = {
   sessionKey: string;
   sessionId: string;
   updatedAt: string;
+  lastActiveAt?: string;
+  createdAt?: string;
   provider?: string;
   chatType?: "direct" | "group" | "unknown";
   displayName?: string;
+  totalMessages?: number;
+  totalTokens?: number;
+  overrides?: Record<string, unknown>;
 };
 
 type SessionIndex = Record<string, SessionIndexEntry>;
@@ -35,6 +40,13 @@ function saveIndex(workspaceDir: string, index: SessionIndex): void {
   fs.writeFileSync(p, JSON.stringify(index, null, 2) + "\n", "utf8");
 }
 
+function findEntryBySessionId(index: SessionIndex, sessionId: string): SessionIndexEntry | null {
+  for (const entry of Object.values(index)) {
+    if (entry.sessionId === sessionId) return entry;
+  }
+  return null;
+}
+
 export function getOrCreateSessionIdForKey(params: {
   workspaceDir: string;
   cfg: RuntimeConfig;
@@ -49,6 +61,8 @@ export function getOrCreateSessionIdForKey(params: {
 
   if (existing?.sessionId) {
     existing.updatedAt = now;
+    existing.lastActiveAt = existing.lastActiveAt || now;
+    existing.createdAt = existing.createdAt || now;
     if (params.provider) existing.provider = params.provider;
     if (params.chatType) existing.chatType = params.chatType;
     if (params.displayName) existing.displayName = params.displayName;
@@ -63,6 +77,8 @@ export function getOrCreateSessionIdForKey(params: {
     sessionKey: params.sessionKey,
     sessionId,
     updatedAt: now,
+    lastActiveAt: now,
+    createdAt: now,
     provider: params.provider,
     chatType: params.chatType,
     displayName: params.displayName
@@ -72,9 +88,50 @@ export function getOrCreateSessionIdForKey(params: {
   return { sessionId, entry };
 }
 
+export function upsertSessionIndexEntry(params: {
+  workspaceDir: string;
+  sessionId: string;
+  sessionKey?: string;
+  provider?: string;
+  chatType?: "direct" | "group" | "unknown";
+  displayName?: string;
+  updatedAt?: string;
+  lastActiveAt?: string;
+  createdAt?: string;
+  totalMessages?: number;
+  totalTokens?: number;
+  overrides?: Record<string, unknown>;
+}): SessionIndexEntry {
+  const index = loadIndex(params.workspaceDir);
+  const now = params.updatedAt || new Date().toISOString();
+  let key = params.sessionKey?.trim();
+  let entry = key ? index[key] : null;
+  if (!entry && !key) {
+    entry = findEntryBySessionId(index, params.sessionId);
+    if (entry) key = entry.sessionKey;
+  }
+  if (!key) key = params.sessionId;
+  const next: SessionIndexEntry = {
+    sessionKey: key,
+    sessionId: params.sessionId,
+    updatedAt: now,
+    lastActiveAt: params.lastActiveAt || entry?.lastActiveAt || now,
+    createdAt: params.createdAt || entry?.createdAt,
+    provider: params.provider || entry?.provider,
+    chatType: params.chatType || entry?.chatType,
+    displayName: params.displayName || entry?.displayName,
+    totalMessages: typeof params.totalMessages === "number" ? params.totalMessages : entry?.totalMessages,
+    totalTokens: typeof params.totalTokens === "number" ? params.totalTokens : entry?.totalTokens,
+    overrides: params.overrides ?? entry?.overrides
+  };
+  index[key] = next;
+  saveIndex(params.workspaceDir, index);
+  return next;
+}
+
 export function listSessionIndex(workspaceDir: string): SessionIndexEntry[] {
   const index = loadIndex(workspaceDir);
-  return Object.values(index).sort((a, b) => String(b.updatedAt || "").localeCompare(String(a.updatedAt || "")));
+  return Object.values(index).sort((a, b) => String(b.updatedAt || b.lastActiveAt || "").localeCompare(String(a.updatedAt || a.lastActiveAt || "")));
 }
 
 export function removeSessionIndexKeys(workspaceDir: string, keys: string[]): void {

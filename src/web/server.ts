@@ -12,6 +12,8 @@ import { resolveConfig } from "../runtime/config/loadConfig.js";
 import { defaultConfigPath, resolveWorkspaceDir } from "../runtime/config/paths.js";
 import { loadWorkspaceContractSnapshot } from "../runtime/workspace/contract.js";
 import { loadSession } from "../runtime/session/sessionStore.js";
+import { resolveMainSessionId } from "../runtime/session/sessionPolicy.js";
+import { listSessionIndex, upsertSessionIndexEntry } from "../runtime/session/sessionIndex.js";
 import { loadTaskStore } from "../runtime/scheduling/taskStore.js";
 import { quickHealthCheck } from "../runtime/workspace/healthCheck.js";
 import { listSkillStubs } from "../runtime/tools/implementations/skills.js";
@@ -225,6 +227,82 @@ function redactConfig(value: any): any {
     return out;
   }
   return value;
+}
+
+function listSessionsForControl(params: {
+  workspaceDir: string;
+  cfg: any;
+  limit?: number;
+  activeMinutes?: number;
+}): Array<Record<string, unknown>> {
+  const sessionDir = path.join(params.workspaceDir, "sessions");
+  const mainSessionId = resolveMainSessionId(params.cfg);
+  const limit = Math.max(1, Math.min(200, Number(params.limit ?? 50)));
+  const activeMinutes = Number(params.activeMinutes ?? 0);
+  const cutoff = activeMinutes > 0 ? Date.now() - activeMinutes * 60 * 1000 : null;
+  const rows: Array<Record<string, unknown>> = [];
+
+  const indexEntries = listSessionIndex(params.workspaceDir);
+  const indexedIds = new Set(indexEntries.map((e) => e.sessionId));
+
+  for (const entry of indexEntries) {
+    const p = path.join(sessionDir, `${entry.sessionId}.json`);
+    const needsSession = typeof entry.totalMessages !== "number" || typeof entry.totalTokens !== "number" || !entry.overrides;
+    const session = needsSession ? loadSession(entry.sessionId, sessionDir) : null;
+    const updatedAt = entry.updatedAt || entry.lastActiveAt || session?.stats?.lastActiveAt || session?.updated_at || session?.created_at;
+    const updatedMs = Date.parse(updatedAt || "");
+    if (cutoff && (!Number.isFinite(updatedMs) || updatedMs < cutoff)) continue;
+    rows.push({
+      sessionId: entry.sessionId,
+      sessionKey: entry.sessionKey,
+      provider: entry.provider,
+      chatType: entry.chatType,
+      displayName: entry.displayName,
+      kind: entry.sessionId === mainSessionId ? "main" : "other",
+      updatedAt,
+      totalMessages: entry.totalMessages ?? session?.stats?.totalMessages ?? session?.conversation?.length ?? 0,
+      totalTokens: entry.totalTokens ?? session?.stats?.totalTokens ?? undefined,
+      overrides: entry.overrides ?? session?.meta?.overrides
+    });
+  }
+
+  if (fs.existsSync(sessionDir)) {
+    const extras = fs
+      .readdirSync(sessionDir, { withFileTypes: true })
+      .filter((entry) => entry.isFile() && entry.name.endsWith(".json"))
+      .map((entry) => entry.name.replace(/\.json$/, ""))
+      .filter((sessionId) => !indexedIds.has(sessionId));
+
+    for (const sessionId of extras) {
+      const session = loadSession(sessionId, sessionDir);
+      if (!session) continue;
+      const updatedAt = session.stats?.lastActiveAt || session.updated_at || session.created_at;
+      const updatedMs = Date.parse(updatedAt || "");
+      if (cutoff && (!Number.isFinite(updatedMs) || updatedMs < cutoff)) continue;
+      upsertSessionIndexEntry({
+        workspaceDir: params.workspaceDir,
+        sessionId: session.session_id,
+        sessionKey: session.session_id,
+        updatedAt,
+        lastActiveAt: session.stats?.lastActiveAt,
+        createdAt: session.stats?.createdAt,
+        totalMessages: session.stats?.totalMessages ?? session.conversation.length,
+        totalTokens: session.stats?.totalTokens,
+        overrides: session.meta?.overrides as Record<string, unknown> | undefined
+      });
+      rows.push({
+        sessionId: session.session_id,
+        kind: session.session_id === mainSessionId ? "main" : "other",
+        updatedAt,
+        totalMessages: session.stats?.totalMessages ?? session.conversation.length,
+        totalTokens: session.stats?.totalTokens ?? undefined,
+        overrides: session.meta?.overrides
+      });
+    }
+  }
+
+  rows.sort((a, b) => String(b.updatedAt || "").localeCompare(String(a.updatedAt || "")));
+  return rows.slice(0, limit);
 }
 
 async function readJsonBody(req: IncomingMessage): Promise<any> {
@@ -600,6 +678,43 @@ export async function startWebServer(): Promise<void> {
       try {
         const issues = await quickHealthCheck(workspaceDir);
         sendJson(res, 200, { ok: issues.length === 0, issues });
+      } catch (err) {
+        sendJson(res, 500, { error: err instanceof Error ? err.message : String(err) });
+      }
+      return;
+    }
+
+    if (req.method === "GET" && url.pathname === "/api/control/sessions") {
+      if (!requireAdmin(req, res, url, controlToken)) return;
+      try {
+        const limit = Number(url.searchParams.get("limit") ?? 50);
+        const activeMinutes = Number(url.searchParams.get("activeMinutes") ?? 0);
+        const sessions = listSessionsForControl({
+          workspaceDir,
+          cfg: resolveConfig({ repoRoot }),
+          limit,
+          activeMinutes
+        });
+        sendJson(res, 200, { ok: true, sessions });
+      } catch (err) {
+        sendJson(res, 500, { error: err instanceof Error ? err.message : String(err) });
+      }
+      return;
+    }
+
+    if (req.method === "POST" && (url.pathname === "/api/control/sessions/reset" || url.pathname === "/api/control/sessions/compact")) {
+      if (!requireAdmin(req, res, url, controlToken)) return;
+      try {
+        const body = await readJsonBody(req);
+        const sessionId = String(body?.sessionId || "").trim() || resolveMainSessionId(resolveConfig({ repoRoot }));
+        const daemonWs = await getDaemonConnection(sessionId);
+        const command = url.pathname.endsWith("/compact") ? "/compact" : "/reset";
+        daemonWs.send(JSON.stringify({
+          type: "start_turn",
+          input: command,
+          sessionId
+        } as DaemonClientMessage));
+        sendJson(res, 200, { ok: true, sessionId, command });
       } catch (err) {
         sendJson(res, 500, { error: err instanceof Error ? err.message : String(err) });
       }
