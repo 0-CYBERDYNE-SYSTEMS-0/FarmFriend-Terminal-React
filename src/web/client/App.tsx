@@ -298,9 +298,11 @@ function MessageContent({ content, role }: { content: string; role: string }) {
 function AppContent({
   layout = 'full',
   gatewayIndicator,
+  onBack,
 }: {
   layout?: 'full' | 'embedded'
   gatewayIndicator?: GatewayIndicator
+  onBack?: () => void
 }) {
   const { theme } = useTheme();
   const [messages, setMessages] = useState<ChatMessage[]>([])
@@ -619,6 +621,14 @@ function AppContent({
       {layout === 'full' && (
         <header className="flex items-center justify-between px-4 py-3 border-b border-neutral-800 bg-neutral-900/50 backdrop-blur">
           <div className="flex items-center gap-3">
+            {onBack && (
+              <button
+                onClick={onBack}
+                className="px-3 py-1.5 rounded-full bg-neutral-800 text-neutral-200 text-xs font-semibold hover:bg-neutral-700 transition"
+              >
+                Back to FieldView
+              </button>
+            )}
             <h1 className="text-lg font-semibold text-neutral-100">FarmFriend Terminal</h1>
             <span className="text-sm text-neutral-500">Operations console</span>
           </div>
@@ -1530,10 +1540,81 @@ function SkillsManager({ token }: { token: string }) {
     20000,
     [refreshKey]
   )
+  const [collapsed, setCollapsed] = useState(() => {
+    if (typeof window === 'undefined') return false
+    return localStorage.getItem('ff-skills-collapsed') === 'true'
+  })
+  const [query, setQuery] = useState('')
+  const [showSkills, setShowSkills] = useState(true)
+  const [showCommands, setShowCommands] = useState(false)
+  const [showWorkspace, setShowWorkspace] = useState(true)
+  const [showBundled, setShowBundled] = useState(true)
+  const [showExternal, setShowExternal] = useState(false)
 
   const [selectedSkill, setSelectedSkill] = useState<SkillsInstalledEntry | null>(null)
   const [skillContent, setSkillContent] = useState('')
   const [skillStatus, setSkillStatus] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    localStorage.setItem('ff-skills-collapsed', String(collapsed))
+  }, [collapsed])
+
+  const allSkills = installed.data?.skills ?? []
+  const counts = allSkills.reduce(
+    (acc, skill) => {
+      const isCommand = skill.kind === 'markdown_commands'
+      if (isCommand) acc.commands += 1
+      else acc.skills += 1
+      if (skill.source === 'workspace') acc.workspace += 1
+      else if (skill.source === 'bundled') acc.bundled += 1
+      else acc.external += 1
+      if (skill.editable) acc.editable += 1
+      acc.total += 1
+      return acc
+    },
+    { total: 0, skills: 0, commands: 0, workspace: 0, bundled: 0, external: 0, editable: 0 }
+  )
+
+  const filteredSkills = allSkills
+    .filter((skill) => {
+      const isCommand = skill.kind === 'markdown_commands'
+      if (isCommand && !showCommands) return false
+      if (!isCommand && !showSkills) return false
+
+      if (skill.source === 'workspace' && !showWorkspace) return false
+      if (skill.source === 'bundled' && !showBundled) return false
+      if (skill.source === 'external' && !showExternal) return false
+
+      const q = query.trim().toLowerCase()
+      if (!q) return true
+      const hay = [
+        skill.slug,
+        skill.name || '',
+        skill.summary || '',
+        skill.description || '',
+        (skill.tags || []).join(' ')
+      ]
+        .join(' ')
+        .toLowerCase()
+      return hay.includes(q)
+    })
+    .sort((a, b) => {
+      const typeWeight = (s: SkillsInstalledEntry) => (s.kind === 'markdown_commands' ? 1 : 0)
+      const sourceWeight = (s: SkillsInstalledEntry) => {
+        if (s.source === 'workspace') return 0
+        if (s.source === 'bundled') return 1
+        return 2
+      }
+      const type = typeWeight(a) - typeWeight(b)
+      if (type !== 0) return type
+      const source = sourceWeight(a) - sourceWeight(b)
+      if (source !== 0) return source
+      return a.slug.localeCompare(b.slug)
+    })
+
+  const skillTypeLabel = (skill: SkillsInstalledEntry) => (skill.kind === 'markdown_commands' ? 'Command' : 'Skill')
+  const sourceLabel = (skill: SkillsInstalledEntry) => skill.source || 'external'
 
   const openSkill = async (skill: SkillsInstalledEntry) => {
     try {
@@ -1660,83 +1741,215 @@ function SkillsManager({ token }: { token: string }) {
 
   return (
     <div className="control-card lg:col-span-3">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 className="text-sm font-semibold text-slate-200">Skills Manager</h2>
           <p className="text-xs text-slate-400">Installed skills, registry search, and quick creation.</p>
         </div>
-        <div className="flex gap-2 text-xs">
-          {['installed', 'registry', 'create'].map((tab) => (
-            <button
-              key={tab}
-              onClick={() => setSkillsTab(tab as any)}
-              className={`px-3 py-1.5 rounded-full ${skillsTab === tab ? 'bg-emerald-600 text-white' : 'bg-slate-900 text-slate-300 hover:bg-slate-800'}`}
-            >
-              {tab === 'installed' ? 'Installed' : tab === 'registry' ? 'Registry' : 'Create'}
-            </button>
-          ))}
+        <div className="flex flex-wrap items-center gap-2 text-xs">
+          {!collapsed && (
+            <>
+              {['installed', 'registry', 'create'].map((tab) => (
+                <button
+                  key={tab}
+                  onClick={() => setSkillsTab(tab as any)}
+                  className={`px-3 py-1.5 rounded-full ${skillsTab === tab ? 'bg-emerald-600 text-white' : 'bg-slate-900 text-slate-300 hover:bg-slate-800'}`}
+                >
+                  {tab === 'installed' ? 'Installed' : tab === 'registry' ? 'Registry' : 'Create'}
+                </button>
+              ))}
+            </>
+          )}
+          <button
+            onClick={() => setCollapsed((v) => !v)}
+            className="px-3 py-1.5 rounded-full bg-slate-800 text-slate-200 hover:bg-slate-700"
+          >
+            {collapsed ? 'Expand' : 'Collapse'}
+          </button>
         </div>
       </div>
 
-      {skillsTab === 'installed' && (
-        <div className="mt-4 grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
-          <div className="space-y-2 text-sm text-slate-300">
-            {installed.loading && <p>Loading skills...</p>}
-            {installed.error && <p className="text-rose-300">{installed.error}</p>}
-            {!installed.loading && installed.data?.skills?.length === 0 && <p>No skills found.</p>}
-            {installed.data?.skills?.map((skill) => (
-              <button
-                key={skill.path}
-                onClick={() => openSkill(skill)}
-                className={`w-full text-left px-3 py-2 rounded-lg border ${selectedSkill?.path === skill.path ? 'border-emerald-500/60 bg-slate-900/80' : 'border-slate-800 bg-slate-900/50 hover:bg-slate-900'}`}
-              >
-                <div className="flex items-center justify-between">
-                  <span className="font-semibold text-slate-200">{skill.slug}</span>
-                  <span className="text-xs text-slate-500">{skill.source}</span>
-                </div>
-                <p className="text-xs text-slate-400 mt-1">{skill.summary || skill.description || 'No summary'}</p>
-                {!skill.editable && <span className="text-[10px] text-amber-300">read-only</span>}
-              </button>
-            ))}
+      <div className="mt-2 flex flex-wrap gap-3 text-[11px] text-slate-400">
+        <span>Items: {counts.total}</span>
+        <span>Skills: {counts.skills}</span>
+        <span>Commands: {counts.commands}</span>
+        <span>Workspace: {counts.workspace}</span>
+        <span>Bundled: {counts.bundled}</span>
+        <span>External: {counts.external}</span>
+      </div>
+
+      {collapsed && (
+        <div className="mt-3 text-xs text-slate-500">
+          Skills manager collapsed. Expand to browse, filter, or edit.
+        </div>
+      )}
+
+      {!collapsed && skillsTab === 'installed' && (
+        <div className="mt-4 space-y-4">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex flex-col gap-2">
+              <input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search skills by name, slug, or tag..."
+                className="w-full max-w-md px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 text-sm text-slate-200"
+              />
+              <div className="flex flex-wrap gap-2 text-[11px]">
+                <button
+                  onClick={() => setShowSkills((v) => !v)}
+                  className={`px-2.5 py-1 rounded-full border ${showSkills ? 'border-emerald-500/60 text-emerald-200 bg-emerald-500/10' : 'border-slate-700 text-slate-400 bg-slate-900'}`}
+                >
+                  Skills
+                </button>
+                <button
+                  onClick={() => setShowCommands((v) => !v)}
+                  className={`px-2.5 py-1 rounded-full border ${showCommands ? 'border-amber-500/60 text-amber-200 bg-amber-500/10' : 'border-slate-700 text-slate-400 bg-slate-900'}`}
+                >
+                  Commands
+                </button>
+                <button
+                  onClick={() => setShowWorkspace((v) => !v)}
+                  className={`px-2.5 py-1 rounded-full border ${showWorkspace ? 'border-sky-500/60 text-sky-200 bg-sky-500/10' : 'border-slate-700 text-slate-400 bg-slate-900'}`}
+                >
+                  Workspace
+                </button>
+                <button
+                  onClick={() => setShowBundled((v) => !v)}
+                  className={`px-2.5 py-1 rounded-full border ${showBundled ? 'border-indigo-500/60 text-indigo-200 bg-indigo-500/10' : 'border-slate-700 text-slate-400 bg-slate-900'}`}
+                >
+                  Bundled
+                </button>
+                <button
+                  onClick={() => setShowExternal((v) => !v)}
+                  className={`px-2.5 py-1 rounded-full border ${showExternal ? 'border-slate-500/60 text-slate-200 bg-slate-500/10' : 'border-slate-700 text-slate-400 bg-slate-900'}`}
+                >
+                  External
+                </button>
+              </div>
+            </div>
+            <div className="text-[11px] text-slate-400">
+              Showing {filteredSkills.length} of {counts.total}
+            </div>
           </div>
-          <div className="space-y-2">
-            {selectedSkill ? (
-              <>
-                <div className="flex items-center justify-between">
-                  <h3 className="text-sm font-semibold text-slate-200">Edit {selectedSkill.slug}</h3>
-                  {!selectedSkill.editable && (
+
+          <div className="grid gap-4 lg:grid-cols-[1.15fr_0.85fr]">
+            <div className="space-y-2 text-sm text-slate-300">
+              {installed.loading && <p>Loading skills...</p>}
+              {installed.error && <p className="text-rose-300">{installed.error}</p>}
+              {!installed.loading && filteredSkills.length === 0 && (
+                <p className="text-slate-400">No skills match the current filters.</p>
+              )}
+              <div className="max-h-[520px] overflow-y-auto pr-1 space-y-2">
+                {filteredSkills.map((skill) => {
+                  const isSelected = selectedSkill?.path === skill.path
+                  const isCommand = skill.kind === 'markdown_commands'
+                  const source = sourceLabel(skill)
+                  return (
                     <button
-                      onClick={copyToWorkspace}
-                      className="px-2 py-1 rounded-full bg-amber-500 text-xs text-slate-900 font-semibold"
+                      key={skill.path}
+                      onClick={() => openSkill(skill)}
+                      className={`w-full text-left px-3 py-3 rounded-xl border transition ${
+                        isSelected
+                          ? 'border-emerald-500/60 bg-slate-900/80'
+                          : 'border-slate-800 bg-slate-900/50 hover:bg-slate-900'
+                      }`}
                     >
-                      Copy to workspace
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="font-semibold text-slate-200">{skill.slug}</span>
+                            {skill.name && <span className="text-xs text-slate-400">{skill.name}</span>}
+                          </div>
+                          <p className="text-xs text-slate-400 mt-1">
+                            {skill.summary || skill.description || 'No summary'}
+                          </p>
+                        </div>
+                        <div className="flex flex-col items-end gap-1 text-[10px]">
+                          <span
+                            className={`px-2 py-0.5 rounded-full border ${
+                              isCommand
+                                ? 'border-amber-500/60 text-amber-200 bg-amber-500/10'
+                                : 'border-emerald-500/60 text-emerald-200 bg-emerald-500/10'
+                            }`}
+                          >
+                            {skillTypeLabel(skill)}
+                          </span>
+                          <span className="px-2 py-0.5 rounded-full border border-slate-700 text-slate-300 bg-slate-900">
+                            {source}
+                          </span>
+                          {!skill.editable && <span className="text-amber-300">read-only</span>}
+                        </div>
+                      </div>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              {selectedSkill ? (
+                <>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-sm font-semibold text-slate-200">Editing {selectedSkill.slug}</h3>
+                      <div className="mt-1 flex flex-wrap gap-2 text-[10px]">
+                        <span
+                          className={`px-2 py-0.5 rounded-full border ${
+                            selectedSkill.kind === 'markdown_commands'
+                              ? 'border-amber-500/60 text-amber-200 bg-amber-500/10'
+                              : 'border-emerald-500/60 text-emerald-200 bg-emerald-500/10'
+                          }`}
+                        >
+                          {skillTypeLabel(selectedSkill)}
+                        </span>
+                        <span className="px-2 py-0.5 rounded-full border border-slate-700 text-slate-300 bg-slate-900">
+                          {sourceLabel(selectedSkill)}
+                        </span>
+                        {!selectedSkill.editable && <span className="text-amber-300">read-only</span>}
+                      </div>
+                    </div>
+                    {!selectedSkill.editable && (
+                      <button
+                        onClick={copyToWorkspace}
+                        className="px-2 py-1 rounded-full bg-amber-500 text-xs text-slate-900 font-semibold"
+                      >
+                        Copy to workspace
+                      </button>
+                    )}
+                  </div>
+                  <div className="rounded-lg border border-slate-800 bg-slate-950/60 p-3 text-[11px] text-slate-400">
+                    <p>
+                      <span className="text-slate-500">Path:</span>{' '}
+                      <span className="font-mono text-slate-300">{selectedSkill.path}</span>
+                    </p>
+                  </div>
+                  <textarea
+                    value={skillContent}
+                    onChange={(e) => setSkillContent(e.target.value)}
+                    className="w-full h-64 rounded-lg bg-slate-950 border border-slate-800 text-xs text-slate-200 p-3 font-mono"
+                    disabled={!selectedSkill.editable}
+                  />
+                  {selectedSkill.editable && (
+                    <button
+                      onClick={saveSkill}
+                      className="px-3 py-2 rounded-lg bg-emerald-600 text-white text-xs font-semibold hover:bg-emerald-500"
+                    >
+                      Save {skillTypeLabel(selectedSkill)}
                     </button>
                   )}
+                  {skillStatus && <p className="text-xs text-slate-400">{skillStatus}</p>}
+                </>
+              ) : (
+                <div className="rounded-lg border border-dashed border-slate-800 p-6 text-xs text-slate-400">
+                  Select a skill or command on the left to view or edit.
                 </div>
-                <textarea
-                  value={skillContent}
-                  onChange={(e) => setSkillContent(e.target.value)}
-                  className="w-full h-56 rounded-lg bg-slate-950 border border-slate-800 text-xs text-slate-200 p-3 font-mono"
-                  disabled={!selectedSkill.editable}
-                />
-                {selectedSkill.editable && (
-                  <button
-                    onClick={saveSkill}
-                    className="px-3 py-2 rounded-lg bg-emerald-600 text-white text-xs font-semibold hover:bg-emerald-500"
-                  >
-                    Save Skill
-                  </button>
-                )}
-                {skillStatus && <p className="text-xs text-slate-400">{skillStatus}</p>}
-              </>
-            ) : (
-              <p className="text-xs text-slate-400">Select a skill to view or edit.</p>
-            )}
+              )}
+            </div>
           </div>
         </div>
       )}
 
-      {skillsTab === 'registry' && (
+      {!collapsed && skillsTab === 'registry' && (
         <div className="mt-4 space-y-3 text-sm text-slate-300">
           <div className="flex gap-2">
             <input
@@ -1774,7 +1987,7 @@ function SkillsManager({ token }: { token: string }) {
         </div>
       )}
 
-      {skillsTab === 'create' && (
+      {!collapsed && skillsTab === 'create' && (
         <div className="mt-4 space-y-3 text-sm text-slate-300">
           <input
             value={createSlug}
@@ -2113,7 +2326,13 @@ export default function App() {
         />
       )}
       {view === 'control' && <ControlBarn onClose={() => setView('field')} />}
-      {view === 'chat' && <AppContent layout="full" gatewayIndicator={appGatewayIndicator} />}
+      {view === 'chat' && (
+        <AppContent
+          layout="full"
+          gatewayIndicator={appGatewayIndicator}
+          onBack={() => setView('field')}
+        />
+      )}
     </ThemeProvider>
   )
 }
