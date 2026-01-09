@@ -8,6 +8,13 @@ export type ScheduledTask = {
   prompt?: string;
   workflow?: string;
   profile?: string;
+  model?: string;
+  timeout_seconds?: number;
+  session_target?: "main" | "isolated" | "new";
+  isolated_session_id?: string;
+  post_to_main_prefix?: string;
+  description?: string;
+  thinking?: string;
   schedule: {
     schedule_type: "one_time" | "daily" | "weekly" | "interval" | "rrule";
     hour?: number;
@@ -23,6 +30,13 @@ export type ScheduledTask = {
   created_at: string;
   updated_at: string;
   next_run_at?: number;
+  state?: {
+    running_at_ms?: number;
+    last_run_at_ms?: number;
+    last_status?: "ok" | "error" | "skipped" | "timeout";
+    last_error?: string;
+    last_duration_ms?: number;
+  };
   last_run?: {
     started_at: string;
     finished_at?: string;

@@ -881,7 +881,7 @@
         "properties": {
           "action": {
             "type": "string",
-            "description": "Action: 'add' (create task), 'list' (show all), 'remove' (delete), 'enable' (activate), 'disable' (pause), 'status' (check)"
+            "description": "Action: 'add' (create task), 'list' (show all), 'remove' (delete), 'enable' (activate), 'disable' (pause), 'status' (check), 'run' (manually trigger)"
           },
           "name": {
             "type": "string",
@@ -898,6 +898,34 @@
           "profile": {
             "type": "string",
             "description": "Profile name to use when running this scheduled task (overrides default)."
+          },
+          "model": {
+            "type": "string",
+            "description": "Model override (provider/model or alias) for this task"
+          },
+          "description": {
+            "type": "string",
+            "description": "Optional human-readable description of what this scheduled task does"
+          },
+          "thinking": {
+            "type": "string",
+            "description": "Thinking level override: 'low', 'medium', or 'high'. Overrides default when set."
+          },
+          "session_target": {
+            "type": "string",
+            "description": "Session isolation mode: 'main' (post to main session), 'isolated' (persistent dedicated session), 'new' (fresh session each run, default)"
+          },
+          "post_to_main_prefix": {
+            "type": "string",
+            "description": "Prefix for messages posted to main session (e.g., '[Scheduled] '). Only used when session_target is 'main'."
+          },
+          "timeout_seconds": {
+            "type": "integer",
+            "description": "Timeout in seconds for agent execution"
+          },
+          "force": {
+            "type": "boolean",
+            "description": "For 'run' action: Force execution even if task is disabled"
           },
           "schedule_type": {
             "type": "string",

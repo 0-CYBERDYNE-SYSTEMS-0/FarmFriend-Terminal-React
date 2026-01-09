@@ -4,13 +4,23 @@ import { getSchedulerBackend } from "./backends/index.js";
 import { computeNextRRuleExecutionTimestamp, resolveScheduleTimeZone } from "./rrule.js";
 import { computeNextRunAt } from "./scheduler.js";
 import { DateTime } from "luxon";
+import { findRepoRoot } from "../config/repoRoot.js";
+import fs from "node:fs";
+import path from "node:path";
+import { spawn } from "node:child_process";
 
 type Args = {
-  action: "add" | "list" | "remove" | "enable" | "disable" | "status";
+  action: "add" | "list" | "remove" | "enable" | "disable" | "status" | "run";
   name?: string;
   prompt?: string;
   workflow?: string;
   profile?: string;
+  model?: string;
+  session_target?: "main" | "isolated" | "new";
+  post_to_main_prefix?: string;
+  description?: string;
+  thinking?: string;
+  timeout_seconds?: number;
   schedule_type?: "one_time" | "daily" | "weekly" | "interval" | "rrule";
   hour?: number;
   minute?: number;
@@ -24,6 +34,7 @@ type Args = {
   auto_remove?: boolean;
   dry_run?: boolean;
   open_result?: boolean;
+  force?: boolean;
 };
 
 type ParsedTime =
@@ -142,6 +153,21 @@ function resolveOneTimeTimestamp(args: Args): number {
   throw new Error("schedule_task: missing execution_timestamp (or supply time_string or hour/minute)");
 }
 
+async function runScheduledTaskNow(taskId: string): Promise<boolean> {
+  const repoRoot = findRepoRoot();
+  const cli = path.join(repoRoot, "dist", "bin", "ff-terminal.js");
+  if (!fs.existsSync(cli)) {
+    throw new Error("schedule_task: missing build output (run npm run build)");
+  }
+  return await new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, [cli, "run", "--scheduled-task", taskId, "--headless"], {
+      stdio: "inherit"
+    });
+    child.on("error", (err) => reject(err));
+    child.on("close", (code) => resolve(code === 0));
+  });
+}
+
 export async function scheduleTaskTool(argsRaw: unknown, workspaceDir: string): Promise<string> {
   const args = argsRaw as Args;
   if (!args?.action) throw new Error("schedule_task: missing action");
@@ -184,6 +210,14 @@ export async function scheduleTaskTool(argsRaw: unknown, workspaceDir: string): 
     if (!backend) return JSON.stringify(task, null, 2);
     const status = await backend.status({ taskName: task.name });
     return JSON.stringify({ task, scheduler_daemon: status }, null, 2);
+  }
+
+  if (args.action === "run") {
+    if (existingIndex === -1) return `No such task: ${name}`;
+    const task = store.tasks[existingIndex];
+    if (!task.enabled && !args.force) return `Task ${task.name} is disabled (pass force: true to run anyway)`;
+    const ok = await runScheduledTaskNow(task.id);
+    return `${ok ? "Ran" : "Failed"} task ${task.name} (${task.id})`;
   }
 
   // add
@@ -276,6 +310,12 @@ export async function scheduleTaskTool(argsRaw: unknown, workspaceDir: string): 
       prompt: args.prompt,
       workflow: args.workflow,
       profile: args.profile,
+      model: args.model,
+      session_target: args.session_target,
+      post_to_main_prefix: args.post_to_main_prefix,
+      description: args.description,
+      thinking: args.thinking,
+      timeout_seconds: args.timeout_seconds,
       schedule: {
         schedule_type,
         hour: hourMinute?.hour ?? args.hour,

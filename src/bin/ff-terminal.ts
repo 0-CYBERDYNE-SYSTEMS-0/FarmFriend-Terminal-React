@@ -11,7 +11,8 @@ import { findRepoRoot } from "../runtime/config/repoRoot.js";
 import { resolveConfig } from "../runtime/config/loadConfig.js";
 import { runAgentTurn } from "../runtime/agentLoop.js";
 import { toWire } from "../runtime/streamProtocol.js";
-import { resolveSessionId } from "../runtime/session/sessionPolicy.js";
+import { resolveMainSessionId, resolveSessionId } from "../runtime/session/sessionPolicy.js";
+import { newId } from "../shared/ids.js";
 import { ensureCanonicalStructure } from "../runtime/workspace/migration.js";
 import { loadTaskStore, saveTaskStore, taskStorePath } from "../runtime/scheduling/taskStore.js";
 import { getSchedulerBackend } from "../runtime/scheduling/backends/index.js";
@@ -722,15 +723,18 @@ async function run(): Promise<void> {
       { repoRoot }
     );
     ensureCanonicalStructure(workspaceDir);
-    const sessionId = resolveSessionId({
+    let sessionId = resolveSessionId({
       requested: requestedSessionId,
       workspaceDir,
       cfg: runtimeCfg
     });
+    let sessionKey: string | undefined;
 
     let promptToRun = userPrompt;
     let scheduledTaskName: string | null = null;
+    let scheduledTaskId: string | null = null;
     let scheduledTaskProfile: string | undefined;
+    let scheduledTaskModel: string | undefined;
 
     if (scheduledTaskRef) {
       const store = loadTaskStore(workspaceDir);
@@ -742,10 +746,39 @@ async function run(): Promise<void> {
       if (task.workflow) throw new Error("workflows are not implemented yet in TS runner\n");
       promptToRun = task.prompt || "";
       scheduledTaskName = task.name;
+      scheduledTaskId = task.id;
       scheduledTaskProfile = task.profile;
+      scheduledTaskModel = task.model;
+
+      if (task.thinking) {
+        process.env.FF_THINKING = task.thinking;
+      }
+
+      if (!requestedSessionId) {
+        const target = task.session_target || "main";
+        if (target === "main") {
+          sessionId = resolveMainSessionId(runtimeCfg);
+          sessionKey = "main";
+        } else if (target === "isolated") {
+          if (!task.isolated_session_id) {
+            task.isolated_session_id = newId("session");
+          }
+          sessionId = task.isolated_session_id;
+          sessionKey = `scheduled:${task.id}`;
+        } else if (target === "new") {
+          sessionId = newId("session");
+          sessionKey = `scheduled:${task.id}:${Date.now()}`;
+        }
+      }
 
       task.last_run = { started_at: new Date().toISOString() };
+      task.state = task.state || {};
+      task.state.running_at_ms = Date.now();
       saveTaskStore(workspaceDir, store);
+
+      if (task.timeout_seconds) {
+        process.env.FF_TIMEOUT = String(task.timeout_seconds * 1000);
+      }
     }
 
     // Scheduled tasks can override the profile unless an explicit CLI profile was provided.
@@ -772,6 +805,11 @@ async function run(): Promise<void> {
       // Set model
       const model = profile.model?.trim();
       if (model) process.env.FF_MODEL = model;
+
+      // Scheduled task model override
+      if (scheduledTaskRef && scheduledTaskModel?.trim()) {
+        process.env.FF_MODEL = scheduledTaskModel.trim();
+      }
 
       // Set up credentials based on provider
       await applyProviderCredentialsFromProfile(profile);
@@ -883,8 +921,9 @@ async function run(): Promise<void> {
       });
 
       const store = loadTaskStore(workspaceDir);
-      const task = store.tasks.find((t) => t.name === scheduledTaskName);
+      const task = store.tasks.find((t) => t.id === scheduledTaskId);
       if (task) {
+        const durationMs = Date.now() - runStartedAt;
         task.last_run = {
           ...(task.last_run || {}),
           started_at: task.last_run?.started_at || new Date().toISOString(),
@@ -893,8 +932,17 @@ async function run(): Promise<void> {
           error,
           session_id: sessionId,
           stdout_log: logPath,
-          duration_ms: Date.now() - runStartedAt
+          duration_ms: durationMs
         };
+
+        // Update state tracking
+        task.state = task.state || {};
+        task.state.running_at_ms = undefined;
+        task.state.last_run_at_ms = Date.now();
+        task.state.last_status = ok ? "ok" : "error";
+        task.state.last_error = error;
+        task.state.last_duration_ms = durationMs;
+
         saveTaskStore(workspaceDir, store);
 
         if (task.schedule) {
