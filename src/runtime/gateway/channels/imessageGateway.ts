@@ -4,7 +4,10 @@ import { fileURLToPath } from "node:url";
 import type { ToolRegistry } from "../../tools/registry.js";
 import { runAgentTurn } from "../../agentLoop.js";
 import { withToolContext } from "../../tools/context.js";
-import { resolveSessionId } from "../../session/sessionPolicy.js";
+import { buildSessionKey } from "../../session/sessionKey.js";
+import { getOrCreateSessionIdForKey } from "../../session/sessionIndex.js";
+import { evaluateSendPolicy } from "../../session/sendPolicy.js";
+import { resetSessionWithArchive, compactSessionWithSummary } from "../../session/resetHelpers.js";
 import { resolveConfig, type RuntimeConfig } from "../../config/loadConfig.js";
 import { getScript, substituteParams, validateParams } from "../../tools/implementations/macos_control/scriptLoader.js";
 import type { GatewayChannel, GatewayChannelStatus } from "../types.js";
@@ -12,6 +15,7 @@ import type { GatewayChannel, GatewayChannelStatus } from "../types.js";
 type WatchTarget = {
   name: string;
   replyTo?: string;
+  kind?: "direct" | "group";
 };
 
 type IMessageGatewayConfig = {
@@ -79,7 +83,9 @@ function normalizeWatchList(raw?: IMessageGatewayConfig["watchChats"]): WatchTar
       const name = String((entry as any).name || "").trim();
       if (!name) continue;
       const replyTo = String((entry as any).reply_to || (entry as any).replyTo || "").trim() || undefined;
-      out.push({ name, replyTo });
+      const kindRaw = String((entry as any).kind || "").trim().toLowerCase();
+      const kind = kindRaw === "group" ? "group" : "direct";
+      out.push({ name, replyTo, kind });
     }
   }
   return out;
@@ -126,7 +132,6 @@ export class IMessageGateway implements GatewayChannel {
   private processing = false;
   private lastSeen: Map<string, string> = new Map();
   private primed = false;
-  private sessionId: string;
   private runtimeCfg: RuntimeConfig;
 
   constructor(opts: {
@@ -145,11 +150,6 @@ export class IMessageGateway implements GatewayChannel {
     this.pollInterval = Number(this.config.pollIntervalMs ?? this.config.poll_interval_ms ?? 8000);
     this.autoReply = Boolean(this.config.autoReply ?? this.config.auto_reply ?? false);
     this.replyPrefix = String(this.config.replyPrefix ?? this.config.reply_prefix ?? "").trim();
-    this.sessionId = resolveSessionId({
-      requested: null,
-      workspaceDir: this.workspaceDir,
-      cfg: this.runtimeCfg
-    });
   }
 
   async start(): Promise<void> {
@@ -247,14 +247,77 @@ export class IMessageGateway implements GatewayChannel {
     }
   }
 
+  private resolveSessionIdForChat(chat: WatchTarget): string {
+    const chatType = chat.kind || "direct";
+    const sessionKey = buildSessionKey({
+      cfg: this.runtimeCfg,
+      provider: "imessage",
+      chatType,
+      chatId: chat.name
+    });
+    const { sessionId } = getOrCreateSessionIdForKey({
+      workspaceDir: this.workspaceDir,
+      cfg: this.runtimeCfg,
+      sessionKey,
+      provider: "imessage",
+      chatType,
+      displayName: chat.name
+    });
+    return sessionId;
+  }
+
   private async handleInbound(chat: WatchTarget, sender: string, content: string): Promise<void> {
+    const sessionId = this.resolveSessionIdForChat(chat);
+    const cfg = this.runtimeCfg;
+    const decision = evaluateSendPolicy({
+      cfg,
+      provider: "imessage",
+      chatType: (chat.kind || "direct") === "group" ? "group" : "direct",
+      sessionId
+    });
+    if (!decision.allowed) {
+      return;
+    }
+
+    const trimmed = content.trim();
+    if (/^\/(reset|new)\b/i.test(trimmed)) {
+      const remainder = trimmed.replace(/^\/(reset|new)\b/i, "").trim();
+      await resetSessionWithArchive({
+        sessionId,
+        workspaceDir: this.workspaceDir,
+        repoRoot: this.repoRoot,
+        cfg
+      });
+      if (!remainder) {
+        await this.sendMessage(chat.replyTo || chat.name, "✓ Session reset");
+        return;
+      }
+      content = remainder;
+    } else if (/^\/compact\b/i.test(trimmed)) {
+      const remainder = trimmed.replace(/^\/compact\b/i, "").trim();
+      const result = await compactSessionWithSummary({
+        sessionId,
+        workspaceDir: this.workspaceDir,
+        repoRoot: this.repoRoot,
+        cfg
+      });
+      if (!remainder) {
+        const suffix = result.summarizedCount > 0
+          ? ` (${result.summarizedCount} messages summarized)`
+          : " (no changes needed)";
+        await this.sendMessage(chat.replyTo || chat.name, `✓ Session compacted${suffix}`);
+        return;
+      }
+      content = remainder;
+    }
+
     let responseText = "";
     const prompt = `New iMessage from ${sender} (chat: ${chat.name}):\n${content}`.trim();
 
     try {
       await withToolContext(
         {
-          sessionId: this.sessionId,
+          sessionId,
           workspaceDir: this.workspaceDir,
           repoRoot: this.repoRoot
         },
@@ -262,7 +325,7 @@ export class IMessageGateway implements GatewayChannel {
           for await (const chunk of runAgentTurn({
             userInput: prompt,
             registry: this.registry,
-            sessionId: this.sessionId,
+            sessionId,
             signal: new AbortController().signal
           })) {
             if (chunk.kind === "content") responseText += chunk.delta || "";

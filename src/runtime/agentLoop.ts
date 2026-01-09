@@ -3,6 +3,11 @@ import { executeToolCalls } from "./tools/executeTools.js";
 import { StreamChunk } from "./streamProtocol.js";
 import { buildSystemPrompt, buildCacheableSystemPrompt } from "./prompts/systemPrompt.js";
 import { createSession, loadSession, saveSession } from "./session/sessionStore.js";
+import { getSessionOverrides } from "./session/sessionOverrides.js";
+import { handleIdleExpiry, ensureSessionStats } from "./session/sessionLifecycle.js";
+import { estimateConversationTokens, summarizeSessionHistory } from "./session/summarization.js";
+import { pruneToolMessages } from "./session/contextPruning.js";
+import { resolveSessionMode } from "./session/sessionPolicy.js";
 import { findRepoRoot } from "./config/repoRoot.js";
 import { resolveConfig } from "./config/loadConfig.js";
 import { loadToolSchemas, validateToolArgs } from "./tools/toolSchemas.js";
@@ -224,8 +229,90 @@ export async function* runAgentTurn(params: {
   const workspaceDir = resolveWorkspaceDir(toolCtx?.workspaceDir ?? process.env.FF_WORKSPACE_DIR ?? undefined);
   const sessionDir = path.join(workspaceDir, "sessions");
   ensureCanonicalStructure(workspaceDir);
+  const cfg = resolveConfig({ repoRoot });
+  const sessionMode = resolveSessionMode(cfg);
+  let session = loadSession(sessionId, sessionDir) ?? createSession(sessionId);
+  ensureSessionStats(session);
 
-  const session = loadSession(sessionId, sessionDir) ?? createSession(sessionId);
+  const logLevel = parseLogLevel((cfg as any).log_level);
+  const logMaxBytes = Number((cfg as any).log_max_bytes ?? 5 * 1024 * 1024);
+  const logRetention = Number((cfg as any).log_retention ?? 3);
+  const logBaseDir = workspaceDir;
+  const sessionLogPath = path.join(logBaseDir, "logs", "sessions", `${sessionId}.jsonl`);
+  const logger = new StructuredLogger({ filePath: sessionLogPath, level: logLevel, maxBytes: logMaxBytes, retention: logRetention });
+
+  const idleResult = handleIdleExpiry({
+    session,
+    sessionId,
+    sessionDir,
+    cfg,
+    mode: sessionMode
+  });
+  session = idleResult.session;
+  const sessionConfig = (cfg as any)?.session || {};
+  const autoSummarize = Boolean(sessionConfig.autoSummarize);
+  const maxHistoryTokens = Number(sessionConfig.maxHistoryTokens ?? 0);
+  if (idleResult.expired) {
+    logger.log("info", "session_idle_reset", {
+      session_id: sessionId,
+      idle_minutes: idleResult.idleMinutes,
+      archive_path: idleResult.archivePath || undefined
+    });
+    if (autoSummarize && idleResult.archivePath) {
+      try {
+        const archived = JSON.parse(fs.readFileSync(idleResult.archivePath, "utf8"));
+        if (archived?.conversation?.length) {
+          yield { kind: "status", message: "Summarizing previous session after idle reset..." };
+          const summarized = await summarizeSessionHistory({
+            session: archived,
+            cfg,
+            repoRoot,
+            keepLast: 10,
+            sessionId
+          });
+          if (summarized.summary) {
+            session.conversation.unshift({
+              role: "assistant",
+              content: `Summary from previous session (idle reset):\n${summarized.summary}`,
+              created_at: new Date().toISOString()
+            });
+            saveSession(session, sessionDir);
+            logger.log("info", "session_idle_summary", {
+              session_id: sessionId,
+              summarized_count: summarized.summarizedCount
+            });
+          }
+        }
+      } catch (err) {
+        logger.log("warn", "session_idle_summary_failed", {
+          session_id: sessionId,
+          error: err instanceof Error ? err.message : String(err)
+        });
+      }
+    }
+  }
+  if (autoSummarize && maxHistoryTokens > 0) {
+    const estimated = estimateConversationTokens(session.conversation);
+    if (estimated > maxHistoryTokens) {
+      yield { kind: "status", message: "Summarizing session history..." };
+      const summarized = await summarizeSessionHistory({
+        session,
+        cfg,
+        repoRoot,
+        sessionId
+      });
+      if (summarized.summarizedCount > 0) {
+        session = summarized.session;
+        saveSession(session, sessionDir);
+        logger.log("info", "session_auto_summarize", {
+          session_id: sessionId,
+          summarized_count: summarized.summarizedCount,
+          estimated_tokens: estimated,
+          max_history_tokens: maxHistoryTokens
+        });
+      }
+    }
+  }
 
   // Convert content blocks to string for session storage
   const contentForHistory = typeof userInput === 'string'
@@ -234,16 +321,15 @@ export async function* runAgentTurn(params: {
         block.type === 'text' ? block.text : `[Image]`
       ).join('\n');
 
-  session.conversation.push({ role: "user", content: contentForHistory, created_at: new Date().toISOString() });
+  const userCreatedAt = new Date().toISOString();
+  session.conversation.push({ role: "user", content: contentForHistory, created_at: userCreatedAt });
   saveSession(session, sessionDir);
-
-  const cfg = resolveConfig({ repoRoot });
-  const logLevel = parseLogLevel((cfg as any).log_level);
-  const logMaxBytes = Number((cfg as any).log_max_bytes ?? 5 * 1024 * 1024);
-  const logRetention = Number((cfg as any).log_retention ?? 3);
-  const logBaseDir = workspaceDir;
-  const sessionLogPath = path.join(logBaseDir, "logs", "sessions", `${sessionId}.jsonl`);
-  const logger = new StructuredLogger({ filePath: sessionLogPath, level: logLevel, maxBytes: logMaxBytes, retention: logRetention });
+  logger.log("info", "session_message", {
+    session_id: sessionId,
+    role: "user",
+    created_at: userCreatedAt,
+    content: contentForHistory
+  });
   const memorySnapshot = (() => {
     try {
       return loadMemorySnapshot(workspaceDir);
@@ -255,9 +341,11 @@ export async function* runAgentTurn(params: {
     }
   })();
 
+  let bootstrapActive = false;
   const contractSnapshot = (() => {
     try {
       const snapshot = loadWorkspaceContractSnapshot(workspaceDir);
+      bootstrapActive = Boolean(snapshot.bootstrap?.trim());
       return formatWorkspaceContractForPrompt(snapshot);
     } catch (err) {
       logger.log("warn", "workspace_contract_load_failed", {
@@ -357,6 +445,9 @@ export async function* runAgentTurn(params: {
     for (const t of ALWAYS_ALLOWED_TOOLS) allowed.add(t);
     return Array.from(allowed);
   })();
+  const availableToolSet = new Set(availableToolNames);
+  const enabledTools = Array.from(availableToolSet).sort((a, b) => a.localeCompare(b));
+  const disabledTools = registry.listNames().filter((name) => !availableToolSet.has(name)).sort((a, b) => a.localeCompare(b));
 
   const planValidationEnabled = (cfg as any).plan_validation_enabled ?? false;
   let activePlan: ExecutionPlan | null = null;
@@ -377,6 +468,11 @@ export async function* runAgentTurn(params: {
         skillSections,
         memorySnapshot,
         contractSnapshot,
+        bootstrapActive,
+        sessionId,
+        sessionMode,
+        enabledTools,
+        disabledTools,
         planContext,
         availableToolNames,
         enableCaching: true
@@ -389,15 +485,21 @@ export async function* runAgentTurn(params: {
         skillSections,
         memorySnapshot,
         contractSnapshot,
+        bootstrapActive,
+        sessionId,
+        sessionMode,
+        enabledTools,
+        disabledTools,
         planContext,
         availableToolNames
       }) }];
 
-  const { provider, model } = createProvider({ repoRoot, modelOverride: params.modelOverride });
+  const sessionOverrides = getSessionOverrides(session);
+  const effectiveModelOverride = params.modelOverride || sessionOverrides.model;
+  const { provider, model } = createProvider({ repoRoot, modelOverride: effectiveModelOverride });
   // Load schemas with strict mode for structured outputs (guarantees valid tool calls)
   const allSchemas = loadToolSchemas(repoRoot, { strict: true });
   // Only advertise tools we can actually execute (prevents the model from calling unimplemented tools).
-  const availableToolSet = new Set(availableToolNames);
   const tools = allSchemas.filter((t) => registry.has(t.function.name) && availableToolSet.has(t.function.name));
   const messages: OpenAIMessage[] = [{ role: "system", content: systemPromptBlocks }];
   for (const m of session.conversation.slice(-40)) {
@@ -411,6 +513,12 @@ export async function* runAgentTurn(params: {
     } else {
       messages.push({ role: m.role === "assistant" ? "assistant" : "user", content: m.content });
     }
+  }
+  if (bootstrapActive) {
+    messages.push({
+      role: "system",
+      content: "BOOTSTRAP MODE ACTIVE. Ask exactly ONE onboarding question now and do not answer the user's request yet."
+    });
   }
 
   // Allow very long runs; default 500, overridable via config/env.
@@ -537,9 +645,27 @@ export async function* runAgentTurn(params: {
       // Extract GLM thinking mode (applies to all GLM models: 4.5, 4.6, 4.7)
       const glmThinkingMode = String((cfg as any).glm_thinking_mode ?? "disabled") as "auto" | "enabled" | "disabled";
 
+      const pruning = pruneToolMessages({
+        messages,
+        cfg,
+        contextWindowTokens: Number((cfg as any).context_window ?? 200000)
+      });
+      if (pruning.stats.enabled && (pruning.stats.trimmedCount > 0 || pruning.stats.clearedCount > 0)) {
+        logger.log("info", "context_pruning_applied", {
+          session_id: sessionId,
+          turn_id: turnId,
+          iteration: i + 1,
+          trimmed: pruning.stats.trimmedCount,
+          cleared: pruning.stats.clearedCount,
+          pruned_chars: pruning.stats.prunedChars,
+          est_tokens_before: pruning.stats.estimatedTokensBefore,
+          est_tokens_after: pruning.stats.estimatedTokensAfter
+        });
+      }
+
       for await (const ev of provider.streamChat({
         model,
-        messages,
+        messages: pruning.messages,
         tools,
         tool_choice: forceToolChoice,
         temperature: Number((cfg as any).temperature ?? 0.7),
@@ -659,12 +785,19 @@ export async function* runAgentTurn(params: {
     }
 
     // Record assistant content (even if empty; tool-calling turns often have little text).
+    const assistantCreatedAt = new Date().toISOString();
     session.conversation.push({
       role: "assistant",
       content: assistantContent,
-      created_at: new Date().toISOString()
+      created_at: assistantCreatedAt
     });
     saveSession(session, sessionDir);
+    logger.log("info", "session_message", {
+      session_id: sessionId,
+      role: "assistant",
+      created_at: assistantCreatedAt,
+      content: assistantContent
+    });
 
     messages.push({ role: "assistant", content: assistantContent });
 

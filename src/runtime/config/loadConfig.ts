@@ -16,6 +16,44 @@ export type RuntimeConfig = Record<string, unknown> & {
   workspace_dir?: string;
   session_mode?: "main" | "last" | "new";
   main_session_id?: string;
+  session?: {
+    scope?: "main" | "per-sender" | "clawdbot";
+    idleMinutes?: number;
+    autoSummarize?: boolean;
+    maxHistoryTokens?: number;
+    sendPolicy?: {
+      default?: "allow" | "deny";
+      rules?: Array<{
+        action: "allow" | "deny";
+        match?: {
+          provider?: string;
+          chatType?: "group" | "direct" | "unknown";
+          keyPrefix?: string;
+        };
+      }>;
+    };
+    contextPruning?: {
+      enabled?: boolean;
+      mode?: "adaptive" | "aggressive";
+      keepLastAssistants?: number;
+      softTrimRatio?: number;
+      hardClearRatio?: number;
+      minPrunableToolChars?: number;
+      tools?: {
+        allow?: string[];
+        deny?: string[];
+      };
+      softTrim?: {
+        maxChars?: number;
+        headChars?: number;
+        tailChars?: number;
+      };
+      hardClear?: {
+        enabled?: boolean;
+        placeholder?: string;
+      };
+    };
+  };
   control_barn_token?: string;
   controlBarnToken?: string;
 
@@ -63,6 +101,10 @@ export function resolveConfig(params?: { repoRoot?: string; userConfigPath?: str
   // Order: defaults < user config < environment variables
   const merged: RuntimeConfig = { ...defaults, ...user };
 
+  if ((merged as any).system_message_variant === "unified") {
+    merged.system_message_variant = "a";
+  }
+
   // Minimal env var bridging for common provider keys (Python uses env vars heavily).
   if (typeof process.env.OPENAI_API_KEY === "string" && process.env.OPENAI_API_KEY.length) {
     merged.openai_api_key = process.env.OPENAI_API_KEY;
@@ -104,8 +146,9 @@ export function resolveConfig(params?: { repoRoot?: string; userConfigPath?: str
 
   // System message variant environment variable
   if (typeof process.env.FF_SYSTEM_MESSAGE_VARIANT === "string") {
-    const variant = process.env.FF_SYSTEM_MESSAGE_VARIANT.toLowerCase();
-    if (variant === "a" || variant === "b" || variant === "c" || variant === "d" || variant === "unified") {
+    const raw = process.env.FF_SYSTEM_MESSAGE_VARIANT.toLowerCase();
+    const variant = raw === "unified" ? "a" : raw;
+    if (variant === "a" || variant === "b" || variant === "c" || variant === "d") {
       merged.system_message_variant = variant as "a" | "b" | "c" | "d";
     }
   }

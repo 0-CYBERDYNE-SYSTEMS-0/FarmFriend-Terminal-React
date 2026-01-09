@@ -5,6 +5,9 @@ import { runAgentTurn } from "../runtime/agentLoop.js";
 import { withToolContext } from "../runtime/tools/context.js";
 import { WhatsAppClient } from "./whatsappClient.js";
 import { WhatsAppSessionManager } from "./sessionManager.js";
+import { resolveConfig } from "../runtime/config/loadConfig.js";
+import { evaluateSendPolicy } from "../runtime/session/sendPolicy.js";
+import { resetSessionWithArchive, compactSessionWithSummary } from "../runtime/session/resetHelpers.js";
 
 /**
  * Handles routing WhatsApp messages to the agent and formatting responses
@@ -50,10 +53,26 @@ export class WhatsAppMessageHandler {
       }
 
       // Get or create session for this chat
-      const phoneNumber = message.isGroup ? message.groupId! : message.from;
-      const sessionId = this.sessionManager.getOrCreateSession(phoneNumber);
+      const chatId = message.isGroup ? message.groupId! : message.from;
+      const sessionId = this.sessionManager.getOrCreateSession({
+        chatId,
+        isGroup: message.isGroup,
+        displayName: undefined
+      });
 
       console.log(`[WhatsApp] Processing message from ${message.senderName} (session: ${sessionId})`);
+
+      const cfg = resolveConfig({ repoRoot: this.repoRoot });
+      const decision = evaluateSendPolicy({
+        cfg,
+        provider: "whatsapp",
+        chatType: message.isGroup ? "group" : "direct",
+        sessionId
+      });
+      if (!decision.allowed) {
+        console.log(`[WhatsApp] Send policy blocked reply for session ${sessionId}`);
+        return;
+      }
 
       // Send typing indicator
       await this.sendTypingIndicator(message.from, true);
@@ -106,7 +125,8 @@ export class WhatsAppMessageHandler {
    */
   private async handleCommand(message: WhatsAppMessage): Promise<void> {
     const command = message.text.toLowerCase().trim();
-    const phoneNumber = message.isGroup ? message.groupId! : message.from;
+    const chatId = message.isGroup ? message.groupId! : message.from;
+    const cfg = resolveConfig({ repoRoot: this.repoRoot });
 
     switch (command) {
       case "/status":
@@ -122,8 +142,40 @@ export class WhatsAppMessageHandler {
 
       case "/new":
       case "/reset":
-        this.sessionManager.resetSession(phoneNumber);
-        await this.client.sendMessage(message.from, "✓ Started new conversation");
+        {
+          const sessionId = this.sessionManager.getOrCreateSession({
+            chatId,
+            isGroup: message.isGroup,
+            displayName: undefined
+          });
+          await resetSessionWithArchive({
+            sessionId,
+            workspaceDir: this.workspaceDir,
+            repoRoot: this.repoRoot,
+            cfg
+          });
+          await this.client.sendMessage(message.from, "✓ Started new conversation");
+        }
+        break;
+
+      case "/compact":
+        {
+          const sessionId = this.sessionManager.getOrCreateSession({
+            chatId,
+            isGroup: message.isGroup,
+            displayName: undefined
+          });
+          const result = await compactSessionWithSummary({
+            sessionId,
+            workspaceDir: this.workspaceDir,
+            repoRoot: this.repoRoot,
+            cfg
+          });
+          const suffix = result.summarizedCount > 0
+            ? ` (${result.summarizedCount} messages summarized)`
+            : " (no changes needed)";
+          await this.client.sendMessage(message.from, `✓ Session compacted${suffix}`);
+        }
         break;
 
       case "/help":
@@ -134,7 +186,8 @@ export class WhatsAppMessageHandler {
           `/help - Show this help\n` +
           `/status - Show bot status\n` +
           `/new - Start new conversation\n` +
-          `/reset - Reset conversation\n\n` +
+          `/reset - Reset conversation\n` +
+          `/compact - Summarize older history\n\n` +
           `Just send a message to chat with the AI assistant!`
         );
         break;

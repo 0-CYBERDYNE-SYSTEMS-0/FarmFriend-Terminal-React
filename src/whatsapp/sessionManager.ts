@@ -1,83 +1,91 @@
-import fs from "node:fs";
-import path from "node:path";
-import { randomUUID } from "node:crypto";
 import type { WhatsAppSession } from "./types.js";
 import type { SessionMode } from "../runtime/session/sessionPolicy.js";
 import { resolveMainSessionId, resolveSessionMode } from "../runtime/session/sessionPolicy.js";
+import { buildSessionKey } from "../runtime/session/sessionKey.js";
+import { getOrCreateSessionIdForKey, listSessionIndex, removeSessionIndexKeys } from "../runtime/session/sessionIndex.js";
+import { resolveConfig, type RuntimeConfig } from "../runtime/config/loadConfig.js";
+import { findRepoRoot } from "../runtime/config/repoRoot.js";
+import { newId } from "../shared/ids.js";
 
 /**
  * Manages mapping between WhatsApp chats and FF-Terminal sessions
  */
 export class WhatsAppSessionManager {
-  private sessionsPath: string;
   private sessions: Map<string, WhatsAppSession> = new Map();
   private sessionMode: SessionMode;
   private mainSessionId: string;
+  private cfg: RuntimeConfig;
+  private workspaceDir: string;
+  private repoRoot: string;
 
-  constructor(workspaceDir: string, opts?: { sessionMode?: SessionMode; mainSessionId?: string }) {
-    this.sessionsPath = path.join(workspaceDir, "whatsapp", "sessions.json");
+  constructor(workspaceDir: string, opts?: { sessionMode?: SessionMode; mainSessionId?: string; repoRoot?: string; cfg?: RuntimeConfig }) {
+    this.workspaceDir = workspaceDir;
+    this.repoRoot = opts?.repoRoot ?? findRepoRoot();
     this.sessionMode = opts?.sessionMode ?? resolveSessionMode();
     this.mainSessionId = opts?.mainSessionId ?? resolveMainSessionId();
-    this.ensureFile();
+    this.cfg = opts?.cfg ?? resolveConfig({ repoRoot: this.repoRoot });
     this.loadSessions();
-  }
-
-  private ensureFile(): void {
-    const dir = path.dirname(this.sessionsPath);
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-    }
-    if (!fs.existsSync(this.sessionsPath)) {
-      fs.writeFileSync(this.sessionsPath, JSON.stringify({}, null, 2));
-    }
   }
 
   private loadSessions(): void {
     try {
-      const data = fs.readFileSync(this.sessionsPath, "utf8");
-      const obj = JSON.parse(data);
-      this.sessions = new Map(Object.entries(obj));
+      const entries = listSessionIndex(this.workspaceDir);
+      const map = new Map<string, WhatsAppSession>();
+      for (const entry of entries) {
+        if (entry.provider !== "whatsapp") continue;
+        map.set(entry.sessionKey, {
+          sessionId: entry.sessionId,
+          phoneNumber: entry.sessionKey,
+          lastActivity: Date.parse(entry.updatedAt || "") || Date.now(),
+          messageCount: 0
+        });
+      }
+      this.sessions = map;
     } catch (error) {
       console.error("[WhatsApp SessionManager] Failed to load sessions:", error);
       this.sessions = new Map();
     }
   }
 
-  private saveSessions(): void {
-    try {
-      const obj = Object.fromEntries(this.sessions);
-      fs.writeFileSync(this.sessionsPath, JSON.stringify(obj, null, 2));
-    } catch (error) {
-      console.error("[WhatsApp SessionManager] Failed to save sessions:", error);
-    }
-  }
-
   /**
    * Get or create a session ID for a WhatsApp chat
    */
-  getOrCreateSession(phoneNumber: string): string {
-    const existing = this.sessions.get(phoneNumber);
-
+  getOrCreateSession(params: { chatId: string; isGroup: boolean; displayName?: string }): string {
+    if (this.sessionMode === "new") {
+      return newId("session");
+    }
+    const provider = "whatsapp";
+    const chatType = params.isGroup ? "group" : "direct";
+    const sessionKey = buildSessionKey({
+      cfg: this.cfg,
+      provider,
+      chatType,
+      chatId: params.chatId
+    });
+    const resolvedKey = this.sessionMode === "main" && chatType === "direct" ? "main" : sessionKey;
+    const { sessionId } = getOrCreateSessionIdForKey({
+      workspaceDir: this.workspaceDir,
+      cfg: this.cfg,
+      sessionKey: resolvedKey,
+      provider,
+      chatType,
+      displayName: params.displayName
+    });
+    const existing = this.sessions.get(resolvedKey);
     if (existing) {
-      // Update last activity
       existing.lastActivity = Date.now();
       existing.messageCount++;
-      this.saveSessions();
-      return existing.sessionId;
+      existing.sessionId = sessionId;
+      this.sessions.set(resolvedKey, existing);
+      return sessionId;
     }
-
-    // Create new session
-    const sessionId = this.sessionMode === "main" ? this.mainSessionId : randomUUID();
     const session: WhatsAppSession = {
       sessionId,
-      phoneNumber,
+      phoneNumber: resolvedKey,
       lastActivity: Date.now(),
       messageCount: 1
     };
-
-    this.sessions.set(phoneNumber, session);
-    this.saveSessions();
-
+    this.sessions.set(resolvedKey, session);
     return sessionId;
   }
 
@@ -92,21 +100,8 @@ export class WhatsAppSessionManager {
    * Reset a session (create new session ID for phone number)
    */
   resetSession(phoneNumber: string): string {
-    if (this.sessionMode === "main") {
-      const sessionId = this.mainSessionId;
-      const session: WhatsAppSession = {
-        sessionId,
-        phoneNumber,
-        lastActivity: Date.now(),
-        messageCount: 1
-      };
-      this.sessions.set(phoneNumber, session);
-      this.saveSessions();
-      return sessionId;
-    }
     this.sessions.delete(phoneNumber);
-    this.saveSessions();
-    return this.getOrCreateSession(phoneNumber);
+    return this.getOrCreateSession({ chatId: phoneNumber, isGroup: phoneNumber.includes(":group:"), displayName: undefined });
   }
 
   /**
@@ -122,17 +117,19 @@ export class WhatsAppSessionManager {
   cleanupOldSessions(): void {
     const sevenDaysAgo = Date.now() - (7 * 24 * 60 * 60 * 1000);
     let cleaned = 0;
+    const removedKeys: string[] = [];
 
     for (const [phoneNumber, session] of this.sessions.entries()) {
       if (session.lastActivity < sevenDaysAgo) {
         this.sessions.delete(phoneNumber);
         cleaned++;
+        removedKeys.push(phoneNumber);
       }
     }
 
     if (cleaned > 0) {
       console.log(`[WhatsApp SessionManager] Cleaned up ${cleaned} old sessions`);
-      this.saveSessions();
+      removeSessionIndexKeys(this.workspaceDir, removedKeys);
     }
   }
 

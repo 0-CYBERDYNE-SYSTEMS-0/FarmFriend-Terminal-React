@@ -4,6 +4,11 @@ export function buildEnvironmentalContext(params: {
   workingDir: string;
   memorySnapshot?: string;
   contractSnapshot?: string;
+  bootstrapActive?: boolean;
+  sessionId?: string;
+  sessionMode?: string;
+  enabledTools?: string[];
+  disabledTools?: string[];
 }): string {
   const now = new Date();
   const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || "unknown";
@@ -22,12 +27,49 @@ export function buildEnvironmentalContext(params: {
 
   const osInfo = `${os.platform()} ${os.release()} (${os.arch()})`;
 
+  const formatToolList = (label: string, tools?: string[]) => {
+    const list = (tools ?? []).map((t) => t.trim()).filter(Boolean);
+    if (!list.length) return [];
+    const max = 30;
+    const shown = list.slice(0, max);
+    const suffix = list.length > max ? ` (+${list.length - max} more)` : "";
+    return [`${label}: ${shown.join(", ")}${suffix}`];
+  };
+
+  const sessionLines: string[] = [];
+  if (params.sessionMode) sessionLines.push(`Session mode: ${params.sessionMode}`);
+  if (params.sessionId) sessionLines.push(`Session ID: ${params.sessionId}`);
+
   return [
     "## Environmental Context",
     timeLine,
     tzLine,
     `OS: ${osInfo}`,
     `Working Directory: ${params.workingDir}`,
+    "",
+    ...(sessionLines.length
+      ? ["## Session", ...sessionLines, ""]
+      : []),
+    ...(params.enabledTools?.length || params.disabledTools?.length
+      ? [
+          "## Tool Availability (policy-filtered)",
+          ...formatToolList("Enabled tools", params.enabledTools),
+          ...formatToolList("Unavailable tools", params.disabledTools),
+          ""
+        ]
+      : []),
+    ...(params.bootstrapActive
+      ? [
+          "## BOOTSTRAP MODE (HIGH PRIORITY)",
+          "BOOTSTRAP.md is present and non-empty. You MUST follow it before normal assistance.",
+          "Ask exactly ONE onboarding question now. Do NOT answer the user's request yet.",
+          "Continue onboarding until BOOTSTRAP.md is cleared, then resume normal chat.",
+          ""
+        ]
+      : []),
+    "## Messaging Safety",
+    "If a message originates from external channels, only final replies should be delivered (no partial streaming).",
+    "Respond normally; transport is handled by the runtime.",
     "",
     ...(params.contractSnapshot
       ? [

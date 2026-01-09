@@ -11,7 +11,7 @@ import type { ExecutionPlan } from "../runtime/planning/types.js";
 import { loadToolSchemas } from "../runtime/tools/toolSchemas.js";
 import { readMountsConfig, setMountEnabled, addExtraDirs } from "../runtime/config/mounts.js";
 import { findRepoRoot } from "../runtime/config/repoRoot.js";
-import { resolveWorkspaceDir } from "../runtime/config/paths.js";
+import { resolveWorkspaceDir, defaultConfigPath } from "../runtime/config/paths.js";
 import { resolveConfig } from "../runtime/config/loadConfig.js";
 import { loadCommands, listCommands, getCommand } from "../runtime/commands/loader.js";
 import { loadAgentConfigs, listAgentConfigs, getAllTemplates } from "../runtime/agents/loader.js";
@@ -30,6 +30,7 @@ import {
 } from "../runtime/workspace/doctor.js";
 import { planMigration, executeMigration } from "../runtime/workspace/migration.js";
 import { isValidSessionId as isValidSessionIdFormat } from "../shared/ids.js";
+import { resolveMainSessionId, resolveSessionMode } from "../runtime/session/sessionPolicy.js";
 import { getTheme, getCurrentTheme, color, type ThemeName } from "./colorTheme.js";
 import { startTtsService, stopTtsService, TextBuffer, synthesize, AudioPlaybackQueue } from "./tts/index.js";
 
@@ -39,6 +40,8 @@ type ServerMessage =
   | { type: "chunk"; turnId: string; seq: number; chunk: string }
   | { type: "turn_finished"; turnId: string; ok: boolean; error?: string }
   | { type: "tools"; tools: string[] }
+  | { type: "sessions_list"; sessions: any[] }
+  | { type: "session_patched"; ok: boolean; sessionId?: string; sessionKey?: string; overrides?: Record<string, string | null>; error?: string }
   | { type: "todo_update"; todos: Todo[] }
   | { type: "subagent_start"; agentId: string; task: string }
   | { type: "subagent_progress"; agentId: string; action: string; file?: string; toolCount: number; tokens: number }
@@ -912,6 +915,9 @@ const HELP_ROWS: HelpRow[] = [
   { command: "/planning", description: "Alias for /mode planning" },
   { command: "/init", description: "Run initialization analysis" },
   { command: "/init-project [path]", description: "Initialize from a project directory (picker if omitted)" },
+  { command: "/session [info|reset|mode|list|model]", description: "Inspect or manage session (persistent main mode)" },
+  { command: "/compact", description: "Summarize older history for the current session" },
+  { command: "/status", description: "Show session + workspace status" },
   { command: "/clear", description: "Clear transcript" },
   { command: "/doctor", description: "Check workspace health and fix issues" },
   { command: "/theme (/colors)", description: "Print color-role samples" },
@@ -1103,6 +1109,9 @@ type MainViewProps = {
   daemonVersion: string | null;
   currentProvider: string | null;
   currentModel: string | null;
+  sessionId: string | null;
+  sessionMode: "main" | "last" | "new";
+  mainSessionId: string;
   mode: Mode;
   wizardIndex: number;
   mountRows: ReadonlyArray<{ key: string; label: string; enabled: boolean }>;
@@ -1154,6 +1163,9 @@ const MainView = memo(function MainView(props: MainViewProps) {
     daemonVersion,
     currentProvider,
     currentModel,
+    sessionId,
+    sessionMode,
+    mainSessionId,
     mode,
     wizardIndex,
     mountRows,
@@ -1790,6 +1802,10 @@ const MainView = memo(function MainView(props: MainViewProps) {
     );
   })() : null;
 
+  const sessionDisplayId = sessionId || (sessionMode === "main" ? mainSessionId : null);
+  const sessionModeLabel = sessionMode === "main" ? "persistent" : sessionMode;
+  const sessionLine = `Session: ${sessionDisplayId || "pending"} (${sessionModeLabel})`;
+
   return (
     <>
       <Banner displayMode={displayMode} width={stdoutWidth} themeName={props.themeName} />
@@ -1800,6 +1816,7 @@ const MainView = memo(function MainView(props: MainViewProps) {
           : "connecting..."}
         {daemonVersion ? ` (daemon ${daemonVersion})` : ""}
       </Text>
+      <Text color={theme.system}>{sessionLine}</Text>
       {wizardPanel}
       {helpPanel}
       {mountsPanel}
@@ -1929,16 +1946,25 @@ function App(props: { port: number }) {
   );
 
   const repoRoot = useMemo(() => findRepoRoot(), []);
-
+  const runtimeCfg = useMemo(() => resolveConfig({ repoRoot }), [repoRoot]);
   const workspaceDir = useMemo(() => {
-    const runtimeCfg = resolveConfig({ repoRoot });
     const workspaceFromEnv = process.env.FF_WORKSPACE_DIR;
     return resolveWorkspaceDir((runtimeCfg as any).workspace_dir ?? workspaceFromEnv ?? undefined);
-  }, [repoRoot]);
+  }, [runtimeCfg]);
+  const sessionMode = useMemo(() => resolveSessionMode(runtimeCfg), [runtimeCfg]);
+  const mainSessionId = useMemo(() => resolveMainSessionId(runtimeCfg), [runtimeCfg]);
+  const sessionIdOverride = useMemo(() => {
+    const raw = String(process.env.FF_SESSION_ID || "").trim();
+    return raw.length ? raw : null;
+  }, []);
 
   // Load last active session on mount
   useEffect(() => {
     try {
+      if (sessionIdOverride && isValidSessionIdFormat(sessionIdOverride)) {
+        setSessionId(sessionIdOverride);
+        return;
+      }
       const lastSessionPath = path.join(workspaceDir, ".last-session-id");
       if (fs.existsSync(lastSessionPath)) {
         const id = fs.readFileSync(lastSessionPath, "utf8").trim();
@@ -1949,7 +1975,7 @@ function App(props: { port: number }) {
     } catch {
       // Ignore errors - will get sessionId from daemon
     }
-  }, [workspaceDir]);
+  }, [sessionIdOverride, workspaceDir]);
 
   const transcriptHeight = useMemo(() => {
     const rows = stdout?.rows ?? 40;
@@ -2108,6 +2134,23 @@ function App(props: { port: number }) {
     [commitLines]
   );
 
+  useEffect(() => {
+    try {
+      const bootstrapPath = path.join(workspaceDir, "BOOTSTRAP.md");
+      if (fs.existsSync(bootstrapPath)) {
+        const content = fs.readFileSync(bootstrapPath, "utf8").trim();
+        if (content) {
+          pushLines({
+            kind: "system",
+            text: "Onboarding detected: BOOTSTRAP.md is present. Ask one question at a time and fill IDENTITY.md, USER.md, and SOUL.md."
+          });
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }, [pushLines, workspaceDir]);
+
   const pushWrappedSystemLines = useCallback(
     (rows: Array<{ label: string; value?: string | number | null }>) => {
       const maxWidth = Math.max(50, Math.min(stdoutWidth, 140));
@@ -2250,6 +2293,132 @@ function App(props: { port: number }) {
     pushLines([
       { kind: "system", text: `Tools (${rows.length}):` },
       ...rows.map((r) => ({ kind: "tool" as const, text: `- ${r.name}${r.description ? ` — ${r.description}` : ""}` }))
+    ]);
+  }, [pushLines]);
+
+  const showSessionInfo = useCallback(() => {
+    const sessionCfg = (runtimeCfg as any).session || {};
+    const sessionDisplayId = sessionId || (sessionMode === "main" ? mainSessionId : null);
+    const sessionPath = sessionDisplayId
+      ? path.join(workspaceDir, "sessions", `${sessionDisplayId}.json`)
+      : null;
+    let statsSummary = "";
+    let overridesSummary = "";
+    if (sessionPath && fs.existsSync(sessionPath)) {
+      try {
+        const raw = fs.readFileSync(sessionPath, "utf8");
+        const parsed = JSON.parse(raw);
+        const totalMessages = Number(parsed?.stats?.totalMessages ?? parsed?.conversation?.length ?? 0);
+        const lastActiveAt = String(parsed?.stats?.lastActiveAt || parsed?.updated_at || "");
+        statsSummary = `messages=${totalMessages}${lastActiveAt ? `, lastActive=${lastActiveAt}` : ""}`;
+        const overrides = parsed?.meta?.overrides || {};
+        const overrideParts = [];
+        if (overrides.model) overrideParts.push(`model=${overrides.model}`);
+        if (overrides.thinkingLevel) overrideParts.push(`thinking=${overrides.thinkingLevel}`);
+        if (overrides.verboseLevel) overrideParts.push(`verbose=${overrides.verboseLevel}`);
+        if (overrides.reasoningLevel) overrideParts.push(`reasoning=${overrides.reasoningLevel}`);
+        if (overrideParts.length) overridesSummary = overrideParts.join(", ");
+      } catch {
+        // ignore
+      }
+    }
+    pushLines([
+      { kind: "system", text: `Session mode: ${sessionMode}` },
+      { kind: "system", text: `Main session ID: ${mainSessionId}` },
+      { kind: "system", text: `Current session: ${sessionDisplayId || "(pending)"}` },
+      { kind: "system", text: `Idle minutes: ${Number(sessionCfg.idleMinutes ?? 0)}` },
+      { kind: "system", text: `Auto-summarize: ${Boolean(sessionCfg.autoSummarize)}` },
+      { kind: "system", text: `Max history tokens: ${Number(sessionCfg.maxHistoryTokens ?? 0) || "(default)"}` },
+      ...(statsSummary ? [{ kind: "system" as const, text: `Session stats: ${statsSummary}` }] : []),
+      ...(overridesSummary ? [{ kind: "system" as const, text: `Session overrides: ${overridesSummary}` }] : [])
+    ]);
+  }, [mainSessionId, pushLines, runtimeCfg, sessionId, sessionMode, workspaceDir]);
+
+  const listSessionsLocal = useCallback(() => {
+    const sessionsDir = path.join(workspaceDir, "sessions");
+    if (!fs.existsSync(sessionsDir)) {
+      pushLines({ kind: "system", text: "No sessions directory found." });
+      return;
+    }
+    const entries = fs
+      .readdirSync(sessionsDir, { withFileTypes: true })
+      .filter((entry) => entry.isFile() && entry.name.endsWith(".json"))
+      .map((entry) => ({
+        id: entry.name.replace(/\.json$/, ""),
+        path: path.join(sessionsDir, entry.name)
+      }));
+    if (!entries.length) {
+      pushLines({ kind: "system", text: "No session files found." });
+      return;
+    }
+    const rows = entries
+      .map((entry) => {
+        let updatedAt = "";
+        let count = 0;
+        try {
+          const raw = fs.readFileSync(entry.path, "utf8");
+          const parsed = JSON.parse(raw);
+          updatedAt = String(parsed?.stats?.lastActiveAt || parsed?.updated_at || "");
+          count = Number(parsed?.stats?.totalMessages ?? parsed?.conversation?.length ?? 0);
+        } catch {
+          // ignore
+        }
+        return { id: entry.id, updatedAt, count };
+      })
+      .sort((a, b) => (b.updatedAt || "").localeCompare(a.updatedAt || ""));
+    pushLines([
+      { kind: "system", text: `Sessions (${rows.length}):` },
+      ...rows.map((r) => ({
+        kind: "tool" as const,
+        text: `- ${r.id}${r.count ? ` (${r.count} msgs)` : ""}${r.updatedAt ? ` • ${r.updatedAt}` : ""}`
+      }))
+    ]);
+  }, [pushLines, workspaceDir]);
+
+  const requestSessionsList = useCallback(() => {
+    if (!ws || !connected) {
+      listSessionsLocal();
+      return;
+    }
+    ws.send(JSON.stringify({ type: "list_sessions", limit: 200 }));
+    pushLines({ kind: "system", text: "Fetching sessions from daemon..." });
+  }, [connected, listSessionsLocal, pushLines, ws]);
+
+  const patchSessionOverrides = useCallback((overrides: Record<string, string | null>) => {
+    if (!ws || !connected) {
+      pushLines({ kind: "error", text: "Not connected to daemon. Start ff-terminal to update session overrides." });
+      return;
+    }
+    const sessionDisplayId = sessionId || (sessionMode === "main" ? mainSessionId : null);
+    ws.send(JSON.stringify({
+      type: "patch_session",
+      sessionId: sessionDisplayId || undefined,
+      sessionKey: sessionDisplayId ? undefined : (sessionMode === "main" ? "main" : undefined),
+      overrides
+    }));
+  }, [connected, mainSessionId, pushLines, sessionId, sessionMode, ws]);
+
+  const updateSessionMode = useCallback((nextMode: string) => {
+    const normalized = nextMode.trim().toLowerCase();
+    if (!["main", "last", "new"].includes(normalized)) {
+      pushLines({ kind: "error", text: "Session mode must be: main, last, or new" });
+      return;
+    }
+    const configPath = (process.env.FF_CONFIG_PATH || "").trim() || defaultConfigPath();
+    let rawConfig: Record<string, any> = {};
+    try {
+      if (fs.existsSync(configPath)) {
+        rawConfig = JSON.parse(fs.readFileSync(configPath, "utf8"));
+      }
+    } catch {
+      rawConfig = {};
+    }
+    rawConfig.session_mode = normalized;
+    fs.mkdirSync(path.dirname(configPath), { recursive: true });
+    fs.writeFileSync(configPath, JSON.stringify(rawConfig, null, 2) + "\n", "utf8");
+    pushLines([
+      { kind: "system", text: `Session mode updated to "${normalized}" in ${configPath}` },
+      { kind: "system", text: "Restart the daemon to apply the new mode." }
     ]);
   }, [pushLines]);
 
@@ -2448,6 +2617,40 @@ ${fullContext}`;
 
         if (msg.type === "hello") {
           setDaemonVersion(msg.daemonVersion);
+          return;
+        }
+
+        if (msg.type === "sessions_list") {
+          const rows = Array.isArray(msg.sessions) ? msg.sessions : [];
+          if (!rows.length) {
+            pushLines({ kind: "system", text: "No sessions found." });
+            return;
+          }
+          pushLines([
+            { kind: "system", text: `Sessions (${rows.length}):` },
+            ...rows.map((r: any) => ({
+              kind: "tool" as const,
+              text: `- ${r.sessionId}${r.sessionKey ? ` [${r.sessionKey}]` : ""}${r.totalMessages ? ` (${r.totalMessages} msgs)` : ""}${r.updatedAt ? ` • ${r.updatedAt}` : ""}`
+            }))
+          ]);
+          return;
+        }
+
+        if (msg.type === "session_patched") {
+          if (msg.ok) {
+            const overrideSummary = msg.overrides
+              ? Object.entries(msg.overrides)
+                  .filter(([, v]) => v)
+                  .map(([k, v]) => `${k}=${v}`)
+                  .join(", ")
+              : "";
+            pushLines({
+              kind: "system",
+              text: `Session updated${msg.sessionId ? ` (${msg.sessionId})` : ""}${overrideSummary ? `: ${overrideSummary}` : ""}`
+            });
+          } else {
+            pushLines({ kind: "error", text: `Session update failed: ${msg.error || "unknown error"}` });
+          }
           return;
         }
 
@@ -4105,6 +4308,93 @@ Use skill_draft first to create the draft, then skill_apply to create the final 
             return;
           }
 
+          if (command === "status") {
+            showSessionInfo();
+            if (!connected) {
+              pushLines({ kind: "system", text: "Daemon not connected. Start ff-terminal to query live sessions." });
+            }
+            setInputValue("");
+            return;
+          }
+
+          if (command === "compact") {
+            pushLines({ kind: "system", text: "Compacting session…" });
+            sendTurn(
+              [
+                "Use the reset_session tool now.",
+                "action: summarize",
+                sessionId ? `sessionId: ${sessionId}` : ""
+              ].filter(Boolean).join("\n"),
+              { echoUser: false }
+            );
+            setInputValue("");
+            return;
+          }
+
+          if (command === "session") {
+            if (!arg0 || arg0 === "info") {
+              showSessionInfo();
+              setInputValue("");
+              return;
+            }
+            if (arg0 === "list") {
+              requestSessionsList();
+              setInputValue("");
+              return;
+            }
+            if (arg0 === "mode") {
+              const nextMode = String(args[1] || "").trim();
+              if (!nextMode) {
+                pushLines({ kind: "system", text: `Session mode: ${sessionMode}` });
+                setInputValue("");
+                return;
+              }
+              updateSessionMode(nextMode);
+              setInputValue("");
+              return;
+            }
+            if (arg0 === "model") {
+              const nextModel = String(args[1] || "").trim();
+              if (!nextModel) {
+                showSessionInfo();
+                setInputValue("");
+                return;
+              }
+              if (["clear", "unset", "default"].includes(nextModel.toLowerCase())) {
+                patchSessionOverrides({ model: null });
+                pushLines({ kind: "system", text: "Cleared session model override." });
+                setInputValue("");
+                return;
+              }
+              patchSessionOverrides({ model: nextModel });
+              pushLines({ kind: "system", text: `Session model override set to "${nextModel}".` });
+              setInputValue("");
+              return;
+            }
+            if (arg0 === "reset") {
+              const action = String(args[1] || "archive").trim().toLowerCase();
+              if (!["archive", "clear", "summarize"].includes(action)) {
+                pushLines({ kind: "error", text: "Reset action must be: archive, clear, summarize" });
+                setInputValue("");
+                return;
+              }
+              pushLines({ kind: "system", text: `Resetting session (${action})…` });
+              sendTurn(
+                [
+                  "Use the reset_session tool now.",
+                  `action: ${action}`,
+                  sessionId ? `sessionId: ${sessionId}` : ""
+                ].filter(Boolean).join("\n"),
+                { echoUser: false }
+              );
+              setInputValue("");
+              return;
+            }
+            pushLines({ kind: "error", text: "Usage: /session [info|list|mode <main|last|new>|model <name|clear>|reset <archive|clear|summarize>]" });
+            setInputValue("");
+            return;
+          }
+
           if (command === "init-project" || command === "init_project") {
             const rawPath = argsRaw.join(" ").trim();
             if (!rawPath) {
@@ -4283,6 +4573,9 @@ Use skill_draft first to create the draft, then skill_apply to create the final 
         daemonVersion={daemonVersion}
         currentProvider={currentProvider}
         currentModel={currentModel}
+        sessionId={sessionId}
+        sessionMode={sessionMode}
+        mainSessionId={mainSessionId}
         mode={mode}
         wizardIndex={wizardIndex}
         mountRows={mountRows}

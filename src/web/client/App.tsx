@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, type Dispatch, type SetStateAction } from 'react'
 import { Markdown } from './components/Markdown'
 import { ArtifactPreview } from './components/ArtifactPreview'
 import { FileUpload } from './components/FileUpload'
@@ -13,6 +13,7 @@ type WebSocketMessage =
   | { type: 'thinking_xml'; content: string; session_id: string; timestamp: number }
   | { type: 'tool_call'; tool_name: string; content: string; session_id: string; timestamp: number }
   | { type: 'error'; content: string; session_id: string; timestamp: number }
+  | { type: 'history'; content: string; session_id: string; timestamp: number }
   | { type: 'pong'; session_id: string; timestamp: number }
   | { type: 'command_received'; content: string; session_id: string; timestamp: number }
   | { type: 'turn_finished'; session_id: string; timestamp: number }
@@ -299,20 +300,29 @@ function AppContent({
   layout = 'full',
   gatewayIndicator,
   onBack,
+  sharedState,
 }: {
   layout?: 'full' | 'embedded'
   gatewayIndicator?: GatewayIndicator
   onBack?: () => void
+  sharedState?: {
+    messages: ChatMessage[]
+    setMessages: Dispatch<SetStateAction<ChatMessage[]>>
+    input: string
+    setInput: Dispatch<SetStateAction<string>>
+    attachments: FileAttachment[]
+    setAttachments: Dispatch<SetStateAction<FileAttachment[]>>
+  }
 }) {
   const { theme } = useTheme();
-  const [messages, setMessages] = useState<ChatMessage[]>([])
-  const [input, setInput] = useState('')
+  const [internalMessages, setInternalMessages] = useState<ChatMessage[]>([])
+  const [internalInput, setInternalInput] = useState('')
   const [isConnected, setIsConnected] = useState(false)
   const [isProcessing, setIsProcessing] = useState(false)
   const [assistantContent, setAssistantContent] = useState('')
   const lastChunkAtRef = useRef<number | null>(null)
   const turnStartedAtRef = useRef<number | null>(null)
-  const [attachments, setAttachments] = useState<FileAttachment[]>([])
+  const [internalAttachments, setInternalAttachments] = useState<FileAttachment[]>([])
   const [messageAddedForTurn, setMessageAddedForTurn] = useState(false)
   const [showConsole, setShowConsole] = useState(false)
   const [consoleEvents, setConsoleEvents] = useState<ConsoleEvent[]>([])
@@ -326,6 +336,13 @@ function AppContent({
   // Streaming optimization: buffer content and update smoothly
   const streamBufferRef = useRef<string>('')
   const streamRafRef = useRef<number | null>(null)
+
+  const messages = sharedState?.messages ?? internalMessages
+  const setMessages = sharedState?.setMessages ?? setInternalMessages
+  const input = sharedState?.input ?? internalInput
+  const setInput = sharedState?.setInput ?? setInternalInput
+  const attachments = sharedState?.attachments ?? internalAttachments
+  const setAttachments = sharedState?.setAttachments ?? setInternalAttachments
 
   // Detect mobile/tablet vs desktop for console layout
   useEffect(() => {
@@ -354,6 +371,30 @@ function AppContent({
     scrollToBottom()
   }, [messages, assistantContent, scrollToBottom])
 
+  // Restore draft input from localStorage
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const draftKey = `ff-chat-draft:${DEFAULT_SESSION}`
+    const draft = localStorage.getItem(draftKey)
+    if (draft && !input) {
+      setInput(draft)
+    }
+  }, [input, setInput])
+
+  // Persist draft input to localStorage
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const draftKey = `ff-chat-draft:${DEFAULT_SESSION}`
+    const handle = window.setTimeout(() => {
+      if (input) {
+        localStorage.setItem(draftKey, input)
+      } else {
+        localStorage.removeItem(draftKey)
+      }
+    }, 250)
+    return () => window.clearTimeout(handle)
+  }, [input])
+
   // WebSocket connection
   useEffect(() => {
     const connect = () => {
@@ -364,10 +405,34 @@ function AppContent({
         ws.onopen = () => {
           setIsConnected(true)
           console.log('Connected to FarmFriend Terminal')
+          try {
+            ws.send(JSON.stringify({ type: 'get_history' }))
+          } catch {
+            // ignore history fetch failures
+          }
         }
 
         ws.onmessage = (event) => {
           const msg = JSON.parse(event.data) as WebSocketMessage
+
+          if (msg.type === 'history') {
+            try {
+              const parsed = JSON.parse(msg.content || '[]') as Array<{ role: string; content: string; timestamp?: number }>
+              setMessages(prev => {
+                if (prev.length) return prev
+                const hydrated = parsed.map((item, idx) => ({
+                  id: `${item.timestamp || Date.now()}-${idx}-history`,
+                  role: (item.role as ChatMessage['role']) || 'assistant',
+                  content: item.content || '',
+                  timestamp: item.timestamp || Date.now()
+                }))
+                return hydrated
+              })
+            } catch {
+              // ignore bad history payload
+            }
+            return
+          }
 
           // Add to console event log (skip streaming response chunks)
           if (msg.type !== 'response') {
@@ -949,6 +1014,14 @@ type FieldViewProps = {
   mode: FieldViewMode
   onModeChange: (mode: FieldViewMode) => void
   overview: ControlOverviewState
+  chatSharedState: {
+    messages: ChatMessage[]
+    setMessages: Dispatch<SetStateAction<ChatMessage[]>>
+    input: string
+    setInput: Dispatch<SetStateAction<string>>
+    attachments: FileAttachment[]
+    setAttachments: Dispatch<SetStateAction<FileAttachment[]>>
+  }
 }
 
 const FIELDVIEW_MODES: Array<{ id: FieldViewMode; label: string }> = [
@@ -1022,6 +1095,7 @@ function FieldViewClassic({
   onOpenChat,
   mode,
   onModeChange,
+  chatSharedState,
 }: {
   shared: FieldViewShared
   showControl: boolean
@@ -1029,6 +1103,7 @@ function FieldViewClassic({
   onOpenChat: () => void
   mode: FieldViewMode
   onModeChange: (mode: FieldViewMode) => void
+  chatSharedState: FieldViewProps['chatSharedState']
 }) {
   const { data, loading, channels, healthyCount, unhealthy, contractCoverage, statusPills } = shared
 
@@ -1148,7 +1223,7 @@ function FieldViewClassic({
               <span className="text-xs uppercase tracking-[0.2em] text-slate-400">{DEFAULT_SESSION}</span>
             </div>
             <div className="mt-4 h-[70vh] min-h-[480px]">
-              <AppContent layout="embedded" />
+              <AppContent layout="embedded" sharedState={chatSharedState} />
             </div>
           </section>
         </div>
@@ -1439,7 +1514,7 @@ function FieldViewGuided({
   )
 }
 
-function FieldView({ showControl, onOpenControl, onOpenChat, mode, onModeChange, overview }: FieldViewProps) {
+function FieldView({ showControl, onOpenControl, onOpenChat, mode, onModeChange, overview, chatSharedState }: FieldViewProps) {
   const { data, loading, error } = overview
   const channels = data?.gateway?.channels ?? []
   const enabledChannels = channels.filter((c) => c.enabled)
@@ -1527,6 +1602,7 @@ function FieldView({ showControl, onOpenControl, onOpenChat, mode, onModeChange,
       onOpenChat={onOpenChat}
       mode={mode}
       onModeChange={onModeChange}
+      chatSharedState={chatSharedState}
     />
   )
 }
@@ -2308,6 +2384,19 @@ export default function App() {
     channels: overview.data?.gateway?.channels
   })
 
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([])
+  const [chatInput, setChatInput] = useState('')
+  const [chatAttachments, setChatAttachments] = useState<FileAttachment[]>([])
+
+  const chatSharedState = {
+    messages: chatMessages,
+    setMessages: setChatMessages,
+    input: chatInput,
+    setInput: setChatInput,
+    attachments: chatAttachments,
+    setAttachments: setChatAttachments
+  }
+
   useEffect(() => {
     if (typeof window === 'undefined') return
     localStorage.setItem('ff-fieldview-mode', fieldMode)
@@ -2323,6 +2412,7 @@ export default function App() {
           mode={fieldMode}
           onModeChange={setFieldMode}
           overview={overview}
+          chatSharedState={chatSharedState}
         />
       )}
       {view === 'control' && <ControlBarn onClose={() => setView('field')} />}
@@ -2331,6 +2421,7 @@ export default function App() {
           layout="full"
           gatewayIndicator={appGatewayIndicator}
           onBack={() => setView('field')}
+          sharedState={chatSharedState}
         />
       )}
     </ThemeProvider>

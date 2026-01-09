@@ -35,8 +35,10 @@ function usage(): void {
   console.log(`Usage:
   ff-terminal daemon
   ff-terminal ui
-  ff-terminal start [profile] [--display-mode verbose|clean] [--web] [--tts] [--voice <voice>]
-  ff-terminal local [profile] [--display-mode verbose|clean] [--tts] [--voice <voice>]
+  ff-terminal start [profile] [--display-mode verbose|clean] [--session-mode <main|last|new>] [--session-id <id>] [--new-session]
+                    [--web] [--tts] [--voice <voice>]
+  ff-terminal local [profile] [--display-mode verbose|clean] [--session-mode <main|last|new>] [--session-id <id>] [--new-session]
+                    [--tts] [--voice <voice>]
   ff-terminal web
   ff-terminal acp [--profile <name>]
   ff-terminal scheduler [--once] [--poll-interval <ms>] [--headless]
@@ -81,6 +83,29 @@ function pickArg(args: string[], flag: string): string | null {
 
 function hasFlag(args: string[], flag: string): boolean {
   return args.includes(flag);
+}
+
+function normalizeSessionMode(raw?: string | null): "main" | "last" | "new" | undefined {
+  const mode = String(raw || "").trim().toLowerCase();
+  if (!mode) return undefined;
+  if (mode === "main" || mode === "last" || mode === "new") return mode;
+  return undefined;
+}
+
+function applySessionEnvOverrides(env: Record<string, string>, args: string[]): void {
+  const rawSessionMode = pickArg(args, "--session-mode");
+  const sessionIdOverride = pickArg(args, "--session-id");
+  const newSession = hasFlag(args, "--new-session");
+
+  const sessionMode = newSession ? "new" : normalizeSessionMode(rawSessionMode);
+  if (rawSessionMode && !sessionMode) {
+    throw new Error(`Invalid --session-mode: ${rawSessionMode} (expected main|last|new)`);
+  }
+
+  if (sessionMode) env.FF_SESSION_MODE = sessionMode;
+  if (sessionIdOverride && sessionIdOverride.trim()) {
+    env.FF_SESSION_ID = sessionIdOverride.trim();
+  }
 }
 
 function applyToolAllowFlags(args: string[]): void {
@@ -292,6 +317,8 @@ async function run(): Promise<void> {
     if (profile.imageModel?.trim()) process.env.FF_IMAGE_MODEL = profile.imageModel.trim();
     if (profile.videoModel?.trim()) process.env.FF_VIDEO_MODEL = profile.videoModel.trim();
 
+    applySessionEnvOverrides(process.env as Record<string, string>, rest);
+
     // Match the ai-claude-start approach: spawn runtime + UI as child processes with the selected env.
     const env = { ...process.env } as Record<string, string>;
     const port = Number(env.FF_TERMINAL_PORT || 28888);
@@ -460,6 +487,8 @@ async function run(): Promise<void> {
     if (profile.webModel?.trim()) process.env.FF_WEB_MODEL = profile.webModel.trim();
     if (profile.imageModel?.trim()) process.env.FF_IMAGE_MODEL = profile.imageModel.trim();
     if (profile.videoModel?.trim()) process.env.FF_VIDEO_MODEL = profile.videoModel.trim();
+
+    applySessionEnvOverrides(process.env as Record<string, string>, rest);
 
     // LOCAL MODE: Set workspace to current directory
     const localWorkspaceDir = path.join(process.cwd(), LOCAL_WORKSPACE_DIRNAME);

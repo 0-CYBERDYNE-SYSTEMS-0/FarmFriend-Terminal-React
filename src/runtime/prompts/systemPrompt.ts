@@ -15,13 +15,23 @@ export function buildSystemPrompt(params: {
   contractSnapshot?: string;
   planContext?: string;
   availableToolNames?: string[];
+  bootstrapActive?: boolean;
+  sessionId?: string;
+  sessionMode?: string;
+  enabledTools?: string[];
+  disabledTools?: string[];
 }): string {
   const repoRoot = params.repoRoot ?? findRepoRoot();
   const template = loadPromptTemplate(params.variant, repoRoot);
   const env_context = buildEnvironmentalContext({
     workingDir: params.workingDir,
     memorySnapshot: params.memorySnapshot,
-    contractSnapshot: params.contractSnapshot
+    contractSnapshot: params.contractSnapshot,
+    bootstrapActive: params.bootstrapActive,
+    sessionId: params.sessionId,
+    sessionMode: params.sessionMode,
+    enabledTools: params.enabledTools,
+    disabledTools: params.disabledTools
   });
   const parallel_section = loadParallelSection({ repoRoot, enabled: params.parallelMode });
   const toolSchemas = (() => {
@@ -56,6 +66,11 @@ export function buildCacheableSystemPrompt(params: {
   planContext?: string;
   availableToolNames?: string[];
   enableCaching?: boolean;
+  bootstrapActive?: boolean;
+  sessionId?: string;
+  sessionMode?: string;
+  enabledTools?: string[];
+  disabledTools?: string[];
 }): Array<{ type: "text"; text: string; cache_control?: { type: "ephemeral"; ttl?: "5m" | "1h" } }> {
   if (!params.enableCaching) {
     const prompt = buildSystemPrompt(params);
@@ -88,7 +103,12 @@ export function buildCacheableSystemPrompt(params: {
   const env_context = buildEnvironmentalContext({
     workingDir: params.workingDir,
     memorySnapshot: params.memorySnapshot,
-    contractSnapshot: params.contractSnapshot
+    contractSnapshot: params.contractSnapshot,
+    bootstrapActive: params.bootstrapActive,
+    sessionId: params.sessionId,
+    sessionMode: params.sessionMode,
+    enabledTools: params.enabledTools,
+    disabledTools: params.disabledTools
   });
   const footer = buildContextFooter({ workingDir: params.workingDir });
   const dynamicContent = interpolate(template, {

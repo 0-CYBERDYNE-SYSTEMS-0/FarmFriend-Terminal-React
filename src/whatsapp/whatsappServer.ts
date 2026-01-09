@@ -5,6 +5,7 @@ import { WhatsAppSessionManager } from "./sessionManager.js";
 import { WhatsAppMessageHandler } from "./messageHandler.js";
 import { PairingManager } from "./pairingManager.js";
 import type { SessionMode } from "../runtime/session/sessionPolicy.js";
+import { resolveConfig } from "../runtime/config/loadConfig.js";
 
 /**
  * WhatsApp Server - Main entry point for WhatsApp integration
@@ -33,9 +34,12 @@ export class WhatsAppServer {
     this.repoRoot = repoRoot;
     this.sessionMode = opts?.sessionMode;
     this.mainSessionId = opts?.mainSessionId;
+    const cfg = resolveConfig({ repoRoot: this.repoRoot });
     this.sessionManager = new WhatsAppSessionManager(workspaceDir, {
       sessionMode: this.sessionMode,
-      mainSessionId: this.mainSessionId
+      mainSessionId: this.mainSessionId,
+      repoRoot: this.repoRoot,
+      cfg
     });
   }
 

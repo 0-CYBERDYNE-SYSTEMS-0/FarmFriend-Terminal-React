@@ -10,7 +10,7 @@ import { runAgentTurn } from "../runtime/agentLoop.js";
 import { toWire } from "../runtime/streamProtocol.js";
 import { findRepoRoot } from "../runtime/config/repoRoot.js";
 import { withToolContext, type SubagentEvent } from "../runtime/tools/context.js";
-import { resolveConfig } from "../runtime/config/loadConfig.js";
+import { resolveConfig, type RuntimeConfig } from "../runtime/config/loadConfig.js";
 import { loadDefaultDotenv } from "../runtime/config/dotenv.js";
 import { quickHealthCheck } from "../runtime/workspace/healthCheck.js";
 import { ensureCanonicalStructure } from "../runtime/workspace/migration.js";
@@ -20,6 +20,9 @@ import {
   resolveSessionMode,
   resolveMainSessionId
 } from "../runtime/session/sessionPolicy.js";
+import { resetSessionWithArchive, compactSessionWithSummary } from "../runtime/session/resetHelpers.js";
+import { listSessionIndex, getOrCreateSessionIdForKey } from "../runtime/session/sessionIndex.js";
+import { patchSessionOverrides, getSessionOverrides } from "../runtime/session/sessionOverrides.js";
 import { GatewayManager } from "../runtime/gateway/manager.js";
 import { WhatsAppGateway } from "../runtime/gateway/channels/whatsappGateway.js";
 import { IMessageGateway } from "../runtime/gateway/channels/imessageGateway.js";
@@ -38,6 +41,131 @@ function send(ws: WebSocket, msg: ServerMessage): void {
   ws.send(JSON.stringify(msg));
 }
 
+function listSessions(workspaceDir: string, limit = 50, activeMinutes?: number, messageLimit?: number): any[] {
+  const sessionDir = path.join(workspaceDir, "sessions");
+  if (!fs.existsSync(sessionDir)) return [];
+  const cutoff = activeMinutes && activeMinutes > 0 ? Date.now() - activeMinutes * 60 * 1000 : null;
+  const indexEntries = listSessionIndex(workspaceDir);
+  const indexedIds = new Set(indexEntries.map((e) => e.sessionId));
+  const rows = (indexEntries.length ? indexEntries.map((entry) => {
+    const p = path.join(sessionDir, `${entry.sessionId}.json`);
+    const session = fs.existsSync(p) ? JSON.parse(fs.readFileSync(p, "utf8")) : null;
+    const updatedAt = entry.updatedAt || session?.stats?.lastActiveAt || session?.updated_at || session?.created_at;
+    const updatedMs = Date.parse(updatedAt || "");
+    if (cutoff && (!Number.isFinite(updatedMs) || updatedMs < cutoff)) return null;
+    const messages =
+      typeof messageLimit === "number" && messageLimit > 0 && Array.isArray(session?.conversation)
+        ? session.conversation.slice(-messageLimit)
+        : undefined;
+    return {
+      sessionId: entry.sessionId,
+      sessionKey: entry.sessionKey,
+      provider: entry.provider,
+      chatType: entry.chatType,
+      displayName: entry.displayName,
+      updatedAt,
+      totalMessages: session?.stats?.totalMessages ?? session?.conversation?.length ?? 0,
+      totalTokens: session?.stats?.totalTokens ?? undefined,
+      overrides: session?.meta?.overrides,
+      transcriptPath: p,
+      messages
+    };
+  }) : []) as any[];
+
+  const extraRows = fs
+    .readdirSync(sessionDir, { withFileTypes: true })
+    .filter((entry) => entry.isFile() && entry.name.endsWith(".json"))
+    .map((entry) => {
+      const sessionId = entry.name.replace(/\.json$/, "");
+      if (indexedIds.has(sessionId)) return null;
+      const p = path.join(sessionDir, entry.name);
+      try {
+        const session = JSON.parse(fs.readFileSync(p, "utf8"));
+        const updatedAt = session?.stats?.lastActiveAt || session?.updated_at || session?.created_at;
+        const updatedMs = Date.parse(updatedAt || "");
+        if (cutoff && (!Number.isFinite(updatedMs) || updatedMs < cutoff)) return null;
+        const messages =
+          typeof messageLimit === "number" && messageLimit > 0 && Array.isArray(session?.conversation)
+            ? session.conversation.slice(-messageLimit)
+            : undefined;
+        return {
+          sessionId: session?.session_id || sessionId,
+          updatedAt,
+          totalMessages: session?.stats?.totalMessages ?? session?.conversation?.length ?? 0,
+          totalTokens: session?.stats?.totalTokens ?? undefined,
+          overrides: session?.meta?.overrides,
+          transcriptPath: p,
+          messages
+        };
+      } catch {
+        return null;
+      }
+    })
+    .filter(Boolean) as any[];
+
+  rows.push(...extraRows);
+  rows.sort((a, b) => String(b.updatedAt || "").localeCompare(String(a.updatedAt || "")));
+  return rows.slice(0, Math.max(1, Math.min(200, limit)));
+}
+
+async function applyResetTrigger(params: {
+  sessionId: string;
+  workspaceDir: string;
+  repoRoot: string;
+  cfg: RuntimeConfig;
+}): Promise<void> {
+  await resetSessionWithArchive({
+    sessionId: params.sessionId,
+    workspaceDir: params.workspaceDir,
+    repoRoot: params.repoRoot,
+    cfg: params.cfg
+  });
+}
+
+async function applyCompactTrigger(params: {
+  sessionId: string;
+  workspaceDir: string;
+  repoRoot: string;
+  cfg: RuntimeConfig;
+}): Promise<{ summarizedCount: number }> {
+  const res = await compactSessionWithSummary({
+    sessionId: params.sessionId,
+    workspaceDir: params.workspaceDir,
+    repoRoot: params.repoRoot,
+    cfg: params.cfg
+  });
+  return { summarizedCount: res.summarizedCount };
+}
+
+function resolveSessionIdForPatch(params: {
+  workspaceDir: string;
+  cfg: RuntimeConfig;
+  sessionId?: string;
+  sessionKey?: string;
+  displayName?: string | null;
+}): { sessionId: string; sessionKey?: string } {
+  const requestedId = String(params.sessionId || "").trim();
+  if (requestedId) return { sessionId: requestedId };
+
+  const sessionKey = String(params.sessionKey || "").trim();
+  if (sessionKey) {
+    const entries = listSessionIndex(params.workspaceDir);
+    const match = entries.find((e) => e.sessionKey === sessionKey);
+    if (match?.sessionId) return { sessionId: match.sessionId, sessionKey };
+    const created = getOrCreateSessionIdForKey({
+      workspaceDir: params.workspaceDir,
+      cfg: params.cfg,
+      sessionKey,
+      provider: "internal",
+      chatType: "direct",
+      displayName: params.displayName || undefined
+    });
+    return { sessionId: created.sessionId, sessionKey };
+  }
+
+  return { sessionId: resolveMainSessionId(params.cfg) };
+}
+
 export async function startDaemon(): Promise<void> {
   const repoRoot = findRepoRoot();
   loadDefaultDotenv({ repoRoot });
@@ -46,11 +174,16 @@ export async function startDaemon(): Promise<void> {
   const wss = new WebSocketServer({ server });
 
   const runtimeCfg = resolveConfig({ repoRoot });
+  const sessionMode = resolveSessionMode(runtimeCfg);
+  const mainSessionId = resolveMainSessionId(runtimeCfg);
   const workspaceDir = resolveWorkspaceDir(
     (runtimeCfg as any).workspace_dir ?? process.env.FF_WORKSPACE_DIR ?? undefined,
     { repoRoot }
   );
   ensureCanonicalStructure(workspaceDir);
+
+  // eslint-disable-next-line no-console
+  console.log(`[daemon] Session policy: mode=${sessionMode}, mainSessionId=${mainSessionId}`);
 
   const healthIssues = await quickHealthCheck(workspaceDir);
   if (healthIssues.length > 0) {
@@ -72,8 +205,8 @@ export async function startDaemon(): Promise<void> {
       registry,
       workspaceDir,
       repoRoot,
-      sessionMode: resolveSessionMode(runtimeCfg),
-      mainSessionId: resolveMainSessionId(runtimeCfg)
+      sessionMode,
+      mainSessionId
     })
   );
   gateway.register(
@@ -129,6 +262,52 @@ export async function startDaemon(): Promise<void> {
         return;
       }
 
+      if (msg.type === "list_sessions") {
+        const rows = listSessions(
+          workspaceDir,
+          Number(msg.limit ?? 50),
+          msg.activeMinutes,
+          msg.messageLimit
+        );
+        send(ws, { type: "sessions_list", sessions: rows });
+        return;
+      }
+
+      if (msg.type === "patch_session") {
+        try {
+          const resolved = resolveSessionIdForPatch({
+            workspaceDir,
+            cfg: runtimeCfg,
+            sessionId: msg.sessionId,
+            sessionKey: msg.sessionKey,
+            displayName: msg.displayName ?? null
+          });
+          const sessionDir = path.join(workspaceDir, "sessions");
+          const updated = patchSessionOverrides({
+            sessionId: resolved.sessionId,
+            sessionDir,
+            patch: msg.overrides || {}
+          });
+          const overrides = getSessionOverrides(updated);
+          send(ws, {
+            type: "session_patched",
+            ok: true,
+            sessionId: resolved.sessionId,
+            sessionKey: resolved.sessionKey,
+            overrides
+          });
+        } catch (err) {
+          send(ws, {
+            type: "session_patched",
+            ok: false,
+            sessionId: msg.sessionId,
+            sessionKey: msg.sessionKey,
+            error: err instanceof Error ? err.message : String(err)
+          });
+        }
+        return;
+      }
+
       if (msg.type === "cancel_turn") {
         if (currentTurn?.id === msg.turnId) {
           currentTurn.controller.abort();
@@ -142,11 +321,78 @@ export async function startDaemon(): Promise<void> {
         const resolvedSessionId = resolveSessionId({
           requested: msg.sessionId,
           workspaceDir,
-          cfg: runtimeCfg
+          cfg: runtimeCfg,
+          mode: sessionMode
         });
         // Update the session tracker and persist to workspace
         sessionId = resolvedSessionId;
         saveLastActiveSession(workspaceDir, resolvedSessionId);
+
+        // eslint-disable-next-line no-console
+        console.log(`[daemon] Starting turn for session: ${resolvedSessionId}`);
+
+        if (resolvedSessionId === mainSessionId) {
+          getOrCreateSessionIdForKey({
+            workspaceDir,
+            cfg: runtimeCfg,
+            sessionKey: "main",
+            provider: "internal",
+            chatType: "direct",
+            displayName: "main"
+          });
+        }
+
+        let input = msg.input;
+        let resetTriggered = false;
+        let resetRemainder = "";
+        let compactTriggered = false;
+        let compactRemainder = "";
+        if (typeof input === "string") {
+          const trimmed = input.trim();
+          if (/^\/(reset|new)\b/i.test(trimmed)) {
+            resetTriggered = true;
+            resetRemainder = trimmed.replace(/^\/(reset|new)\b/i, "").trim();
+          } else if (/^\/compact\b/i.test(trimmed)) {
+            compactTriggered = true;
+            compactRemainder = trimmed.replace(/^\/compact\b/i, "").trim();
+          }
+        }
+
+        if (resetTriggered) {
+          await applyResetTrigger({ sessionId: resolvedSessionId, workspaceDir, repoRoot, cfg: runtimeCfg });
+          if (!resetRemainder) {
+            const resetTurnId = newTurnId();
+            send(ws, { type: "turn_started", sessionId: resolvedSessionId, turnId: resetTurnId });
+            let seq = 0;
+            send(ws, { type: "chunk", turnId: resetTurnId, seq: (seq += 1), chunk: toWire({ kind: "content", delta: "Session reset. Start a new conversation." }) });
+            send(ws, { type: "turn_finished", turnId: resetTurnId, ok: true });
+            return;
+          }
+          input = resetRemainder;
+        }
+
+        if (compactTriggered) {
+          const result = await applyCompactTrigger({ sessionId: resolvedSessionId, workspaceDir, repoRoot, cfg: runtimeCfg });
+          if (!compactRemainder) {
+            const compactTurnId = newTurnId();
+            send(ws, { type: "turn_started", sessionId: resolvedSessionId, turnId: compactTurnId });
+            let seq = 0;
+            send(ws, {
+              type: "chunk",
+              turnId: compactTurnId,
+              seq: (seq += 1),
+              chunk: toWire({
+                kind: "content",
+                delta: result.summarizedCount > 0
+                  ? `Session compacted (${result.summarizedCount} messages summarized).`
+                  : "Session compacted (no changes needed)."
+              })
+            });
+            send(ws, { type: "turn_finished", turnId: compactTurnId, ok: true });
+            return;
+          }
+          input = compactRemainder;
+        }
 
         currentTurn?.controller.abort();
         const controller = new AbortController();
@@ -191,7 +437,7 @@ export async function startDaemon(): Promise<void> {
             },
             async () => {
               for await (const chunk of runAgentTurn({
-                userInput: msg.input,
+                userInput: input,
                 registry,
                 sessionId: resolvedSessionId,
                 signal: controller.signal

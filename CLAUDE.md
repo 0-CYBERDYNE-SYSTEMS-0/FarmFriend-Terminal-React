@@ -166,9 +166,28 @@ System prompts and schemas from `packet/` ensure cross-implementation consistenc
 ## Important Notes
 
 ### Session Management
-- UUID format sessionIds
-- History in `sessions/<sessionId>.json`
-- Auto-loaded for context reconstruction
+- Session modes: `main` (persistent), `last` (resume last active), `new` (fresh each turn)
+- Defaults: `session_mode: "main"`, `main_session_id: "main"` in `packet/default_config.json`
+- Config overrides:
+  ```json
+  {
+    "session_mode": "main",
+    "main_session_id": "main",
+    "session": {
+      "idleMinutes": 0,
+      "autoSummarize": false,
+      "maxHistoryTokens": 100000
+    }
+  }
+  ```
+- CLI overrides: `--session-mode <main|last|new>`, `--session-id <id>`, `--new-session`
+- Ink UI helpers: `/session [info|list|mode|reset|model]`, `/compact`, `/status`
+- Session tools: `sessions_list`, `sessions_history`, `sessions_send`, `sessions_spawn`
+- History in `sessions/<sessionId>.json` (with stats + message counts)
+- Session transcripts/logs in `logs/sessions/<sessionId>.jsonl`
+- Bootstrap ritual file: `BOOTSTRAP.md` (first-run onboarding, auto-cleared by the agent)
+- Session scope: `session.scope` (`main`, `per-sender`, `clawdbot`) controls session key mapping
+- Per-session overrides stored in `session.meta.overrides` (e.g., `model`)
 
 ### Model Selection Priority
 1. Runtime override (`FF_MODEL`, etc.)

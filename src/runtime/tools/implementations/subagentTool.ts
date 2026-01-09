@@ -25,6 +25,10 @@ export async function subagentTool(argsRaw: unknown, signal: AbortSignal): Promi
   // Prevent recursive subagent spawning by using a registry without subagent_tool.
   const registry = new ToolRegistry();
   registerDefaultTools(registry, { workspaceDir });
+  registry.unregister("sessions_list");
+  registry.unregister("sessions_history");
+  registry.unregister("sessions_send");
+  registry.unregister("sessions_spawn");
 
   const sessionId = newId("subsession");
   const subagentId = newId("subagent");

@@ -22,7 +22,15 @@ export type ClientMessage =
   | { type: "hello"; client: "ink" | "web"; version?: string }
   | { type: "start_turn"; input: string | any[]; sessionId?: string }
   | { type: "cancel_turn"; turnId: string }
-  | { type: "list_tools" };
+  | { type: "list_tools" }
+  | { type: "list_sessions"; limit?: number; activeMinutes?: number; messageLimit?: number }
+  | {
+      type: "patch_session";
+      sessionId?: string;
+      sessionKey?: string;
+      overrides?: Record<string, string | null>;
+      displayName?: string | null;
+    };
 
 export type ServerMessage =
   | { type: "hello"; daemonVersion: string }
@@ -30,6 +38,15 @@ export type ServerMessage =
   | { type: "chunk"; turnId: string; seq: number; chunk: string }
   | { type: "turn_finished"; turnId: string; ok: boolean; error?: string }
   | { type: "tools"; tools: string[] }
+  | { type: "sessions_list"; sessions: any[] }
+  | {
+      type: "session_patched";
+      ok: boolean;
+      sessionId?: string;
+      sessionKey?: string;
+      overrides?: Record<string, string | null>;
+      error?: string;
+    }
   | { type: "todo_update"; todos: Todo[] }
   | { type: "subagent_start"; agentId: string; task: string }
   | { type: "subagent_progress"; agentId: string; action: string; file?: string; toolCount: number; tokens: number }
@@ -50,6 +67,8 @@ export function isClientMessage(value: unknown): value is ClientMessage {
   if (type === "start_turn") return typeof (value as any).input === "string" || Array.isArray((value as any).input);
   if (type === "cancel_turn") return typeof (value as any).turnId === "string";
   if (type === "list_tools") return true;
+  if (type === "list_sessions") return true;
+  if (type === "patch_session") return true;
   return false;
 }
 
@@ -62,4 +81,3 @@ export function newTurnId(): string {
 }
 
 export { isValidSessionId };
-

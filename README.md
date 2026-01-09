@@ -398,9 +398,47 @@ The workspace directory stores sessions, logs, and project data. It defaults to 
 - `AGENTS.md`, `SOUL.md`, `TOOLS.md`, `USER.md`, `IDENTITY.md`, `MEMORY.md`, `PLAN.md`, `TASKS.md`, `LOG.md`
 
 **Session Continuity:**
-- Default session is `main` for long-lived continuity.
-- Override with `--session <id>` or `FF_SESSION_MODE` (`main`, `last`, `new`).
-- Customize the main session ID with `FF_MAIN_SESSION_ID`.
+- Default session mode is `main` (persistent).
+- CLI flags: `--session-mode <main|last|new>`, `--session-id <id>`, `--new-session` (start/local).
+- Env overrides: `FF_SESSION_MODE`, `FF_MAIN_SESSION_ID`.
+- Config options:
+  ```json
+  {
+    "session_mode": "main",
+    "main_session_id": "main",
+    "session": {
+      "scope": "main",
+      "idleMinutes": 0,
+      "autoSummarize": false,
+      "maxHistoryTokens": 100000,
+      "contextPruning": {
+        "enabled": false,
+        "mode": "adaptive"
+      }
+    }
+  }
+  ```
+- CLI helpers: `/session [info|list|mode|reset|model]`, `/compact`, `/status` inside the Ink UI.
+- Per-session overrides are stored in `session.meta.overrides` (e.g., `/session model gpt-5-mini`).
+- More detail: `docs/session-management.md`.
+
+**First-run onboarding:**
+- A `BOOTSTRAP.md` file is created in the workspace on first run.
+- If present, the agent uses it to ask one question at a time and fill `IDENTITY.md`, `USER.md`, and `SOUL.md`, then clears `BOOTSTRAP.md`.
+
+**Send policy (optional):**
+```json
+{
+  "session": {
+    "sendPolicy": {
+      "default": "allow",
+      "rules": [
+        { "action": "deny", "match": { "provider": "whatsapp", "chatType": "group" } }
+      ]
+    }
+  }
+}
+```
 
 **Gateway Status:**
 - CLI: `ff-terminal gateway status`

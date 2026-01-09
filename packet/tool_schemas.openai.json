@@ -1057,6 +1057,172 @@
   {
     "type": "function",
     "function": {
+      "name": "reset_session",
+      "description": "Reset or archive a session while keeping workspace memory intact. Useful for persistent main sessions.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "description": "Action to perform: 'archive' (archive and start fresh), 'clear' (empty messages), or 'summarize' (replace old history with a summary)"
+          },
+          "sessionId": {
+            "type": "string",
+            "description": "Optional session id to reset (defaults to current/main session)"
+          },
+          "keepLast": {
+            "type": "integer",
+            "description": "For summarize: number of recent messages to keep verbatim"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "manage_memory",
+      "description": "Extract, update, or search long-term memory stored in MEMORY.md.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "description": "Action to perform: 'extract' (pull memory from recent conversation), 'update' (replace a section), or 'search' (find lines containing a query)"
+          },
+          "sessionId": {
+            "type": "string",
+            "description": "Optional session id to extract memory from"
+          },
+          "maxMessages": {
+            "type": "integer",
+            "description": "Maximum number of recent messages to use for extraction"
+          },
+          "section": {
+            "type": "string",
+            "description": "Section heading to update (for 'update')"
+          },
+          "content": {
+            "type": "string",
+            "description": "New section content (for 'update')"
+          },
+          "query": {
+            "type": "string",
+            "description": "Search query (for 'search')"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "sessions_list",
+      "description": "List available sessions from the workspace session store.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "description": "Maximum number of sessions to return"
+          },
+          "activeMinutes": {
+            "type": "integer",
+            "description": "Only include sessions active within the last N minutes"
+          },
+          "messageLimit": {
+            "type": "integer",
+            "description": "Include the last N messages per session (0 = none)"
+          }
+        },
+        "required": []
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "sessions_history",
+      "description": "Fetch conversation history for a specific session.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "sessionId": {
+            "type": "string",
+            "description": "Session id to fetch"
+          },
+          "limit": {
+            "type": "integer",
+            "description": "Maximum number of messages to return (0 = all)"
+          }
+        },
+        "required": []
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "sessions_send",
+      "description": "Send a message into another session and return its response.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "sessionId": {
+            "type": "string",
+            "description": "Session id to send to (defaults to main)"
+          },
+          "message": {
+            "type": "string",
+            "description": "Message to send into the target session"
+          }
+        },
+        "required": [
+          "message"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "sessions_spawn",
+      "description": "Spawn a sub-agent run in a new session and return its response.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "task": {
+            "type": "string",
+            "description": "Task to run in the spawned session"
+          },
+          "label": {
+            "type": "string",
+            "description": "Optional label for the spawned session"
+          },
+          "model": {
+            "type": "string",
+            "description": "Optional model override for the spawned run"
+          },
+          "cleanup": {
+            "type": "string",
+            "description": "Cleanup policy: 'delete' or 'keep' (default keep)"
+          }
+        },
+        "required": [
+          "task"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
       "name": "skill_apply",
       "description": "Write a drafted skill to disk and refresh the registry.",
       "parameters": {

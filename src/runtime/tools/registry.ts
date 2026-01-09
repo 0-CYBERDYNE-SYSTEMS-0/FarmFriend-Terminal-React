@@ -14,6 +14,10 @@ export class ToolRegistry {
     return this.handlers.has(name);
   }
 
+  unregister(name: string): void {
+    this.handlers.delete(name);
+  }
+
   get(name: string): ToolHandler | undefined {
     return this.handlers.get(name);
   }

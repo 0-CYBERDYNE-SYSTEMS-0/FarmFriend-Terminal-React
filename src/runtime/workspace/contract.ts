@@ -13,6 +13,18 @@ Purpose: Operating instructions for the FarmFriend Terminal runtime.
 - Keep tasks and plans readable in TASKS.md and PLAN.md.
 - Log notable actions in LOG.md.
 `,
+  "BOOTSTRAP.md": `# FarmFriend Terminal - Bootstrap
+
+This file is a first-run ritual. If it exists, follow it once and then clear the file.
+
+Instructions:
+- Start with a warm, brief hello.
+- Ask **one question at a time** (no multi-question lists).
+- Capture answers in USER.md, IDENTITY.md, and SOUL.md.
+- Offer a few small suggestions when helpful (name, tone, emoji).
+- Keep it short and friendly.
+- After completing the onboarding, **clear this file** (write an empty string) so it won't run again.
+`,
   "SOUL.md": `# FarmFriend Terminal - Voice & Guardrails
 
 Tone:
@@ -130,6 +142,7 @@ export function loadMemorySnapshot(workspaceDir: string, maxChars = 8000): strin
 
 export type WorkspaceContractSnapshot = {
   agents?: string;
+  bootstrap?: string;
   soul?: string;
   tools?: string;
   user?: string;
@@ -151,6 +164,7 @@ export function loadWorkspaceContractSnapshot(workspaceDir: string, maxChars = 6
 
   return {
     agents: read("AGENTS.md", Math.floor(maxChars / 6)),
+    bootstrap: read("BOOTSTRAP.md", Math.floor(maxChars / 6)),
     soul: read("SOUL.md", Math.floor(maxChars / 6)),
     tools: read("TOOLS.md", Math.floor(maxChars / 6)),
     user: read("USER.md", Math.floor(maxChars / 6)),
@@ -164,6 +178,7 @@ export function loadWorkspaceContractSnapshot(workspaceDir: string, maxChars = 6
 export function formatWorkspaceContractForPrompt(snapshot: WorkspaceContractSnapshot): string {
   const sections: Array<[string, string | undefined]> = [
     ["AGENTS.md", snapshot.agents],
+    ["BOOTSTRAP.md", snapshot.bootstrap],
     ["SOUL.md", snapshot.soul],
     ["TOOLS.md", snapshot.tools],
     ["USER.md", snapshot.user],

@@ -1,4 +1,4 @@
-# Tool Catalog (43)
+# Tool Catalog (49)
 
 - `analyze_data` — Analyze data using natural language
 - `analyze_image_gemini` — Analyze images using Gemini 2.5 Flash Image vision capabilities. State-of-the-art OCR, object detection, scene understanding, visual Q&A, document analysis, and chart/graph interpretation.
@@ -27,6 +27,12 @@
 - `search_code` — Search code using natural language
 - `semantic_search` — Semantic CODE search using natural language and local embeddings (osgrep). BEST FOR: Codebase concept search in git repositories - 'where is authentication handled?', 'find rate limiting logic', 'how do we validate tools?'. NOT FOR: Project discovery in ff-terminal-workspace (use glob/grep instead - workspace is not a git repo). Finds meaning in CODE, not just keywords. Powered by tree-sitter code parsing.
 - `session_summary` — Create or update long-term memory for cross-session continuity. Use at the end of work sessions to leave context for future sessions. Writes to ff-terminal-workspace/MEMORY.md and appends to ff-terminal-workspace/memory/YYYY-MM-DD.md.
+- `reset_session` — Reset or archive a session while keeping workspace memory intact.
+- `manage_memory` — Extract, update, or search long-term memory stored in MEMORY.md.
+- `sessions_list` — List available sessions from the workspace session store.
+- `sessions_history` — Fetch conversation history for a specific session.
+- `sessions_send` — Send a message into another session and return its response.
+- `sessions_spawn` — Spawn a sub-agent run in a new session and return its response.
 - `skill_apply` — Write a drafted skill to disk and refresh the registry.
 - `skill_documentation` — Generate documentation for existing skills or skill drafts.
 - `skill_draft` — Draft a skill manifest and instructions before writing files.

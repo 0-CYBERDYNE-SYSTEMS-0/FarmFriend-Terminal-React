@@ -11,6 +11,7 @@ import { findRepoRoot } from "../runtime/config/repoRoot.js";
 import { resolveConfig } from "../runtime/config/loadConfig.js";
 import { defaultConfigPath, resolveWorkspaceDir } from "../runtime/config/paths.js";
 import { loadWorkspaceContractSnapshot } from "../runtime/workspace/contract.js";
+import { loadSession } from "../runtime/session/sessionStore.js";
 import { loadTaskStore } from "../runtime/scheduling/taskStore.js";
 import { quickHealthCheck } from "../runtime/workspace/healthCheck.js";
 import { listSkillStubs } from "../runtime/tools/implementations/skills.js";
@@ -1114,6 +1115,14 @@ export async function startWebServer(): Promise<void> {
     const sessionId = String(info?.sessionId || "main");
     let daemonWs: WebSocket | null = null;
     let currentTurnId: string | null = null;
+    const { workspaceDir } = resolveRuntimeContext(repoRoot);
+    let bootstrapActive = false;
+    try {
+      const snapshot = loadWorkspaceContractSnapshot(workspaceDir, 2000);
+      bootstrapActive = Boolean(snapshot.bootstrap?.trim());
+    } catch {
+      bootstrapActive = false;
+    }
 
     // Send initial connection message
     sendWebMessage(webWs, {
@@ -1122,6 +1131,14 @@ export async function startWebServer(): Promise<void> {
       session_id: sessionId,
       timestamp: Date.now() / 1000
     });
+    if (bootstrapActive) {
+      sendWebMessage(webWs, {
+        type: "system",
+        content: "Onboarding detected: BOOTSTRAP.md is present. Ask one question at a time and fill IDENTITY.md, USER.md, and SOUL.md.",
+        session_id: sessionId,
+        timestamp: Date.now() / 1000
+      });
+    }
 
     // Set up daemon connection first BEFORE handling web client messages
     try {
@@ -1258,11 +1275,22 @@ export async function startWebServer(): Promise<void> {
       }
 
       if (msg.type === "get_history") {
-        // History is stored in daemon workspace - need to implement via daemon or file read
-        // For now, return placeholder
+        // Load history from session file
+        const { workspaceDir } = resolveRuntimeContext(repoRoot);
+        const sessionDir = path.join(workspaceDir, "sessions");
+        const session = loadSession(sessionId, sessionDir);
+        const limit = 200;
+        const raw = Array.isArray(session?.conversation) ? session.conversation.slice(-limit) : [];
+        const history = raw
+          .filter((msg) => msg.role === "user" || msg.role === "assistant")
+          .map((msg) => ({
+            role: msg.role,
+            content: msg.content,
+            timestamp: Date.parse(msg.created_at || "") || Date.now()
+          }));
         sendWebMessage(webWs, {
           type: "history",
-          content: "[]",
+          content: JSON.stringify(history),
           session_id: sessionId,
           timestamp: Date.now() / 1000
         });

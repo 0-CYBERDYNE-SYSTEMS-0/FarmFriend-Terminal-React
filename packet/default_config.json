@@ -25,6 +25,35 @@
   "tool_history_limit": 5000,
   "context_window": 200000,
   "max_tokens": 16384,
+  "session_mode": "main",
+  "main_session_id": "main",
+  "session": {
+    "scope": "main",
+    "idleMinutes": 0,
+    "autoSummarize": false,
+    "maxHistoryTokens": 100000,
+    "contextPruning": {
+      "enabled": false,
+      "mode": "adaptive",
+      "keepLastAssistants": 3,
+      "softTrimRatio": 0.3,
+      "hardClearRatio": 0.5,
+      "minPrunableToolChars": 50000,
+      "softTrim": {
+        "maxChars": 4000,
+        "headChars": 1500,
+        "tailChars": 1500
+      },
+      "hardClear": {
+        "enabled": true,
+        "placeholder": "[Old tool result content cleared]"
+      },
+      "tools": {
+        "allow": [],
+        "deny": []
+      }
+    }
+  },
   "temperature": 0.7,
   "ollama_options": {},
   "enable_thinking": true,

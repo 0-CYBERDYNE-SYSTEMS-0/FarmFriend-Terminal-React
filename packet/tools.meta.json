@@ -137,6 +137,36 @@
       "category": "file"
     },
     {
+      "name": "reset_session",
+      "description": "Reset or archive a session while keeping workspace memory intact.",
+      "category": "system"
+    },
+    {
+      "name": "manage_memory",
+      "description": "Extract, update, or search long-term memory stored in MEMORY.md.",
+      "category": "file"
+    },
+    {
+      "name": "sessions_list",
+      "description": "List available sessions from the workspace session store.",
+      "category": "system"
+    },
+    {
+      "name": "sessions_history",
+      "description": "Fetch conversation history for a specific session.",
+      "category": "system"
+    },
+    {
+      "name": "sessions_send",
+      "description": "Send a message into another session and return its response.",
+      "category": "system"
+    },
+    {
+      "name": "sessions_spawn",
+      "description": "Spawn a sub-agent run in a new session and return its response.",
+      "category": "system"
+    },
+    {
       "name": "skill_apply",
       "description": "Write a drafted skill to disk and refresh the registry.",
       "category": "system"

@@ -17,7 +17,21 @@ export type SessionFile = {
   created_at: string;
   updated_at: string;
   conversation: ConversationMessage[];
-  meta?: Record<string, unknown>;
+  stats?: {
+    totalMessages: number;
+    totalTokens?: number;
+    createdAt: string;
+    lastActiveAt: string;
+    archivedCount?: number;
+  };
+  meta?: Record<string, unknown> & {
+    overrides?: {
+      model?: string;
+      thinkingLevel?: string;
+      verboseLevel?: string;
+      reasoningLevel?: string;
+    };
+  };
 };
 
 export function defaultSessionDir(workspaceDir?: string): string {
@@ -49,12 +63,47 @@ export function loadSession(sessionId: string, sessionDir = defaultSessionDir())
 
 export function createSession(sessionId: string): SessionFile {
   const now = new Date().toISOString();
-  return { version: 1, session_id: sessionId, created_at: now, updated_at: now, conversation: [] };
+  return {
+    version: 1,
+    session_id: sessionId,
+    created_at: now,
+    updated_at: now,
+    conversation: [],
+    stats: {
+      totalMessages: 0,
+      totalTokens: 0,
+      createdAt: now,
+      lastActiveAt: now,
+      archivedCount: 0
+    }
+  };
+}
+
+function estimateTokensForConversation(messages: ConversationMessage[]): number {
+  let total = 0;
+  for (const m of messages) {
+    const text = m.content || "";
+    total += Math.max(1, Math.ceil(text.length / 4));
+  }
+  return total;
 }
 
 export function saveSession(session: SessionFile, sessionDir = defaultSessionDir()): void {
   const p = sessionPath(session.session_id, sessionDir);
   fs.mkdirSync(path.dirname(p), { recursive: true });
-  session.updated_at = new Date().toISOString();
+  const now = new Date().toISOString();
+  session.updated_at = now;
+  if (!session.stats) {
+    session.stats = {
+      totalMessages: session.conversation.length,
+      totalTokens: estimateTokensForConversation(session.conversation),
+      createdAt: session.created_at || now,
+      lastActiveAt: now,
+      archivedCount: 0
+    };
+  }
+  session.stats.totalMessages = session.conversation.length;
+  session.stats.totalTokens = estimateTokensForConversation(session.conversation);
+  session.stats.lastActiveAt = now;
   fs.writeFileSync(p, JSON.stringify(session, null, 2) + "\n", "utf8");
 }
