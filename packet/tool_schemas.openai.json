@@ -993,6 +993,27 @@
           "limit": {
             "type": "integer",
             "description": "For 'history' action: max number of runs to return (default: 50)"
+          },
+          "wake_mode": {
+            "type": "string",
+            "description": "Wake mode: 'next-heartbeat' (default, wait for next poll) or 'now' (trigger immediate execution check)",
+            "enum": ["next-heartbeat", "now"]
+          },
+          "delivery_webhook_url": {
+            "type": "string",
+            "description": "Optional webhook URL to POST task results to after execution. Enables result delivery integration."
+          },
+          "delivery_best_effort": {
+            "type": "boolean",
+            "description": "If true (default), delivery failures won't fail the task. If false, task fails if delivery fails."
+          },
+          "delivery_include_output": {
+            "type": "boolean",
+            "description": "Include task output in delivery payload (default: false)"
+          },
+          "delivery_include_logs": {
+            "type": "boolean",
+            "description": "Include log file path in delivery payload (default: false)"
           }
         },
         "required": [

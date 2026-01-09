@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { ensureDir, writeJson } from "../config/loadConfig.js";
+import type { DeliveryConfig } from "./delivery.js";
 
 export type PayloadType =
   | { kind: "agentTurn"; prompt?: string; workflow?: string }
@@ -20,6 +21,8 @@ export type ScheduledTask = {
   post_to_main_prefix?: string;
   description?: string;
   thinking?: string;
+  wake_mode?: "next-heartbeat" | "now";
+  delivery?: DeliveryConfig;
   schedule: {
     schedule_type: "one_time" | "daily" | "weekly" | "interval" | "rrule";
     hour?: number;

@@ -25,6 +25,20 @@ function schedulerLockPath(workspaceDir: string): string {
   return path.join(workspaceDir, "memory_core", "scheduled_tasks", "scheduler.lock");
 }
 
+function wakeSignalPath(workspaceDir: string): string {
+  return path.join(workspaceDir, "memory_core", "scheduled_tasks", "wake_signal");
+}
+
+export function triggerSchedulerWake(workspaceDir: string): void {
+  const signalPath = wakeSignalPath(workspaceDir);
+  fs.mkdirSync(path.dirname(signalPath), { recursive: true });
+  try {
+    fs.writeFileSync(signalPath, "", { flag: "w" });
+  } catch {
+    // Ignore errors in signal creation
+  }
+}
+
 function nowUtcSeconds(): number {
   return Math.floor(Date.now() / 1000);
 }
@@ -210,6 +224,16 @@ export async function runSchedulerLoop(opts: SchedulerRunOptions): Promise<void>
 
   try {
     while (true) {
+      const signalPath = wakeSignalPath(opts.workspaceDir);
+      const hasWakeSignal = fs.existsSync(signalPath);
+      if (hasWakeSignal) {
+        try {
+          fs.unlinkSync(signalPath);
+        } catch {
+          // Ignore errors in signal deletion
+        }
+      }
+
       const store = loadTaskStore(opts.workspaceDir);
       const now = DateTime.now();
       let dirty = false;
@@ -245,12 +269,14 @@ export async function runSchedulerLoop(opts: SchedulerRunOptions): Promise<void>
 
       if (!dueTasks.length) {
         if (opts.once) break;
-        const nextAt = store.tasks
-          .filter((t) => t.enabled && t.next_run_at !== undefined)
-          .map((t) => t.next_run_at as number)
-          .sort((a, b) => a - b)[0];
-        const delaySeconds = nextAt ? Math.max(5, nextAt - nowSeconds) : 60;
-        await sleep(Math.min(delaySeconds * 1000, opts.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS));
+        if (!hasWakeSignal) {
+          const nextAt = store.tasks
+            .filter((t) => t.enabled && t.next_run_at !== undefined)
+            .map((t) => t.next_run_at as number)
+            .sort((a, b) => a - b)[0];
+          const delaySeconds = nextAt ? Math.max(5, nextAt - nowSeconds) : 60;
+          await sleep(Math.min(delaySeconds * 1000, opts.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS));
+        }
         continue;
       }
 

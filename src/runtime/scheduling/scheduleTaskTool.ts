@@ -2,7 +2,7 @@ import { newId } from "../../shared/ids.js";
 import { loadTaskStore, saveTaskStore, ScheduledTask, type PayloadType } from "./taskStore.js";
 import { getSchedulerBackend } from "./backends/index.js";
 import { computeNextRRuleExecutionTimestamp, resolveScheduleTimeZone } from "./rrule.js";
-import { computeNextRunAt } from "./scheduler.js";
+import { computeNextRunAt, triggerSchedulerWake } from "./scheduler.js";
 import { DateTime } from "luxon";
 import { findRepoRoot } from "../config/repoRoot.js";
 import fs from "node:fs";
@@ -38,6 +38,11 @@ type Args = {
   open_result?: boolean;
   force?: boolean;
   limit?: number;
+  wake_mode?: "next-heartbeat" | "now";
+  delivery_webhook_url?: string;
+  delivery_best_effort?: boolean;
+  delivery_include_output?: boolean;
+  delivery_include_logs?: boolean;
 };
 
 type ParsedTime =
@@ -244,6 +249,7 @@ export async function scheduleTaskTool(argsRaw: unknown, workspaceDir: string): 
     if (args.profile !== undefined) task.profile = args.profile;
     if (args.session_target !== undefined) task.session_target = args.session_target;
     if (args.post_to_main_prefix !== undefined) task.post_to_main_prefix = args.post_to_main_prefix;
+    if (args.wake_mode !== undefined) task.wake_mode = args.wake_mode;
 
     if (args.schedule_type || args.hour !== undefined || args.minute !== undefined || args.weekdays !== undefined || args.interval_seconds !== undefined || args.execution_timestamp !== undefined || args.schedule_rule !== undefined || args.timezone !== undefined || args.start_datetime !== undefined) {
       const hourMinute = resolveHourMinute(args);
@@ -265,6 +271,10 @@ export async function scheduleTaskTool(argsRaw: unknown, workspaceDir: string): 
 
     task.updated_at = new Date().toISOString();
     saveTaskStore(workspaceDir, store);
+
+    if (args.wake_mode === "now") {
+      triggerSchedulerWake(workspaceDir);
+    }
 
     return `Updated task ${task.name} (${task.id})`;
   }
@@ -359,6 +369,21 @@ export async function scheduleTaskTool(argsRaw: unknown, workspaceDir: string): 
         : { kind: "agentTurn", prompt: args.prompt, workflow: args.workflow }
       : undefined;
 
+    const delivery = args.delivery_webhook_url
+      ? {
+          enabled: true,
+          channels: [
+            {
+              type: "webhook" as const,
+              config: { url: args.delivery_webhook_url }
+            }
+          ],
+          bestEffort: args.delivery_best_effort ?? true,
+          includeOutput: args.delivery_include_output ?? false,
+          includeLogs: args.delivery_include_logs ?? false
+        }
+      : undefined;
+
     const task: ScheduledTask = {
       id: newId("task"),
       name,
@@ -372,6 +397,8 @@ export async function scheduleTaskTool(argsRaw: unknown, workspaceDir: string): 
       description: args.description,
       thinking: args.thinking,
       timeout_seconds: args.timeout_seconds,
+      wake_mode: args.wake_mode,
+      delivery,
       schedule: {
         schedule_type,
         hour: hourMinute?.hour ?? args.hour,
@@ -398,6 +425,10 @@ export async function scheduleTaskTool(argsRaw: unknown, workspaceDir: string): 
     }
 
     saveTaskStore(workspaceDir, store);
+
+    if (task.wake_mode === "now") {
+      triggerSchedulerWake(workspaceDir);
+    }
 
     if (args.dry_run) {
       return `Dry run: saved task definition for ${name} (not installing OS schedule yet).`;

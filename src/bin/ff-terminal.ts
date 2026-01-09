@@ -29,6 +29,7 @@ import { StructuredLogger, parseLogLevel, truncateForLog } from "../runtime/logg
 import { runAutonomyLoop, type OracleMode, type SessionStrategy } from "../runtime/autonomy/loop.js";
 import { runAutonomyWizard } from "../runtime/autonomy/wizard.js";
 import { computeNextRunAt, runSchedulerLoop } from "../runtime/scheduling/scheduler.js";
+import { deliverTaskResult } from "../runtime/scheduling/delivery.js";
 import { DateTime } from "luxon";
 
 function usage(): void {
@@ -970,6 +971,58 @@ async function run(): Promise<void> {
           sessionId,
           outputSummary: assistantText.slice(0, 500)
         });
+
+        // Deliver task result to configured channels
+        if (task.delivery?.enabled) {
+          try {
+            const logPath = task.last_run?.stdout_log;
+            const deliveryResults = await deliverTaskResult(
+              task,
+              {
+                taskId: task.id,
+                taskName: task.name,
+                ok,
+                error,
+                duration_ms: durationMs,
+                output: assistantText,
+                logPath,
+                session_id: sessionId
+              },
+              task.delivery
+            );
+
+            const failedDeliveries = deliveryResults.filter((r) => !r.success);
+            if (failedDeliveries.length > 0 && !task.delivery.bestEffort) {
+              const failedChannels = failedDeliveries.map((r) => `${r.channel}: ${r.message}`).join("; ");
+              throw new Error(`Delivery failed: ${failedChannels}`);
+            }
+
+            if (failedDeliveries.length > 0) {
+              runLogger?.log("warn", "delivery_partial_failure", {
+                session_id: sessionId,
+                scheduled_task: scheduledTaskName,
+                failed_count: failedDeliveries.length,
+                total_count: deliveryResults.length
+              });
+            } else if (deliveryResults.length > 0) {
+              runLogger?.log("info", "delivery_success", {
+                session_id: sessionId,
+                scheduled_task: scheduledTaskName,
+                channel_count: deliveryResults.length
+              });
+            }
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            if (!task.delivery.bestEffort) {
+              throw err;
+            }
+            runLogger?.log("error", "delivery_failed", {
+              session_id: sessionId,
+              scheduled_task: scheduledTaskName,
+              message: msg
+            });
+          }
+        }
 
         if (task.schedule) {
           try {
