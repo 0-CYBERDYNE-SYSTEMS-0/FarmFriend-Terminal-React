@@ -15,10 +15,21 @@ const isDevelopment = fs.existsSync(path.join(repoRoot, "src"));
 const fieldviewDistDir = path.join(repoRoot, isDevelopment ? "src" : "dist", "web", "fieldview", "dist");
 
 // Create WebSocket server for fieldview
-const wsPort = PORT + 1000; // Use different port offset for WebSocket
-const wss = new WebSocketServer({ port: wsPort });
+const wsPort = PORT + 100; // Use smaller port offset for WebSocket
 
-console.log(`FieldView WebSocket server listening on ws://${HOST}:${PORT + 1}`);
+let wss: WebSocketServer;
+try {
+  wss = new WebSocketServer({ port: wsPort });
+  console.log(`FieldView WebSocket server listening on ws://${HOST}:${wsPort}`);
+} catch (error: any) {
+  if (error.code === 'EADDRINUSE') {
+    console.error(`WebSocket port ${wsPort} already in use. Please try a different port.`);
+    process.exit(1);
+  }
+  throw error;
+}
+
+console.log(`FieldView WebSocket server listening on ws://${HOST}:${wsPort}`);
 
 // Connect to daemon WebSocket
 let daemonWs: WebSocket | null = null;
