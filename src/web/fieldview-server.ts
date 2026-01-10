@@ -10,7 +10,9 @@ const HOST = process.env.FF_FIELDVIEW_HOST || "localhost";
 
 // FieldView frontend dist directory
 const repoRoot = findRepoRoot();
-const fieldviewDistDir = path.join(repoRoot, "src", "web", "fieldview", "dist");
+// Check if running from source or dist
+const isDevelopment = fs.existsSync(path.join(repoRoot, "src"));
+const fieldviewDistDir = path.join(repoRoot, isDevelopment ? "src" : "dist", "web", "fieldview", "dist");
 
 // Create WebSocket server for fieldview
 const wsPort = PORT + 1000; // Use different port offset for WebSocket
