@@ -1,5 +1,5 @@
 {
-  "name": "fieldview-classic-template",
+  "name": "@ff-terminal/fieldview",
   "version": "1.0.0",
   "type": "module",
   "description": "FieldView Classic UI Template - A clean terminal-style interface for any CLI backend",

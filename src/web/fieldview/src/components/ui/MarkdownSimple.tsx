@@ -1,4 +1,5 @@
 // Simple Markdown renderer without external dependencies
+import React from 'react'
 import { CodeBlock } from './CodeBlock'
 import { 
   HTMLArtifact, 
@@ -126,9 +127,11 @@ export function Markdown({ content, className = '' }: MarkdownProps) {
         const level = line.match(/^#+/)?.[0].length || 1
         const HeaderTag = `h${Math.min(level, 6)}`
         elements.push(
-          <HeaderTag className={`font-bold mt-4 mb-2 text-${level === 1 ? '2xl' : level === 2 ? 'xl' : level === 3 ? 'lg' : 'md'}`}>
-            {line.replace(/^#+\s*/, '')}
-          </HeaderTag>
+          React.createElement(
+            HeaderTag,
+            { className: `font-bold mt-4 mb-2 text-${level === 1 ? '2xl' : level === 2 ? 'xl' : level === 3 ? 'lg' : 'md'}` },
+            line.replace(/^#+\s*/, '')
+          )
         )
         continue
       }

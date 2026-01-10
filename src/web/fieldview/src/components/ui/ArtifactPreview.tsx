@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { CodeBlock } from '@/components/ui/CodeBlock'
 
-interface ArtifactPreviewProps {
+export interface ArtifactPreviewProps {
   content: string
   title?: string
   type: 'html' | 'json' | 'image' | 'text' | 'code'

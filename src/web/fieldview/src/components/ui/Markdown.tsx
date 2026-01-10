@@ -1,6 +1,6 @@
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { rehypeHighlight } from 'rehype-highlight'
+// import rehypeHighlight from 'rehype-highlight'
 import { CodeBlock } from './CodeBlock'
 import { 
   HTMLArtifact, 
@@ -88,9 +88,10 @@ export function Markdown({ content, className = '' }: MarkdownProps) {
     <div className={`prose prose-sm max-w-none ${className}`}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
-        rehypePlugins={[rehypeHighlight]}
+        // rehypePlugins={[rehypeHighlight]}
         components={{
-          code: ({ inline, children, ...props }) => {
+          code: (props: any) => {
+            const { inline, children } = props
             if (inline) {
               return <code className="bg-gray-100 px-1 py-0.5 rounded text-sm font-mono">{children}</code>
             }
@@ -111,7 +112,7 @@ export function Markdown({ content, className = '' }: MarkdownProps) {
 }
 
 // Utility to extract language from markdown code blocks
-function extractLanguage(content: string): string {
-  const match = content.match(/^```(\w+)?/)
-  return match ? match[1] || 'text' : 'text'
-}
+// function extractLanguage(content: string): string {
+//   const match = content.match(/^```(\w+)?/)
+//   return match ? match[1] || 'text' : 'text'
+// }

@@ -1,12 +1,12 @@
 import { type StatusPillData } from '@/store/types'
-import { useTheme } from '@/contexts/ThemeContext'
+// import { useTheme } from '@/contexts/ThemeContext'
 
 interface StatusPillsProps {
   pills: StatusPillData[]
 }
 
 export function StatusPills({ pills }: StatusPillsProps) {
-  const { theme } = useTheme()
+  // const { theme } = useTheme()
 
   return (
     <div className="flex flex-wrap items-center gap-2">

@@ -1,31 +1,43 @@
 import { useState, useEffect } from 'react'
-import { highlight } from 'shiki'
-import type { Lang } from 'shiki'
+import { createHighlighter } from 'shiki'
 
 interface CodeBlockProps {
   code: string
-  lang?: Lang
+  lang?: string
   className?: string
 }
+
+let highlighter: any = null
 
 export function CodeBlock({ code, lang = 'text', className = '' }: CodeBlockProps) {
   const [html, setHtml] = useState('')
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    highlight(code, { 
-      theme: 'github-dark',
-      lang,
-      fallbackLanguage: 'text'
-    }).then(result => {
-      setHtml(result)
-      setLoading(false)
-    }).catch(error => {
-      console.error('Shiki error:', error)
-      // Fallback to simple pre block
-      setHtml(`<pre><code>${code}</code></pre>`)
-      setLoading(false)
-    })
+    const init = async () => {
+      if (!highlighter) {
+        highlighter = await createHighlighter({
+          themes: ['github-dark'],
+          langs: ['javascript', 'typescript', 'python', 'json', 'html', 'css', 'text']
+        })
+      }
+
+      try {
+        const result = highlighter.codeToHtml(code, {
+          lang: lang as any,
+          theme: 'github-dark'
+        })
+        setHtml(result)
+        setLoading(false)
+      } catch (error: any) {
+        console.error('Shiki error:', error)
+        // Fallback to simple pre block
+        setHtml(`<pre><code>${code}</code></pre>`)
+        setLoading(false)
+      }
+    }
+
+    init()
   }, [code, lang])
 
   if (loading) {

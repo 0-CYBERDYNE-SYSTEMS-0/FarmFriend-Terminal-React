@@ -34,9 +34,10 @@ function usage(): void {
   console.log(`Usage:
   ff-terminal daemon
   ff-terminal ui
-  ff-terminal start [profile] [--display-mode verbose|clean] [--web] [--tts] [--voice <voice>]
+  ff-terminal start [profile] [--display-mode verbose|clean] [--web|--fieldview] [--tts] [--voice <voice>]
   ff-terminal local [profile] [--display-mode verbose|clean] [--tts] [--voice <voice>]
   ff-terminal web
+  ff-terminal fieldview
   ff-terminal acp [--profile <name>]
   ff-terminal scheduler [--once] [--poll-interval <ms>] [--headless]
   ff-terminal run --prompt "..." [--profile <name>] [--session <id>] [--headless]
@@ -208,6 +209,11 @@ async function run(): Promise<void> {
     const displayModeRaw = pickArg(rest, "--display-mode") || "";
     const displayMode = displayModeRaw.trim().toLowerCase();
     const useWeb = hasFlag(rest, "--web") || hasFlag(rest, "-w");
+    const useFieldview = hasFlag(rest, "--fieldview") || hasFlag(rest, "-f");
+    
+    if (useWeb && useFieldview) {
+      throw new Error("Cannot use both --web and --fieldview flags simultaneously");
+    }
     if (displayMode && displayMode !== "verbose" && displayMode !== "clean") {
       throw new Error(`Invalid --display-mode: ${displayModeRaw} (expected verbose|clean)`);
     }
@@ -293,6 +299,7 @@ async function run(): Promise<void> {
     const env = { ...process.env } as Record<string, string>;
     const port = Number(env.FF_TERMINAL_PORT || 28888);
     const webPort = Number(env.FF_WEB_PORT || 8787);
+    const fieldviewPort = Number(env.FF_FIELDVIEW_PORT || 8788);
 
     // eslint-disable-next-line no-console
     console.log(`Using profile: ${profile.name} (${profile.provider})`);
@@ -355,6 +362,35 @@ async function run(): Promise<void> {
         process.exit(code || 0);
       });
       web.on("error", () => shutdown());
+      daemon.on("exit", () => {});
+      return;
+    }
+
+    if (useFieldview) {
+      // Start FieldView server instead of Ink UI
+      // eslint-disable-next-line no-console
+      console.log(`Starting FieldView server... (http://127.0.0.1:${fieldviewPort})`);
+      await new Promise((r) => setTimeout(r, 300));
+
+      const fieldviewCmd = isDevTs ? "tsx" : process.execPath;
+      const fieldviewArgs = isDevTs ? ["src/web/fieldview-server.ts"] : ["dist/web/fieldview-server.js"];
+      const fieldviewSpawnCmd = isDevTs ? tsxCmd : fieldviewCmd;
+
+      const fieldview = spawn(fieldviewSpawnCmd, fieldviewArgs, { env, stdio: "inherit", shell: true, cwd: projectDir });
+
+      const shutdown = () => {
+        try {
+          daemon.kill("SIGTERM");
+        } catch {
+          // ignore
+        }
+      };
+
+      fieldview.on("exit", (code: number | null) => {
+        shutdown();
+        process.exit(code || 0);
+      });
+      fieldview.on("error", () => shutdown());
       daemon.on("exit", () => {});
       return;
     }
@@ -540,6 +576,13 @@ async function run(): Promise<void> {
   if (cmd === "web") {
     applyToolAllowFlags(rest);
     await startWebServer();
+    return;
+  }
+
+  if (cmd === "fieldview") {
+    applyToolAllowFlags(rest);
+    const { startFieldviewServer } = await import("../web/fieldview-server.js");
+    await startFieldviewServer();
     return;
   }
 

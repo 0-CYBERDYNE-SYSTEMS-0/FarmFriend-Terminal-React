@@ -2,7 +2,7 @@
 // This handles WebSocket connection and message display
 
 import { useState, useEffect, useRef } from 'react'
-import { type ChatMessage, type FileAttachment } from '@/store/types'
+import { type ChatMessage } from '@/store/types'
 import { Markdown } from '@/components/ui/Markdown'
 
 interface EmbeddedChatProps {
@@ -108,7 +108,7 @@ export function EmbeddedChat({ layout = 'embedded', sessionId = 'main' }: Embedd
   }
 
   const sendMessage = () => {
-    if (!input.trim() || !wsRef.current?.readyState === 1) return
+    if (!input.trim() || wsRef.current?.readyState !== 1) return
     
     const userMsg = {
       id: Date.now().toString(),

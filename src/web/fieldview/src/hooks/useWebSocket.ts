@@ -26,7 +26,8 @@ export function useWebSocket({
     if (wsRef.current?.readyState === WebSocket.OPEN) return
     
     setIsConnecting(true)
-    const wsUrl = `ws://localhost:8080/ws/terminal/${sessionId}`
+    // Connect to ff-terminal daemon
+    const wsUrl = `ws://localhost:28888/ws/terminal/${sessionId}`
     
     try {
       const ws = new WebSocket(wsUrl)
