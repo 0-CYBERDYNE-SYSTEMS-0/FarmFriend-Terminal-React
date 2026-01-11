@@ -164,7 +164,136 @@ Refer to the full Shopify Admin GraphQL API documentation for complex mutations 
 - Backward compatibility maintained
 - Regular version updates recommended
 
+## Shopify CLI Integration
+
+### Quick Start with CLI
+```bash
+# Setup the skill
+bash setup.sh
+
+# Use the CLI wrapper for common operations
+bash shopify_cli_wrapper.sh verify          # Verify configuration
+bash shopify_cli_wrapper.sh test            # Run all tests
+bash shopify_cli_wrapper.sh shop_info       # Get store info
+bash shopify_cli_wrapper.sh list_products   # List products
+bash shopify_cli_wrapper.sh create_product "Product Name" "29.99"
+```
+
+## Image Upload & Management
+
+### Image Upload - Complete Workflow (Recommended)
+
+Upload an image AND attach it to a product in one command:
+
+```bash
+bash shopify_cli_wrapper.sh upload_and_attach_image \
+  "gid://shopify/Product/14889202483572" \
+  ./product-image.jpg \
+  "Product image description"
+```
+
+**Result:**
+- Image uploaded to Shopify CDN (permanent URL)
+- Image automatically attached to product
+- Image visible in Shopify admin
+
+### Image Upload - Step by Step
+
+**Step 1: Upload image (get permanent URL)**
+```bash
+bash shopify_cli_wrapper.sh upload_image ./my-image.jpg "Image description"
+```
+
+Output includes permanent CDN URL like:
+```
+📎 Image URL for reuse:
+   https://cdn.shopify.com/s/files/1/0963/3670/7956/files/my-image.jpg?v=1768114627
+```
+
+**Step 2: Attach image to product**
+```bash
+bash shopify_cli_wrapper.sh attach_image \
+  "gid://shopify/Product/14889202483572" \
+  "https://cdn.shopify.com/s/files/1/.../my-image.jpg" \
+  "Image alt text"
+```
+
+### Direct Python Usage
+
+For agents or programmatic use:
+
+```bash
+# Upload and attach in one command
+python3 scripts/image_handler.py upload-and-attach \
+  --product-id "gid://shopify/Product/123456" \
+  --image-path "./image.jpg" \
+  --alt-text "Product image"
+
+# Upload only
+python3 scripts/image_handler.py upload \
+  --image-path "./image.jpg" \
+  --alt-text "Image description"
+
+# Attach only (if you have URL)
+python3 scripts/image_handler.py attach \
+  --product-id "gid://shopify/Product/123456" \
+  --image-url "https://cdn.shopify.com/.../image.jpg" \
+  --alt-text "Alt text"
+```
+
+### How It Works
+
+1. **Staging** - Image uploaded to staging URL
+2. **Upload** - File transferred to Shopify CDN (permanent)
+3. **Attachment** - Image linked to product via REST API
+4. **Complete** - Image appears in store and admin
+
+### Image Files Supported
+
+- JPG/JPEG ✅
+- PNG ✅
+- GIF ✅
+- WebP ✅
+- All common image formats
+
+### Agent Integration Example
+
+```python
+import subprocess
+import json
+
+# Your agent can do this:
+product_id = "gid://shopify/Product/14889202483572"
+image_path = "./generated_design.jpg"
+
+result = subprocess.run([
+    "bash", "shopify_cli_wrapper.sh", "upload_and_attach_image",
+    product_id, image_path, "AI-generated design"
+], capture_output=True, text=True)
+
+print(result.stdout)  # See image attached!
+```
+
+### Configuration Files
+- **shopify.app.toml** - App configuration (scopes, API version)
+- **.env** - Credentials (store URL, access token)
+- **setup.sh** - Initialization script
+- **shopify_cli_wrapper.sh** - CLI operations wrapper
+
+### Using Shopify CLI Directly
+```bash
+# Link the app to your store
+shopify app config link --client-id <CLIENT_ID>
+
+# View app configuration
+shopify app info
+
+# See all available Shopify CLI commands
+shopify help
+```
+
 ## Support and Documentation
 - Shopify Admin API docs: https://shopify.dev/docs/api/admin-graphql
 - GraphQL best practices: https://shopify.dev/docs/apps/build/graphql-optimization
 - Rate limiting guide: https://shopify.dev/docs/api/usage/rate-limits
+- Shopify CLI docs: https://shopify.dev/docs/apps/tools/cli

@@ -1,0 +1,19 @@
+# Shopify App Configuration for Drop Shop Integration
+# Generated for shopify_ops skill
+
+scopes = "write_products,read_products,write_inventory,read_inventory,write_orders,read_orders,write_fulfillments,read_fulfillments,write_customers,read_customers,write_discounts,read_discounts,write_files,read_files,write_themes,read_themes,write_locations,read_locations,write_content,read_content,read_metaobjects,write_metaobjects,read_publications,write_publications,read_analytics,read_reports"
+
+# Store configuration
+[store]
+shop_url = "the-drop-shop-10066.myshopify.com"
+
+# API version
+[api]
+version = "2024-10"
+
+# Webhook configuration (optional - for future use)
+[webhooks]
+api_version = "2024-10"
+
+# Extension configuration (optional)
+# [extensions]
