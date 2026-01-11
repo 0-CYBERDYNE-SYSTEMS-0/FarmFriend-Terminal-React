@@ -17,7 +17,8 @@
           }
         },
         "required": [
-          "description"
+          "description",
+          "data_source"
         ]
       }
     }
@@ -48,7 +49,10 @@
           }
         },
         "required": [
-          "image_path"
+          "image_path",
+          "analysis_type",
+          "question",
+          "focus_areas"
         ]
       }
     }
@@ -75,7 +79,9 @@
           }
         },
         "required": [
-          "video_source"
+          "video_source",
+          "prompt",
+          "wait_for_processing"
         ]
       }
     }
@@ -107,7 +113,12 @@
           "mode": {
             "type": "string",
             "description": "Operation mode: auto, confirm, read_only, or planning",
-            "enum": ["auto", "confirm", "read_only", "planning"]
+            "enum": [
+              "auto",
+              "confirm",
+              "read_only",
+              "planning"
+            ]
           },
           "allowedTools": {
             "type": "array",
@@ -139,7 +150,12 @@
           "agent_id",
           "name",
           "description",
-          "systemPromptAddition"
+          "systemPromptAddition",
+          "mode",
+          "allowedTools",
+          "deniedTools",
+          "maxTurns",
+          "tags"
         ]
       }
     }
@@ -166,7 +182,9 @@
           }
         },
         "required": [
-          "draft_id"
+          "draft_id",
+          "force_overwrite",
+          "cleanup_draft"
         ]
       }
     }
@@ -205,7 +223,12 @@
           }
         },
         "required": [
-          "question"
+          "question",
+          "context",
+          "temperature",
+          "max_output_tokens",
+          "reasoning_effort",
+          "include_reasoning"
         ]
       }
     }
@@ -241,7 +264,8 @@
         "required": [
           "command_slug",
           "description",
-          "template"
+          "template",
+          "tags"
         ]
       }
     }
@@ -268,7 +292,9 @@
           }
         },
         "required": [
-          "draft_id"
+          "draft_id",
+          "force_overwrite",
+          "cleanup_draft"
         ]
       }
     }
@@ -308,7 +334,11 @@
         },
         "required": [
           "pattern",
-          "language"
+          "language",
+          "path",
+          "mode",
+          "replacement",
+          "include_context"
         ]
       }
     }
@@ -354,7 +384,9 @@
           }
         },
         "required": [
-          "action"
+          "action",
+          "agent_id",
+          "session_id"
         ]
       }
     }
@@ -387,7 +419,8 @@
         "required": [
           "file_path",
           "old_string",
-          "new_string"
+          "new_string",
+          "replace_all"
         ]
       }
     }
@@ -419,7 +452,9 @@
         },
         "required": [
           "input_image_path",
-          "edit_instructions"
+          "edit_instructions",
+          "context",
+          "filename"
         ]
       }
     }
@@ -446,7 +481,9 @@
           }
         },
         "required": [
-          "prompt"
+          "prompt",
+          "additional_details",
+          "filename"
         ]
       }
     }
@@ -485,7 +522,12 @@
           }
         },
         "required": [
-          "prompt"
+          "prompt",
+          "style",
+          "size",
+          "quality",
+          "moderation",
+          "filename"
         ]
       }
     }
@@ -524,7 +566,12 @@
           }
         },
         "required": [
-          "pattern"
+          "pattern",
+          "path",
+          "sort_by_mtime",
+          "include_dirs",
+          "head_limit",
+          "show_details"
         ]
       }
     }
@@ -583,7 +630,17 @@
           }
         },
         "required": [
-          "pattern"
+          "pattern",
+          "path",
+          "glob",
+          "type",
+          "output_mode",
+          "case_insensitive",
+          "context_before",
+          "context_after",
+          "show_line_numbers",
+          "head_limit",
+          "multiline"
         ]
       }
     }
@@ -641,7 +698,12 @@
           }
         },
         "required": [
-          "action"
+          "action",
+          "target",
+          "wait_time",
+          "language",
+          "kb_script_id",
+          "params"
         ]
       }
     }
@@ -656,7 +718,12 @@
         "properties": {
           "action": {
             "type": "string",
-            "enum": ["list", "create", "update", "complete"],
+            "enum": [
+              "list",
+              "create",
+              "update",
+              "complete"
+            ],
             "description": "Action to perform on tasks"
           },
           "task_id": {
@@ -669,17 +736,29 @@
           },
           "status": {
             "type": "string",
-            "enum": ["pending", "in_progress", "completed"],
+            "enum": [
+              "pending",
+              "in_progress",
+              "completed"
+            ],
             "description": "Task status for create/update actions"
           },
           "priority": {
             "type": "string",
-            "enum": ["high", "medium", "low"],
+            "enum": [
+              "high",
+              "medium",
+              "low"
+            ],
             "description": "Task priority for create/update actions"
           }
         },
         "required": [
-          "action"
+          "action",
+          "task_id",
+          "content",
+          "status",
+          "priority"
         ]
       }
     }
@@ -742,7 +821,10 @@
         },
         "required": [
           "notebook_path",
-          "new_source"
+          "new_source",
+          "cell_id",
+          "cell_type",
+          "edit_mode"
         ]
       }
     }
@@ -765,7 +847,8 @@
           }
         },
         "required": [
-          "query"
+          "query",
+          "search_type"
         ]
       }
     }
@@ -793,7 +876,8 @@
         },
         "required": [
           "template_type",
-          "project_name"
+          "project_name",
+          "workspace_path"
         ]
       }
     }
@@ -820,7 +904,9 @@
           }
         },
         "required": [
-          "message"
+          "message",
+          "update_type",
+          "duration"
         ]
       }
     }
@@ -843,7 +929,8 @@
           }
         },
         "required": [
-          "path"
+          "path",
+          "lines"
         ]
       }
     }
@@ -866,7 +953,8 @@
           }
         },
         "required": [
-          "command"
+          "command",
+          "skill_directory"
         ]
       }
     }
@@ -956,7 +1044,24 @@
           }
         },
         "required": [
-          "action"
+          "action",
+          "name",
+          "prompt",
+          "workflow",
+          "profile",
+          "schedule_type",
+          "schedule_rule",
+          "timezone",
+          "start_datetime",
+          "hour",
+          "minute",
+          "weekdays",
+          "interval_seconds",
+          "execution_timestamp",
+          "time_string",
+          "auto_remove",
+          "dry_run",
+          "open_result"
         ]
       }
     }
@@ -979,7 +1084,8 @@
           }
         },
         "required": [
-          "query"
+          "query",
+          "path"
         ]
       }
     }
@@ -1010,7 +1116,10 @@
           }
         },
         "required": [
-          "query"
+          "query",
+          "path",
+          "max_results",
+          "show_content"
         ]
       }
     }
@@ -1049,7 +1158,12 @@
           }
         },
         "required": [
-          "action"
+          "action",
+          "accomplishments",
+          "decisions",
+          "next_steps",
+          "context",
+          "project_name"
         ]
       }
     }
@@ -1076,7 +1190,9 @@
           }
         },
         "required": [
-          "draft_id"
+          "draft_id",
+          "force_overwrite",
+          "cleanup_draft"
         ]
       }
     }
@@ -1106,7 +1222,12 @@
             "description": "Include usage examples in documentation."
           }
         },
-        "required": []
+        "required": [
+          "skill_slug",
+          "format",
+          "output_file",
+          "include_examples"
+        ]
       }
     }
   },
@@ -1174,8 +1295,16 @@
         },
         "required": [
           "skill_slug",
+          "name",
           "summary",
-          "instructions"
+          "description",
+          "instructions",
+          "triggers",
+          "tags",
+          "assets",
+          "recommended_tools",
+          "author",
+          "version"
         ]
       }
     }
@@ -1202,7 +1331,9 @@
           }
         },
         "required": [
-          "source"
+          "source",
+          "skill_name",
+          "force_overwrite"
         ]
       }
     }
@@ -1225,7 +1356,8 @@
           }
         },
         "required": [
-          "skill_slug"
+          "skill_slug",
+          "include_assets"
         ]
       }
     }
@@ -1256,7 +1388,10 @@
           }
         },
         "required": [
-          "task"
+          "task",
+          "sequence_type",
+          "max_skills",
+          "force_primary"
         ]
       }
     }
@@ -1284,7 +1419,8 @@
         },
         "required": [
           "description",
-          "prompt"
+          "prompt",
+          "model_tier"
         ]
       }
     }
@@ -1311,7 +1447,9 @@
           }
         },
         "required": [
-          "url"
+          "url",
+          "max_depth",
+          "limit"
         ]
       }
     }
@@ -1337,7 +1475,8 @@
           }
         },
         "required": [
-          "urls"
+          "urls",
+          "include_images"
         ]
       }
     }
@@ -1360,7 +1499,8 @@
           }
         },
         "required": [
-          "url"
+          "url",
+          "max_depth"
         ]
       }
     }
@@ -1387,7 +1527,9 @@
           }
         },
         "required": [
-          "query"
+          "query",
+          "search_depth",
+          "max_results"
         ]
       }
     }
@@ -1415,8 +1557,7 @@
     "type": "function",
     "function": {
       "name": "TodoWrite",
-      "description": "Manage todo list for multi-step tasks. CRITICAL: Call this to UPDATE task status as you work (pending→in_progress→completed). Don't just create the list at the start - update it throughout execution to show progress. Users see this in real-time.",
-
+      "description": "Manage todo list for multi-step tasks. CRITICAL: Call this to UPDATE task status as you work (pending\u2192in_progress\u2192completed). Don't just create the list at the start - update it throughout execution to show progress. Users see this in real-time.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -1510,7 +1651,13 @@
           }
         },
         "required": [
-          "action"
+          "action",
+          "workflow_name",
+          "parameters",
+          "execution_mode",
+          "category",
+          "description",
+          "tags"
         ]
       }
     }

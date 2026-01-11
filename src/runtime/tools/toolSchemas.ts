@@ -9,6 +9,8 @@ import { findRepoRoot } from "../config/repoRoot.js";
 // causing validation failures and circuit breaker trips.
 // NOTE: Only include tools that actually handle empty gracefully (not tools that throw)
 const TOOLS_ALLOW_EMPTY_STRINGS = new Set(['think']);
+// Some tools use highly dynamic params that don't fit strict JSON schema.
+const TOOLS_STRICT_EXEMPT = new Set(["macos_control", "skill_draft", "workflow_automation"]);
 
 export type OpenAIToolSchema = {
   type: "function";
@@ -156,7 +158,12 @@ export function loadToolSchemas(repoRoot = findRepoRoot(), options?: { strict?: 
 
   // Apply strict mode if requested (for providers that support structured outputs)
   if (options?.strict) {
-    return schemas.map(enforceStrictSchema);
+    return schemas.map((schema) => {
+      if (TOOLS_STRICT_EXEMPT.has(schema.function.name)) {
+        return schema;
+      }
+      return enforceStrictSchema(schema);
+    });
   }
 
   return schemas;

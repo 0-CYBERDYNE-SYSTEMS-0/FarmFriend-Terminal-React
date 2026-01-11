@@ -3,6 +3,7 @@
 
 import { type StatusPillData, type GatewayIndicator } from '@/store/types'
 import { StatusPills } from '@/components/ui/StatusPills'
+import { EmbeddedChat } from './EmbeddedChatWithArtifacts'
 
 interface FieldViewClassicProps {
   shared: {
@@ -151,20 +152,14 @@ export function FieldViewClassic({
           </section>
 
           <section className="field-chat rounded-2xl p-5 text-slate-100 shadow-lg">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between mb-4">
               <div>
                 <h2 className="text-lg font-semibold">Field chat</h2>
                 <p className="text-xs text-slate-400">Quick questions, quick answers.</p>
               </div>
               <span className="text-xs uppercase tracking-[0.2em] text-slate-400">main</span>
             </div>
-            <div className="mt-4 h-[70vh] min-h-[480px] bg-slate-900 rounded-lg p-4">
-              <p className="text-slate-500 text-center mt-20">
-                Embedded chat component will be added here
-                <br />
-                This connects to your CLI backend via WebSocket
-              </p>
-            </div>
+            <EmbeddedChat layout="embedded" sessionId="main" />
           </section>
         </div>
       </main>

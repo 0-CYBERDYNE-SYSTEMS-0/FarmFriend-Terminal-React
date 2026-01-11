@@ -28,7 +28,7 @@ export function EmbeddedChat({ layout = 'embedded', sessionId = 'main' }: Embedd
   }>>([])
 
   useEffect(() => {
-    const wsUrl = `ws://localhost:8080/ws/terminal/${sessionId}`
+    const wsUrl = `ws://localhost:8787/ws/terminal/${sessionId}`
     
     function connect() {
       const ws = new WebSocket(wsUrl)
@@ -68,18 +68,55 @@ export function EmbeddedChat({ layout = 'embedded', sessionId = 'main' }: Embedd
   const handleMessage = (msg: any) => {
     switch (msg.type) {
       case 'response':
-        // Check if content contains artifacts
-        const contentWithArtifacts = extractArtifacts(msg.content)
-        if (contentWithArtifacts.artifacts.length > 0) {
-          setArtifacts(prev => [...prev, ...contentWithArtifacts.artifacts])
-        }
-        
-        setMessages(prev => [...prev, {
-          id: Date.now().toString(),
-          role: 'assistant',
-          content: contentWithArtifacts.cleanedContent,
-          timestamp: msg.timestamp * 1000
-        }])
+        // Accumulate streaming chunks into the last assistant message
+        setMessages(prev => {
+          const lastMessage = prev[prev.length - 1]
+
+          // If last message is from assistant, update it with streaming content
+          if (lastMessage && lastMessage.role === 'assistant') {
+            const updatedContent = msg.content.startsWith(lastMessage.content)
+              ? msg.content
+              : lastMessage.content + msg.content
+            const contentWithArtifacts = extractArtifacts(updatedContent)
+
+            if (contentWithArtifacts.artifacts.length > 0) {
+              setArtifacts(prevArt => {
+                const existing = new Set(prevArt.map(art => `${art.type}:${art.content}`))
+                const next = contentWithArtifacts.artifacts.filter(
+                  art => !existing.has(`${art.type}:${art.content}`)
+                )
+                return next.length > 0 ? [...prevArt, ...next] : prevArt
+              })
+            }
+
+            return [
+              ...prev.slice(0, -1),
+              {
+                ...lastMessage,
+                content: contentWithArtifacts.cleanedContent
+              }
+            ]
+          }
+
+          // Otherwise create new assistant message
+          const contentWithArtifacts = extractArtifacts(msg.content)
+          if (contentWithArtifacts.artifacts.length > 0) {
+            setArtifacts(prevArt => {
+              const existing = new Set(prevArt.map(art => `${art.type}:${art.content}`))
+              const next = contentWithArtifacts.artifacts.filter(
+                art => !existing.has(`${art.type}:${art.content}`)
+              )
+              return next.length > 0 ? [...prevArt, ...next] : prevArt
+            })
+          }
+
+          return [...prev, {
+            id: Date.now().toString(),
+            role: 'assistant',
+            content: contentWithArtifacts.cleanedContent,
+            timestamp: msg.timestamp * 1000
+          }]
+        })
         break
         
       case 'thinking':
@@ -117,6 +154,14 @@ export function EmbeddedChat({ layout = 'embedded', sessionId = 'main' }: Embedd
           content: msg.content,
           timestamp: msg.timestamp * 1000
         }])
+        break
+
+      case 'command_received':
+        setIsProcessing(true)
+        break
+
+      case 'turn_finished':
+        setIsProcessing(false)
         break
     }
   }
@@ -203,23 +248,22 @@ export function EmbeddedChat({ layout = 'embedded', sessionId = 'main' }: Embedd
 
   const sendMessage = () => {
     if (!input.trim() || wsRef.current?.readyState !== WebSocket.OPEN) return
-    
+
     const userMsg = {
       id: Date.now().toString(),
       role: 'user' as const,
       content: input,
       timestamp: Date.now()
     }
-    
+
     setMessages(prev => [...prev, userMsg])
-    
+
     wsRef.current.send(JSON.stringify({
       type: 'command',
       data: { command: input }
     }))
-    
+
     setInput('')
-    setIsProcessing(true)
   }
 
   const handleKeyPress = (e: React.KeyboardEvent) => {

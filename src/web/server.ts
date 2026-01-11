@@ -293,7 +293,9 @@ export async function startWebServer(): Promise<void> {
   const repoRoot = findRepoRoot();
   const frontendDistDirRaw = process.env.FF_FRONTEND_DIST_DIR;
 
-  // New Vite frontend (highest priority)
+  // FieldView Classic frontend (highest priority)
+  const fieldviewDistDir = path.join(repoRoot, "src", "web", "fieldview", "dist");
+  // New Vite frontend
   const newFrontendDistDir = path.join(repoRoot, "src", "web", "client", "dist");
   // Old cyberpunk frontend
   const frontendDistDir = frontendDistDirRaw && frontendDistDirRaw.trim()
@@ -348,13 +350,15 @@ export async function startWebServer(): Promise<void> {
 
     // Serve React frontend build - check in priority order
     const selectedDistDir =
-      fs.existsSync(newFrontendDistDir) && fs.statSync(newFrontendDistDir).isDirectory()
-        ? newFrontendDistDir
-        : fs.existsSync(frontendDistDir) && fs.statSync(frontendDistDir).isDirectory()
-          ? frontendDistDir
-          : fs.existsSync(bundledFrontendDistDir) && fs.statSync(bundledFrontendDistDir).isDirectory()
-            ? bundledFrontendDistDir
-            : null;
+      fs.existsSync(fieldviewDistDir) && fs.statSync(fieldviewDistDir).isDirectory()
+        ? fieldviewDistDir
+        : fs.existsSync(newFrontendDistDir) && fs.statSync(newFrontendDistDir).isDirectory()
+          ? newFrontendDistDir
+          : fs.existsSync(frontendDistDir) && fs.statSync(frontendDistDir).isDirectory()
+            ? frontendDistDir
+            : fs.existsSync(bundledFrontendDistDir) && fs.statSync(bundledFrontendDistDir).isDirectory()
+              ? bundledFrontendDistDir
+              : null;
     if (selectedDistDir) {
       const url = new URL(req.url ?? "/", `http://${req.headers.host ?? "localhost"}`);
       const pathname = decodeURIComponent(url.pathname);

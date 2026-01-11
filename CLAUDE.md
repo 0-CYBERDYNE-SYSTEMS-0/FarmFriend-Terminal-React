@@ -17,6 +17,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ### CLI Modes
 - `npm run dev -- start [profile]` - Interactive mode with daemon + UI
+- `npm run dev -- start --web` - Start with original web UI (port 8787)
+- `npm run dev -- start --fieldview` - Start with FieldView Classic UI (port 8787)
 - `npm run dev -- local [profile]` - Local workspace mode (creates `ff-terminal-workspace/` in current dir)
 - `npm run dev -- run --prompt "..."` - Single headless execution
 - `npm run dev -- profile setup|list|default` - Profile management
@@ -33,6 +35,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ### Build & Install
 Always rebuild after TypeScript changes: `npm run build`
+
+Build process:
+- Main build compiles TypeScript and builds both web frontends
+- Web client: `npm run build:web` (builds `src/web/client`)
+- FieldView: `npm run build:fieldview` (builds `src/web/fieldview`)
+- Post-build: copies macOS control keyboard files to dist
 
 Install CLI globally:
 ```bash
@@ -51,7 +59,15 @@ ff-terminal start
 Daemon persists independently of UI crashes.
 
 ### Entry Point: `src/bin/ff-terminal.ts`
-Central router for: `daemon`, `ui`, `start`, `local`, `run`, `profile`, `schedule`, `web`, `acp`
+Central router for: `daemon`, `ui`, `start`, `local`, `run`, `profile`, `schedule`, `web`, `fieldview`, `acp`, `whatsapp`
+
+### Dual Web UI System
+Two independent React frontends share same backend:
+- **Original Web Client** - Full-featured responsive UI with mobile drawer
+- **FieldView Classic** - Terminal-aesthetic UI with artifact preview focus
+- Both connect via same WebSocket protocol to daemon
+- Server auto-detects which frontend to serve based on flag
+- FieldView uses port offset pattern (daemon + 1)
 
 ### Core Modules
 
@@ -78,11 +94,18 @@ Central router for: `daemon`, `ui`, `start`, `local`, `run`, `profile`, `schedul
 
 **Web (`src/web/`)**
 - `server.ts` - HTTP+WebSocket server (port 8787)
-- `client/` - React+Vite UI with responsive design (mobile: 768px breakpoint)
+- `client/` - Original React+Vite UI with responsive design (mobile: 768px breakpoint)
   - Desktop: side-by-side chat/console
   - Mobile: bottom drawer (45vh) slides over chat
   - Smart scroll, thinking display, file upload
   - Build separately: `cd src/web/client && npm install && npm run build`
+- `fieldview/` - FieldView Classic terminal-style UI template
+  - Clean terminal aesthetic with syntax highlighting (Shiki)
+  - Artifact preview with sandboxed iframe rendering
+  - Markdown rendering with GitHub Flavored Markdown
+  - WebSocket connection on port offset (+1 from daemon)
+  - Build separately: `cd src/web/fieldview && npm install && npm run build`
+  - Dev mode: `npm run dev:fieldview`
 
 ### Tool System
 35+ tools in categories: File I/O, Execution, Meta, Code Search, Skills, Agents, Web, Data, Media, Automation, System
@@ -245,13 +268,16 @@ Hacker News Scraper & Dashboard tests: API integration, file I/O, multi-language
 - WebSocket fails: verify daemon on port 28888
 - Port conflict: `lsof -ti:28888 | xargs kill`
 - Local mode: check `.daemon-port` file
-- Web UI blank: rebuild frontend with `npm run build:web`
+- Web UI blank: rebuild frontend with `npm run build:web` or `npm run build:fieldview`
+- FieldView connection: WebSocket port is daemon port + 1 (28889 for standard daemon)
 - Tool not found: check `registerDefaultTools()` in `src/runtime/registerDefaultTools.ts`
 
 ### Web UI Development
-- Vite dev server: `cd src/web/client && npm run dev`
-- Tailwind dark theme: `bg-neutral-950`, `text-neutral-100`
+- Original client Vite dev server: `cd src/web/client && npm run dev`
+- FieldView Vite dev server: `npm run dev:fieldview` or `cd src/web/fieldview && npm run dev`
+- Both use Tailwind dark theme: `bg-neutral-950`, `text-neutral-100`
 - No external state library (React hooks only)
+- FieldView uses Shiki for syntax highlighting, react-markdown for content rendering
 
 ### Environment Variables
 - `FF_WORKSPACE_DIR` - Custom workspace location

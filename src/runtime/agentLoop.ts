@@ -324,7 +324,6 @@ export async function* runAgentTurn(params: {
   const enablePromptCaching = (cfg as any).enable_prompt_caching !== false;
   const systemPromptBlocks = enablePromptCaching
     ? buildCacheableSystemPrompt({
-        variant: (cfg.system_message_variant as any) ?? "a",
         repoRoot,
         workingDir,
         parallelMode: (cfg.parallel_mode as any) ?? true,
@@ -335,7 +334,6 @@ export async function* runAgentTurn(params: {
         enableCaching: true
       })
     : [{ type: "text" as const, text: buildSystemPrompt({
-        variant: (cfg.system_message_variant as any) ?? "a",
         repoRoot,
         workingDir,
         parallelMode: (cfg.parallel_mode as any) ?? true,

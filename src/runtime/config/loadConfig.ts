@@ -9,7 +9,6 @@ export type RuntimeConfig = Record<string, unknown> & {
   tool_limit_total?: number;
   hooks_enabled?: boolean;
   parallel_mode?: boolean;
-  system_message_variant?: "a" | "b" | "c" | "d";
   log_level?: string;
   log_max_bytes?: number;
   log_retention?: number;
@@ -95,14 +94,6 @@ export function resolveConfig(params?: { repoRoot?: string; userConfigPath?: str
     const threshold = parseInt(process.env.FF_FORCE_TOOL_CALLS_THRESHOLD, 10);
     if (!isNaN(threshold)) {
       merged.force_tool_calls_threshold = threshold;
-    }
-  }
-
-  // System message variant environment variable
-  if (typeof process.env.FF_SYSTEM_MESSAGE_VARIANT === "string") {
-    const variant = process.env.FF_SYSTEM_MESSAGE_VARIANT.toLowerCase();
-    if (variant === "a" || variant === "b" || variant === "c" || variant === "d" || variant === "unified") {
-      merged.system_message_variant = variant as "a" | "b" | "c" | "d";
     }
   }
 
