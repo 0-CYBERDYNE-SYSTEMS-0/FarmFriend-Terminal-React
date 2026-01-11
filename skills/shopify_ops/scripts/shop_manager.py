@@ -186,22 +186,17 @@ def upload_image(image_path: str, alt_text: str = "") -> Optional[str]:
     
     return resource_url
 
-def create_product_with_image(title: str, price: str, image_path: str, 
-                               description: str = "", vendor: str = "", 
-                               tags: str = "", product_type: str = "", 
+def create_product_with_image(title: str, price: str, image_path: str,
+                               description: str = "", vendor: str = "",
+                               tags: str = "", product_type: str = "",
                                sku: str = "", alt_text: str = "") -> bool:
     """
     Creates a product with an image attached. Handles the complete workflow:
-    1. Upload image to Shopify
-    2. Create product with the image
+    1. Create product first (GraphQL API)
+    2. Upload image to Shopify CDN
+    3. Attach image to product (REST API)
     """
-    # Upload image first
-    image_url = upload_image(image_path, alt_text)
-    
-    if not image_url:
-        raise Exception("Failed to upload image")
-    
-    # Create product without variants first
+    # Step 1: Create product without image
     create_mutation = """
     mutation productCreate($input: ProductInput!) {
       productCreate(input: $input) {
@@ -210,18 +205,6 @@ def create_product_with_image(title: str, price: str, image_path: str,
           title
           handle
           onlineStoreUrl
-          media(first: 10) {
-            edges {
-              node {
-                ... on MediaImage {
-                  id
-                  image {
-                    url
-                  }
-                }
-              }
-            }
-          }
         }
         userErrors {
           field
@@ -230,37 +213,43 @@ def create_product_with_image(title: str, price: str, image_path: str,
       }
     }
     """
-    
+
     variables = {
         "input": {
             "title": title,
             "descriptionHtml": description,
             "vendor": vendor,
             "productType": product_type,
-            "tags": [tag.strip() for tag in tags.split(",") if tag.strip()],
-            "media": [{
-                "mediaContentType": "IMAGE",
-                "originalSource": image_url,
-                "alt": alt_text or title
-            }]
+            "tags": [tag.strip() for tag in tags.split(",") if tag.strip()]
         }
     }
-    
+
     result = run_query(create_mutation, variables)
     user_errors = result["data"]["productCreate"]["userErrors"]
-    
+
     if user_errors:
         print(f"Failed to create product: {user_errors}")
         return False
-    
+
     product = result["data"]["productCreate"]["product"]
     product_id = product["id"]
-    
-    print(f"✅ Product created with image: {product['title']}")
+
+    print(f"✅ Product created: {product['title']}")
     print(f"   ID: {product_id}")
     print(f"   Handle: {product['handle']}")
+
+    # Step 2: Upload image and attach to product
+    image_url = upload_image(image_path, alt_text)
+
+    if not image_url:
+        print(f"⚠️  Product created but image upload failed: {image_path}")
+        return True
+
+    # Step 3: Attach image to product using REST API
+    attach_image_to_product(product_id, image_url, alt_text or title)
+    print(f"✅ Image attached to product")
     
-    # Now add the variant
+    # Now add the variant with price
     if price or sku:
         variant_mutation = """
         mutation productVariantsBulkCreate($productId: ID!, $variants: [ProductVariantsBulkInput!]!) {
@@ -277,23 +266,21 @@ def create_product_with_image(title: str, price: str, image_path: str,
           }
         }
         """
-        
+
         variants_input = []
         if price:
-            variants_input.append({
-                "price": price,
-                "sku": sku or "",
-                "inventoryPolicy": "DENY",
-                "requiresShipping": True
-            })
-        
+            variant_obj = {"price": price}
+            if sku:
+                variant_obj["sku"] = sku
+            variants_input.append(variant_obj)
+
         if variants_input:
             var_result = run_query(variant_mutation, {
                 "productId": product_id,
                 "variants": variants_input
             })
             var_errors = var_result["data"]["productVariantsBulkCreate"]["userErrors"]
-            
+
             if var_errors:
                 print(f"⚠️  Variant creation failed: {var_errors}")
             else:
