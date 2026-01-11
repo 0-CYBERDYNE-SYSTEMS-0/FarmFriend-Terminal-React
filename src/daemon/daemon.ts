@@ -215,6 +215,20 @@ export async function startDaemon(): Promise<void> {
               }
             },
             async () => {
+              const sendTodoUpdate = () => {
+                try {
+                  const todosPath = path.join(workspaceDir, "todos", "sessions", `${resolvedSessionId}.json`);
+                  if (fs.existsSync(todosPath)) {
+                    const todosData = JSON.parse(fs.readFileSync(todosPath, "utf8"));
+                    if (todosData?.todos && Array.isArray(todosData.todos)) {
+                      send(ws, { type: "todo_update", todos: todosData.todos });
+                    }
+                  }
+                } catch {
+                  // Silently ignore todo read errors - not critical
+                }
+              };
+
               for await (const chunk of runAgentTurn({
                 userInput: msg.input,
                 registry,
@@ -225,20 +239,13 @@ export async function startDaemon(): Promise<void> {
                 send(ws, { type: "chunk", turnId, seq, chunk: toWire(chunk) });
 
                 // Check for todo updates after each chunk (real-time updates)
-                try {
-                  const todosPath = path.join(workspaceDir, "todos", "sessions", `${resolvedSessionId}.json`);
-                  if (fs.existsSync(todosPath)) {
-                    const todosData = JSON.parse(fs.readFileSync(todosPath, "utf8"));
-                    if (todosData?.todos && Array.isArray(todosData.todos)) {
-                      send(ws, { type: "todo_update", todos: todosData.todos });
-                    }
-                  }
-                } catch (err) {
-                  // Silently ignore todo read errors - not critical
-                }
+                sendTodoUpdate();
 
                 if (chunk.kind === "task_completed") break;
               }
+
+              // Ensure the UI receives the final todo state for this turn.
+              sendTodoUpdate();
             }
           );
 

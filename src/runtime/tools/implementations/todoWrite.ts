@@ -80,19 +80,28 @@ export async function todoWriteTool(argsRaw: unknown): Promise<string> {
     }
   }
 
-  // Merge todos, setting completedAt when status changes to completed
+  // Merge todos by id to avoid wiping tasks when partial updates are sent.
+  // Also set completedAt when a task is newly completed (or first seen as completed).
   const now = Date.now();
-  const mergedTodos = todos.map(newTodo => {
-    const existing = existingTodos.find(t => t.id === newTodo.id);
-    if (existing && existing.status !== "completed" && newTodo.status === "completed") {
-      // Newly completed - set timestamp
-      return { ...newTodo, completedAt: now };
-    } else if (existing?.completedAt) {
-      // Preserve existing timestamp
-      return { ...newTodo, completedAt: existing.completedAt };
+  const existingById = new Map<string, Todo>();
+  for (const t of existingTodos) existingById.set(t.id, t);
+
+  const mergedTodos: Todo[] = [];
+  const seenIds = new Set<string>();
+  for (const newTodo of todos) {
+    const existing = existingById.get(newTodo.id);
+    let completedAt = existing?.completedAt;
+    if (newTodo.status === "completed" && (!existing || existing.status !== "completed" || !completedAt)) {
+      completedAt = now;
     }
-    return newTodo;
-  });
+    mergedTodos.push({ ...(existing || {}), ...newTodo, completedAt });
+    seenIds.add(newTodo.id);
+  }
+
+  // Preserve any existing todos not included in the update payload.
+  for (const existing of existingTodos) {
+    if (!seenIds.has(existing.id)) mergedTodos.push(existing);
+  }
 
   fs.writeFileSync(p, JSON.stringify({ version: 1, session_id: ctx.sessionId, todos: mergedTodos }, null, 2) + "\n", "utf8");
 
@@ -108,4 +117,3 @@ export async function todoWriteTool(argsRaw: unknown): Promise<string> {
     2
   );
 }
-

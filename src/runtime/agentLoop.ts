@@ -456,7 +456,7 @@ export async function* runAgentTurn(params: {
     // This is the KEY to long-horizon autonomy (matches OpenHands Planner Agent pattern)
     hookRegistry.register(
       createTodoStopHook({
-        enabled: false,
+        enabled: true,
         workspaceDir
       })
     );
@@ -615,7 +615,19 @@ export async function* runAgentTurn(params: {
     });
     saveSession(session, sessionDir);
 
-    messages.push({ role: "assistant", content: assistantContent });
+    if (toolCalls.length > 0) {
+      const tool_calls = toolCalls.map((tc) => ({
+        id: tc.id,
+        type: "function" as const,
+        function: {
+          name: tc.name,
+          arguments: typeof tc.arguments === "string" ? tc.arguments : JSON.stringify(tc.arguments ?? {})
+        }
+      }));
+      messages.push({ role: "assistant", content: assistantContent, tool_calls });
+    } else {
+      messages.push({ role: "assistant", content: assistantContent });
+    }
 
     if (!toolCalls.length) {
       const stop = await hookRegistry.runAgentStop({
