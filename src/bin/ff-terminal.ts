@@ -378,9 +378,30 @@ async function run(): Promise<void> {
 
       const fieldview = spawn(fieldviewSpawnCmd, fieldviewArgs, { env, stdio: "inherit", shell: true, cwd: projectDir });
 
+      // Start web server for WS proxy used by FieldView UI
+      // eslint-disable-next-line no-console
+      console.log(`Starting web server... (http://127.0.0.1:${webPort})`);
+      await new Promise((r) => setTimeout(r, 300));
+
+      const webCmd = isDevTs ? "tsx" : process.execPath;
+      const webArgs = isDevTs ? ["src/web/server.ts"] : ["dist/web/server.js"];
+      const webSpawnCmd = isDevTs ? tsxCmd : webCmd;
+
+      const web = spawn(webSpawnCmd, webArgs, { env, stdio: "inherit", shell: true, cwd: projectDir });
+
       const shutdown = () => {
         try {
           daemon.kill("SIGTERM");
+        } catch {
+          // ignore
+        }
+        try {
+          web.kill("SIGTERM");
+        } catch {
+          // ignore
+        }
+        try {
+          fieldview.kill("SIGTERM");
         } catch {
           // ignore
         }
@@ -391,6 +412,11 @@ async function run(): Promise<void> {
         process.exit(code || 0);
       });
       fieldview.on("error", () => shutdown());
+      web.on("exit", (code: number | null) => {
+        shutdown();
+        process.exit(code || 0);
+      });
+      web.on("error", () => shutdown());
       daemon.on("exit", () => {});
       return;
     }

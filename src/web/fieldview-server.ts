@@ -15,7 +15,7 @@ const isDevelopment = fs.existsSync(path.join(repoRoot, "src"));
 const fieldviewDistDir = path.join(repoRoot, isDevelopment ? "src" : "dist", "web", "fieldview", "dist");
 
 // Create WebSocket server for fieldview
-const wsPort = PORT + 100; // Use smaller port offset for WebSocket
+const wsPort = PORT + 100; // WebSocket on fieldviewPort + 100
 
 let wss: WebSocketServer;
 try {
@@ -31,6 +31,124 @@ try {
 
 console.log(`FieldView WebSocket server listening on ws://${HOST}:${wsPort}`);
 
+type FileAttachment = {
+  name: string;
+  type: string;
+  size: number;
+  data: string;
+};
+
+type WebClientMessage =
+  | { type: "command"; data: { command: string; files?: FileAttachment[] } }
+  | { type: "ping" }
+  | { type: "get_history" }
+  | { type: "clear_session" };
+
+type WebServerMessage =
+  | { type: "system"; content: string; session_id: string; timestamp: number; metadata?: any }
+  | { type: "response"; content: string; session_id: string; timestamp: number; metadata?: any }
+  | { type: "thinking"; content: string; session_id: string; timestamp: number; metadata?: any }
+  | { type: "thinking_xml"; content: string; session_id: string; timestamp: number; metadata?: any }
+  | { type: "tool_call"; tool_name: string; content: string; session_id: string; timestamp: number; metadata?: any }
+  | { type: "error"; content: string; session_id: string; timestamp: number; metadata?: any }
+  | { type: "pong"; session_id: string; timestamp: number; metadata?: any }
+  | { type: "command_received"; content: string; session_id: string; timestamp: number; metadata?: any }
+  | { type: "history"; content: string; session_id: string; timestamp: number; metadata?: any }
+  | { type: "turn_finished"; session_id: string; timestamp: number; metadata?: any };
+
+type DaemonClientMessage =
+  | { type: "hello"; client: "ink" | "web"; version?: string }
+  | { type: "start_turn"; input: string | any[]; sessionId?: string }
+  | { type: "cancel_turn"; turnId: string }
+  | { type: "list_tools" };
+
+type DaemonServerMessage =
+  | { type: "hello"; daemonVersion: string }
+  | { type: "turn_started"; sessionId: string; turnId: string }
+  | { type: "chunk"; turnId: string; seq: number; chunk: string }
+  | { type: "turn_finished"; turnId: string; ok: boolean; error?: string }
+  | { type: "tools"; tools: string[] };
+
+function sendWebMessage(ws: WebSocket, msg: WebServerMessage) {
+  if (ws.readyState !== WebSocket.OPEN) return;
+  ws.send(JSON.stringify(msg));
+}
+
+function parseWebClientMessage(raw: string): WebClientMessage | null {
+  try {
+    const obj = JSON.parse(raw) as any;
+    if (!obj || typeof obj !== "object") return null;
+    if (obj.type === "ping") return { type: "ping" };
+    if (obj.type === "get_history") return { type: "get_history" };
+    if (obj.type === "clear_session") return { type: "clear_session" };
+    if (obj.type === "command" && typeof obj.data?.command === "string") {
+      const files = Array.isArray(obj.data.files) ? obj.data.files : undefined;
+      return { type: "command", data: { command: obj.data.command, files } };
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function extractXmlTag(content: string, tagName: string): string {
+  const startTag = `<${tagName}>`;
+  const endTag = `</${tagName}>`;
+  const startIndex = content.indexOf(startTag);
+  const endIndex = content.indexOf(endTag);
+  if (startIndex === -1 || endIndex === -1) return content;
+  return content.slice(startIndex + startTag.length, endIndex).trim();
+}
+
+function parseDaemonChunk(chunk: string): { kind: string; content?: string; metadata?: any } {
+  if (chunk === "task_completed") return { kind: "task_completed" };
+  if (chunk.startsWith("content:")) {
+    const content = chunk.slice(8);
+    if (content.includes("<thinking>")) {
+      return { kind: "thinking_xml", content: extractXmlTag(content, "thinking") };
+    }
+    return { kind: "content", content };
+  }
+  if (chunk.startsWith("thinking:")) return { kind: "thinking", content: chunk.slice(9) };
+  if (chunk.startsWith("error:")) return { kind: "error", content: chunk.slice(6) };
+  if (chunk.startsWith("status:")) {
+    const msg = chunk.slice(7);
+    if (msg.startsWith("tool_start:")) {
+      const parts = msg.split("|");
+      const toolName = parts[0].replace("tool_start:", "").trim();
+      const contextMsg = parts.slice(1).join("|").trim();
+      return {
+        kind: "tool_start",
+        content: `Running: ${toolName}`,
+        metadata: { toolName, input: contextMsg, phase: "start" }
+      };
+    }
+    if (msg.startsWith("tool_end:")) {
+      const parts = msg.split("|");
+      const toolName = parts[0].replace("tool_end:", "").trim();
+      const duration = parts[1];
+      const status = parts[2];
+      const preview = parts.slice(3).join("|").trim();
+      return {
+        kind: "tool_end",
+        content: `${toolName} ${status} (${duration})`,
+        metadata: { toolName, duration, status, output: preview, phase: "end" }
+      };
+    }
+    if (msg.startsWith("update:")) return { kind: "update", content: msg.slice(7) };
+    return { kind: "status", content: msg };
+  }
+  return { kind: "unknown" };
+}
+
+function parseSessionId(req?: IncomingMessage): string {
+  const url = req?.url || "/";
+  const match = url.match(/\/ws\/terminal\/([^/?#]+)/);
+  if (match && match[1]) return decodeURIComponent(match[1]);
+  const parsed = new URL(url, `http://${HOST}:${wsPort}`);
+  return parsed.searchParams.get("sessionId") || "default-session";
+}
+
 // Connect to daemon WebSocket
 let daemonWs: WebSocket | null = null;
 
@@ -45,14 +163,71 @@ function connectToDaemon() {
       type: "hello",
       client: "web",
       version: "1.0.0"
-    }));
+    } as DaemonClientMessage));
   });
 
   daemonWs.on("message", (data) => {
-    // Broadcast daemon messages to all fieldview clients
+    const msg = JSON.parse(data.toString()) as DaemonServerMessage;
     wss.clients.forEach((client: any) => {
-      if (client.readyState === WebSocket.OPEN) {
-        client.send(data.toString());
+      if (client.readyState !== WebSocket.OPEN) return;
+      const sessionId = client.__sessionId || "default-session";
+
+      if (msg.type === "chunk") {
+        const parsed = parseDaemonChunk(msg.chunk);
+        if (parsed.kind === "content") {
+          sendWebMessage(client, {
+            type: "response",
+            content: parsed.content || "",
+            session_id: sessionId,
+            timestamp: Date.now() / 1000
+          });
+        } else if (parsed.kind === "thinking") {
+          sendWebMessage(client, {
+            type: "thinking",
+            content: parsed.content || "",
+            session_id: sessionId,
+            timestamp: Date.now() / 1000
+          });
+        } else if (parsed.kind === "thinking_xml") {
+          sendWebMessage(client, {
+            type: "thinking_xml",
+            content: parsed.content || "",
+            session_id: sessionId,
+            timestamp: Date.now() / 1000
+          });
+        } else if (parsed.kind === "error") {
+          sendWebMessage(client, {
+            type: "error",
+            content: parsed.content || "",
+            session_id: sessionId,
+            timestamp: Date.now() / 1000
+          });
+        } else if (parsed.kind === "tool_start" || parsed.kind === "tool_end") {
+          sendWebMessage(client, {
+            type: "tool_call",
+            tool_name: parsed.metadata?.toolName || parsed.content || "",
+            content: parsed.content || "",
+            session_id: sessionId,
+            timestamp: Date.now() / 1000,
+            metadata: parsed.metadata
+          });
+        } else if (parsed.kind === "update" || parsed.kind === "status") {
+          sendWebMessage(client, {
+            type: "system",
+            content: parsed.content || "",
+            session_id: sessionId,
+            timestamp: Date.now() / 1000,
+            metadata: parsed.metadata
+          });
+        }
+      }
+
+      if (msg.type === "turn_finished") {
+        sendWebMessage(client, {
+          type: "turn_finished",
+          session_id: sessionId,
+          timestamp: Date.now() / 1000
+        });
       }
     });
   });
@@ -69,13 +244,82 @@ function connectToDaemon() {
 }
 
 // Handle fieldview client connections
-wss.on("connection", (ws: any) => {
+wss.on("connection", (ws: any, req: IncomingMessage) => {
   console.log("FieldView client connected");
+  ws.__sessionId = parseSessionId(req);
+
+  sendWebMessage(ws, {
+    type: "system",
+    content: `Connected to FF-Terminal (TS) session ${ws.__sessionId}`,
+    session_id: ws.__sessionId,
+    timestamp: Date.now() / 1000
+  });
 
   ws.on("message", (data: any) => {
-    // Forward client messages to daemon
-    if (daemonWs && daemonWs.readyState === WebSocket.OPEN) {
-      daemonWs.send(data.toString());
+    const msg = parseWebClientMessage(String(data));
+    if (!msg) {
+      sendWebMessage(ws, {
+        type: "error",
+        content: "Invalid message",
+        session_id: ws.__sessionId,
+        timestamp: Date.now() / 1000
+      });
+      return;
+    }
+
+    if (msg.type === "ping") {
+      sendWebMessage(ws, { type: "pong", session_id: ws.__sessionId, timestamp: Date.now() / 1000 });
+      return;
+    }
+
+    if (msg.type === "command") {
+      const command = msg.data.command.trim();
+      const files = msg.data.files;
+      if (!command && (!files || files.length === 0)) return;
+
+      sendWebMessage(ws, {
+        type: "command_received",
+        content: `Executing: ${command}`,
+        session_id: ws.__sessionId,
+        timestamp: Date.now() / 1000
+      });
+
+      let daemonInput: string | any[];
+
+      if (files && files.length > 0) {
+        const contentBlocks: any[] = [];
+
+        for (const file of files) {
+          if (file.type.startsWith("image/")) {
+            contentBlocks.push({
+              type: "image_url",
+              image_url: { url: file.data }
+            });
+          } else {
+            contentBlocks.push({
+              type: "text",
+              text: `[File attached: ${file.name}]`
+            });
+          }
+        }
+
+        if (command) {
+          contentBlocks.push({ type: "text", text: command });
+        }
+
+        daemonInput = contentBlocks;
+      } else {
+        daemonInput = command;
+      }
+
+      if (daemonWs && daemonWs.readyState === WebSocket.OPEN) {
+        daemonWs.send(JSON.stringify({
+          type: "start_turn",
+          input: daemonInput,
+          sessionId: ws.__sessionId
+        } as DaemonClientMessage));
+      }
+      return;
     }
   });
 

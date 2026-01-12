@@ -28,7 +28,11 @@ export function EmbeddedChat({ layout = 'embedded', sessionId = 'main' }: Embedd
   }>>([])
 
   useEffect(() => {
-    const wsUrl = `ws://localhost:8787/ws/terminal/${sessionId}`
+    const wsProtocol = window.location.protocol === 'https:' ? 'wss' : 'ws'
+    const host = window.location.hostname || 'localhost'
+    const basePort = window.location.port ? Number(window.location.port) : 8788
+    const wsPort = Number.isFinite(basePort) && basePort > 1 ? basePort - 1 : 8787
+    const wsUrl = `${wsProtocol}://${host}:${wsPort}/ws/terminal/${sessionId}`
     
     function connect() {
       const ws = new WebSocket(wsUrl)
