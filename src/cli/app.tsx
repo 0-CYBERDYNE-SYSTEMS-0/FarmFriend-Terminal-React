@@ -275,10 +275,12 @@ const ChatPrompt = memo(function ChatPrompt(props: {
   showToolDetails: boolean;
   thinkingCount: number;
   themeName: ThemeName;
+  displayMode: string;
   ttsEnabled?: boolean;
   currentVoice?: string;
 }) {
   const theme = getTheme(props.themeName);
+  const isCleanMode = props.displayMode === "clean";
 
   const value = useSyncExternalStore(
     (cb) => {
@@ -299,16 +301,126 @@ const ChatPrompt = memo(function ChatPrompt(props: {
     ? (props.ttsEnabled ? `voice:on (${props.currentVoice || "af_heart"})` : "voice:off")
     : "";
 
+  const helpText = isCleanMode
+    ? "Enter to send • Ctrl+C to cancel • Ctrl+E: details • /help"
+    : `Enter to send • Ctrl+C to cancel • Shift+Tab: mode=${props.operationMode} • Ctrl+T: thinking ${thinkingText} • Ctrl+E: tools ${toolsText} • Ctrl+O: agents ${voiceStatus && `• Ctrl+V: ${voiceStatus}`} • /help`;
+
   return (
     <>
       <Text>› {value}</Text>
       <Box gap={1}>
         <Spinner active={props.processing} themeName={props.themeName} />
         <Text color={theme.system}>
-          Enter to send • Ctrl+C to cancel • Shift+Tab: mode={props.operationMode} • Ctrl+T: thinking {thinkingText} • Ctrl+E: tools {toolsText} • Ctrl+O: agents {voiceStatus && `• Ctrl+V: ${voiceStatus}`} • /help
+          {helpText}
         </Text>
       </Box>
     </>
+  );
+});
+
+const getLatestUserGoal = (lines: LineEntry[]): string | null => {
+  for (let i = lines.length - 1; i >= 0; i -= 1) {
+    const line = lines[i];
+    if (line?.kind !== "user") continue;
+    const text = line.text.trim();
+    if (!text) continue;
+    if (text.startsWith("/")) continue;
+    return text;
+  }
+  return null;
+};
+
+const truncateLine = (text: string, maxLength: number, asciiOnly: boolean): string => {
+  if (text.length <= maxLength) return text;
+  const ellipsis = asciiOnly ? "..." : "…";
+  const clipped = Math.max(0, maxLength - ellipsis.length);
+  return text.slice(0, clipped) + ellipsis;
+};
+
+const StreamlinedTodoStatus = memo(function StreamlinedTodoStatus(props: {
+  todos: Todo[];
+  lines: LineEntry[];
+  processing: boolean;
+  stdoutWidth: number;
+  themeName: ThemeName;
+}) {
+  const theme = getTheme(props.themeName);
+  const asciiOnly = process.env.FF_ASCII_ONLY === "1";
+  const symbols = asciiOnly
+    ? { pending: "[ ]", in_progress: "[~]", completed: "[x]" }
+    : { pending: "○", in_progress: "◐", completed: "✓" };
+  const maxLineLength = Math.max(40, Math.min(120, props.stdoutWidth - 4));
+
+  const goal = getLatestUserGoal(props.lines) ?? "Awaiting request";
+  const goalLine = truncateLine(`Goal: ${goal}`, maxLineLength, asciiOnly);
+
+  const priorityOrder = { high: 0, medium: 1, low: 2 };
+  const inProgress = props.todos
+    .filter(t => t.status === "in_progress")
+    .sort((a, b) => priorityOrder[a.priority] - priorityOrder[b.priority]);
+  const pending = props.todos
+    .filter(t => t.status === "pending")
+    .sort((a, b) => priorityOrder[a.priority] - priorityOrder[b.priority]);
+  const completed = props.todos
+    .filter(t => t.status === "completed")
+    .sort((a, b) => priorityOrder[a.priority] - priorityOrder[b.priority]);
+
+  const ordered = [...inProgress, ...pending, ...completed];
+  const MAX_VISIBLE = 5;
+  const visible = ordered.slice(0, MAX_VISIBLE);
+  const hiddenCount = Math.max(0, ordered.length - visible.length);
+
+  let nowDoing = "";
+  if (inProgress[0]) {
+    nowDoing = inProgress[0].activeForm || inProgress[0].content;
+  } else if (props.processing && pending[0]) {
+    nowDoing = pending[0].content;
+  } else if (props.processing) {
+    nowDoing = "Working...";
+  } else if (pending[0]) {
+    nowDoing = `Ready to start: ${pending[0].content}`;
+  } else if (completed.length > 0) {
+    nowDoing = "Done.";
+  } else {
+    nowDoing = "Standing by.";
+  }
+
+  const nowDoingLine = truncateLine(`Now doing: ${nowDoing}`, maxLineLength, asciiOnly);
+
+  return (
+    <Box flexDirection="column" marginY={1}>
+      <Text color={theme.system}>{goalLine}</Text>
+      <Text color={theme.todoSummary}>Checklist</Text>
+      {props.todos.length === 0 ? (
+        <Text color={theme.todoPending} dimColor>
+          {asciiOnly ? "-" : "—"} No tasks yet
+        </Text>
+      ) : (
+        <>
+          {visible.map((t) => {
+            const label = t.status === "in_progress" ? t.activeForm : t.content;
+            const line = `${symbols[t.status]} ${label}`;
+            const color =
+              t.status === "completed"
+                ? theme.todoCompleted
+                : t.status === "in_progress"
+                  ? theme.todoInProgress
+                  : theme.todoPending;
+            return (
+              <Text key={t.id} color={color}>
+                {truncateLine(line, maxLineLength, asciiOnly)}
+              </Text>
+            );
+          })}
+          {hiddenCount > 0 ? (
+            <Text color={theme.todoPending} dimColor>
+              {asciiOnly ? "..." : "…"} +{hiddenCount} more
+            </Text>
+          ) : null}
+        </>
+      )}
+      <Text color={theme.system}>{nowDoingLine}</Text>
+    </Box>
   );
 });
 
@@ -601,15 +713,22 @@ const Transcript = memo(function Transcript(props: {
   scrollOffset: number;
   visibleCount: number;
   themeName: ThemeName;
+  displayMode: string;
 }) {
   const theme = getTheme(props.themeName);
 
   // OPTIMIZE 1: Memoize filtering
   const filteredLines = useMemo(() => {
-    return props.showThinking
+    let next = props.showThinking
       ? props.lines
       : props.lines.filter(l => l.kind !== "thinking");
-  }, [props.lines, props.showThinking]);
+
+    if (props.displayMode === "clean" && !props.showToolDetails) {
+      next = next.filter(l => l.kind === "user" || l.kind === "assistant" || l.kind === "error");
+    }
+
+    return next;
+  }, [props.lines, props.showThinking, props.displayMode, props.showToolDetails]);
 
   // OPTIMIZE 2: Memoize rendered lines (tool grouping)
   const rendered = useMemo((): LineEntry[] => {
@@ -1823,7 +1942,10 @@ function App(props: { port: number }) {
   const [currentModel, setCurrentModel] = useState<string | null>(null);
   const [currentTodos, setCurrentTodos] = useState<Todo[]>([]);
   const [runningSubagents, setRunningSubagents] = useState<Map<string, SubagentState>>(new Map());
-  const [subagentsExpanded, setSubagentsExpanded] = useState(true);
+  const [subagentsExpanded, setSubagentsExpanded] = useState(() => {
+    const mode = String(process.env.FF_DISPLAY_MODE || "clean").trim().toLowerCase();
+    return mode !== "clean";
+  });
   const subagentCounterRef = useRef(1);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [turnId, setTurnId] = useState<string | null>(null);
@@ -1889,7 +2011,10 @@ function App(props: { port: number }) {
   const [commandSkippedFields, setCommandSkippedFields] = useState<Set<string>>(new Set());
   const [commandEditValue, setCommandEditValue] = useState("");
 
-  const [showThinking, setShowThinking] = useState(true);
+  const [showThinking, setShowThinking] = useState(() => {
+    const mode = String(process.env.FF_DISPLAY_MODE || "clean").trim().toLowerCase();
+    return mode !== "clean";
+  });
   const [showPlanPanel, setShowPlanPanel] = useState(false);
   const [showToolDetails, setShowToolDetails] = useState(false);
   const [scrollOffset, setScrollOffset] = useState(0);
@@ -4268,11 +4393,14 @@ Use skill_draft first to create the draft, then skill_apply to create the final 
   });
 
   const isChatMode = mode === "chat";
+  const isCleanMode = displayMode === "clean";
   const transcriptVisibleCount = useMemo(() => {
     if (isChatMode) return transcriptHeight;
     const reduced = Math.floor(transcriptHeight / 4);
     return Math.max(4, Math.min(10, reduced));
   }, [isChatMode, transcriptHeight]);
+  const showTranscript = !isChatMode || !isCleanMode || showToolDetails || showThinking || lines.length > 0;
+  const showSubagents = isChatMode && runningSubagents.size > 0 && (!isCleanMode || subagentsExpanded);
 
   return (
     <Box flexDirection="column" gap={1}>
@@ -4332,18 +4460,30 @@ Use skill_draft first to create the draft, then skill_apply to create the final 
           themeName={themeName}
         />
       ) : null}
-      <Transcript
-        lines={lines}
-        showThinking={showThinking}
-        showToolDetails={showToolDetails}
-        scrollOffset={scrollOffset}
-        visibleCount={transcriptVisibleCount}
-        themeName={themeName}
-      />
-      {isChatMode && currentTodos.length > 0 ? (
+      {isChatMode && isCleanMode ? (
+        <StreamlinedTodoStatus
+          todos={currentTodos}
+          lines={lines}
+          processing={processing}
+          stdoutWidth={stdoutWidth}
+          themeName={themeName}
+        />
+      ) : null}
+      {showTranscript ? (
+        <Transcript
+          lines={lines}
+          showThinking={showThinking}
+          showToolDetails={showToolDetails}
+          scrollOffset={scrollOffset}
+          visibleCount={transcriptVisibleCount}
+          themeName={themeName}
+          displayMode={displayMode}
+        />
+      ) : null}
+      {isChatMode && !isCleanMode && currentTodos.length > 0 ? (
         <InlineTodoStatus todos={currentTodos} themeName={themeName} />
       ) : null}
-      {isChatMode && runningSubagents.size > 0 ? (
+      {showSubagents ? (
         <SubagentSwarm
           agents={Array.from(runningSubagents.values())}
           expanded={subagentsExpanded}
@@ -4359,6 +4499,7 @@ Use skill_draft first to create the draft, then skill_apply to create the final 
           showToolDetails={showToolDetails}
           thinkingCount={lines.filter(l => l.kind === "thinking").length}
           themeName={themeName}
+          displayMode={displayMode}
           ttsEnabled={ttsEnabled}
           currentVoice={currentVoice}
         />
