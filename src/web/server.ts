@@ -5,9 +5,11 @@ import fs from "node:fs";
 import type { Socket } from "node:net";
 import path from "node:path";
 import os from "node:os";
+import { execFile } from "node:child_process";
 import Busboy from "busboy";
 
 import { findRepoRoot } from "../runtime/config/repoRoot.js";
+import { resolveWorkspaceDir } from "../runtime/config/paths.js";
 
 // File attachment from web client
 type FileAttachment = {
@@ -53,6 +55,13 @@ type DaemonServerMessage =
 
 const DAEMON_PORT = Number(process.env.FF_TERMINAL_PORT || 28888);
 const WEB_PORT = Number(process.env.FF_WEB_PORT || 8787);
+const FIELDVIEW_AUTO_OPEN = process.env.FF_FIELDVIEW_AUTO_OPEN === "1";
+const FIELDVIEW_PORT = Number(process.env.FF_FIELDVIEW_PORT || 8788);
+
+const statusState = {
+  lastTurnAt: 0,
+  lastErrorAt: 0
+};
 
 // File upload configuration
 const MAX_FILE_SIZE = 25 * 1024 * 1024; // 25MB
@@ -257,8 +266,96 @@ function sendWebMessage(ws: WebSocket, msg: WebServerMessage): void {
   ws.send(JSON.stringify(msg));
 }
 
+function extractHtmlArtifacts(content: string): string[] {
+  const results: string[] = [];
+  const re = /```html\n([\s\S]*?)\n```/g;
+  for (const match of content.matchAll(re)) {
+    results.push(match[1] || "");
+  }
+  return results;
+}
+
+function writeArtifactFile(content: string, sessionId: string, repoRoot: string): string {
+  const workspaceRoot = resolveWorkspaceDir(process.env.FF_WORKSPACE_DIR, { repoRoot });
+  const artifactsDir = path.join(workspaceRoot, "artifacts");
+  fs.mkdirSync(artifactsDir, { recursive: true });
+  const safeSession = sessionId.replace(/[^a-zA-Z0-9_-]/g, "_");
+  const filePath = path.join(artifactsDir, `artifact-${safeSession}-${Date.now()}.html`);
+  fs.writeFileSync(filePath, content, "utf8");
+  return filePath;
+}
+
+function getArtifactStats(repoRoot: string): { count: number; latest_mtime_ms: number } {
+  const workspaceRoot = resolveWorkspaceDir(process.env.FF_WORKSPACE_DIR, { repoRoot });
+  const artifactsDir = path.join(workspaceRoot, "artifacts");
+  if (!fs.existsSync(artifactsDir)) return { count: 0, latest_mtime_ms: 0 };
+  const entries = fs.readdirSync(artifactsDir);
+  let latest = 0;
+  let count = 0;
+  for (const entry of entries) {
+    if (!entry.endsWith(".html")) continue;
+    count += 1;
+    const full = path.join(artifactsDir, entry);
+    try {
+      const stat = fs.statSync(full);
+      latest = Math.max(latest, stat.mtimeMs);
+    } catch {
+      // ignore
+    }
+  }
+  return { count, latest_mtime_ms: latest };
+}
+
+function getSchedulerStatus(repoRoot: string): { active: boolean; age_ms: number } {
+  const workspaceRoot = resolveWorkspaceDir(process.env.FF_WORKSPACE_DIR, { repoRoot });
+  const lockPath = path.join(workspaceRoot, "memory_core", "scheduled_tasks", "scheduler.lock");
+  if (!fs.existsSync(lockPath)) return { active: false, age_ms: 0 };
+  try {
+    const stat = fs.statSync(lockPath);
+    return { active: true, age_ms: Math.max(0, Date.now() - stat.mtimeMs) };
+  } catch {
+    return { active: false, age_ms: 0 };
+  }
+}
+
+function openArtifactInSafariSplit(filePath: string, fieldUrl: string, repoRoot: string): void {
+  if (process.platform !== "darwin") return;
+  const fileUrl = pathToFileURL(filePath).toString();
+  const workspaceRoot = resolveWorkspaceDir(process.env.FF_WORKSPACE_DIR, { repoRoot });
+  const scriptPath = path.join(workspaceRoot, "artifacts", "fieldview_open_artifact.scpt");
+  const script = [
+    'set fieldUrl to "' + fieldUrl + '"',
+    'set artifactUrl to "' + fileUrl + '"',
+    'tell application "Safari"',
+    "activate",
+    "if (count of windows) = 0 then make new document",
+    "set fieldWindow to window 1",
+    "set URL of current tab of fieldWindow to fieldUrl",
+    "set artWindow to make new document with properties {URL: artifactUrl}",
+    "end tell",
+    'tell application "Finder" to set screenBounds to bounds of window of desktop',
+    "set screenWidth to item 3 of screenBounds",
+    "set screenHeight to item 4 of screenBounds",
+    "set halfWidth to screenWidth / 2",
+    'tell application "Safari"',
+    "set bounds of fieldWindow to {0, 0, halfWidth, screenHeight}",
+    "set bounds of artWindow to {halfWidth, 0, screenWidth, screenHeight}",
+    "end tell"
+  ].join("\n");
+  fs.mkdirSync(path.dirname(scriptPath), { recursive: true });
+  fs.writeFileSync(scriptPath, script, "utf8");
+  const escaped = scriptPath.replace(/'/g, "'\\''");
+  execFile("/bin/bash", ["-lc", `osascript '${escaped}'`], (err) => {
+    if (err) {
+      // eslint-disable-next-line no-console
+      console.error("FieldView auto-open failed:", err.message);
+    }
+  });
+}
+
 // Daemon connection pool - reuse connections per session
 const daemonConnections = new Map<string, WebSocket>();
+const turnBuffers = new Map<string, { turnId: string; content: string }>();
 
 function getDaemonConnection(sessionId: string): Promise<WebSocket> {
   return new Promise((resolve, reject) => {
@@ -316,6 +413,31 @@ export async function startWebServer(): Promise<void> {
     if (req.url === "/health") {
       res.writeHead(200, { "content-type": "application/json" });
       res.end(JSON.stringify({ ok: true }) + "\n");
+      return;
+    }
+
+    if (req.url === "/fieldview/status") {
+      const artifactStats = getArtifactStats(repoRoot);
+      const scheduler = getSchedulerStatus(repoRoot);
+      const daemonConnectionsCount = Array.from(daemonConnections.values()).filter((ws) => ws.readyState === WebSocket.OPEN).length;
+      const body = {
+        ok: true,
+        timestamp: Date.now(),
+        daemon_connected: daemonConnectionsCount > 0,
+        daemon_connections: daemonConnectionsCount,
+        ws_clients: wss.clients.size,
+        last_turn_at: statusState.lastTurnAt,
+        last_error_at: statusState.lastErrorAt,
+        artifacts_count: artifactStats.count,
+        artifacts_latest: artifactStats.latest_mtime_ms,
+        scheduler_lock_active: scheduler.active,
+        scheduler_lock_age_ms: scheduler.age_ms
+      };
+      res.writeHead(200, {
+        "content-type": "application/json",
+        "access-control-allow-origin": "*"
+      });
+      res.end(JSON.stringify(body) + "\n");
       return;
     }
 
@@ -443,6 +565,7 @@ export async function startWebServer(): Promise<void> {
 
         if (msg.type === "turn_started") {
           currentTurnId = msg.turnId;
+          turnBuffers.set(sessionId, { turnId: msg.turnId, content: "" });
           return;
         }
 
@@ -450,6 +573,11 @@ export async function startWebServer(): Promise<void> {
           const parsed = parseDaemonChunk(msg.chunk);
 
           if (parsed.kind === "content") {
+            const buffer = turnBuffers.get(sessionId);
+            if (buffer && buffer.turnId === msg.turnId) {
+              buffer.content += parsed.content || "";
+              turnBuffers.set(sessionId, buffer);
+            }
             sendWebMessage(webWs, {
               type: "response",
               content: parsed.content || "",
@@ -471,6 +599,7 @@ export async function startWebServer(): Promise<void> {
               timestamp: Date.now() / 1000
             });
           } else if (parsed.kind === "error") {
+            statusState.lastErrorAt = Date.now();
             sendWebMessage(webWs, {
               type: "error",
               content: parsed.content || "",
@@ -517,6 +646,19 @@ export async function startWebServer(): Promise<void> {
 
         if (msg.type === "turn_finished") {
           currentTurnId = null;
+          statusState.lastTurnAt = Date.now();
+          if (FIELDVIEW_AUTO_OPEN) {
+            const buffer = turnBuffers.get(sessionId);
+            if (buffer && buffer.turnId === msg.turnId) {
+              const htmlArtifacts = extractHtmlArtifacts(buffer.content);
+              if (htmlArtifacts.length > 0) {
+                const filePath = writeArtifactFile(htmlArtifacts[htmlArtifacts.length - 1], sessionId, repoRoot);
+                const fieldUrl = `http://127.0.0.1:${FIELDVIEW_PORT}`;
+                openArtifactInSafariSplit(filePath, fieldUrl, repoRoot);
+              }
+            }
+          }
+          turnBuffers.delete(sessionId);
           // Forward to web client to signal completion
           sendWebMessage(webWs, {
             type: "turn_finished",

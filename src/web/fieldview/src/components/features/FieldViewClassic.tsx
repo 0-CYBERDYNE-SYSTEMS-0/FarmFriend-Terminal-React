@@ -34,6 +34,13 @@ export function FieldViewClassic({
   onModeChange,
 }: FieldViewClassicProps) {
   const { data, loading, channels, healthyCount, unhealthy, statusPills } = shared
+  const status = data?.status || {}
+  const lastTurnAt = status.last_turn_at ? new Date(status.last_turn_at).toLocaleString() : 'No turns yet'
+  const lastArtifactAt = status.artifacts_latest ? new Date(status.artifacts_latest).toLocaleString() : 'None'
+  const schedulerActive = status.scheduler_lock_active ? 'Active' : 'Idle'
+  const schedulerAge = status.scheduler_lock_age_ms
+    ? `${Math.round(status.scheduler_lock_age_ms / 1000)}s ago`
+    : 'N/A'
 
   return (
     <div className="min-h-screen fieldview-shell text-slate-900">
@@ -50,6 +57,7 @@ export function FieldViewClassic({
             className="px-3 py-2 rounded-lg border border-emerald-200 bg-white text-sm"
           >
             <option value="classic">Classic</option>
+            <option value="command">Command</option>
             <option value="mission">Mission</option>
             <option value="guided">Guided</option>
           </select>
@@ -90,7 +98,7 @@ export function FieldViewClassic({
                 <span className="text-xs text-emerald-700">{new Date().toLocaleDateString()}</span>
               </div>
               <p className="mt-2 text-sm text-emerald-900/80">
-                Start with what matters: check connectivity, review tasks, then send daily update to your team.
+                Last agent turn: {lastTurnAt}. FieldView is tracking live sockets and artifacts.
               </p>
               <div className="mt-4 flex flex-wrap gap-2">
                 <button className="px-3 py-1.5 rounded-full bg-amber-200 text-amber-900 text-xs font-semibold">
@@ -112,9 +120,9 @@ export function FieldViewClassic({
                 {!loading && (
                   <div className="mt-2 space-y-1 text-sm text-emerald-900/80">
                     <p>
-                      {healthyCount}/{channels.length || 0} channels healthy
+                      {healthyCount}/{channels.length || 0} sockets connected
                     </p>
-                    {channels.length === 0 && <p className="text-emerald-700">No channels configured yet.</p>}
+                    {channels.length === 0 && <p className="text-emerald-700">No active WebSocket clients.</p>}
                     {unhealthy.length > 0 && (
                       <ul className="text-xs text-rose-600 list-disc ml-4">
                         {unhealthy.map((channel: any) => (
@@ -128,24 +136,24 @@ export function FieldViewClassic({
               <div className="field-card">
                 <h3 className="text-sm font-semibold text-emerald-900">Automation</h3>
                 <div className="mt-2 text-sm text-emerald-900/80">
-                  <p>Scheduled tasks: {data?.scheduler?.enabled_count ?? 0}</p>
-                  <p className="text-xs text-emerald-700 mt-1">Next run: {data?.scheduler?.next_run_at ? new Date(data.scheduler.next_run_at).toLocaleString() : 'Not scheduled'}</p>
+                  <p>Scheduler daemon: {schedulerActive}</p>
+                  <p className="text-xs text-emerald-700 mt-1">Last lock update: {schedulerAge}</p>
                 </div>
               </div>
               <div className="field-card">
-                <h3 className="text-sm font-semibold text-emerald-900">Workspace readiness</h3>
+                <h3 className="text-sm font-semibold text-emerald-900">Artifacts cache</h3>
                 <div className="mt-2 text-sm text-emerald-900/80">
-                  <p>{shared.contractCoverage}% of contract files present</p>
-                  <p className="text-xs text-emerald-700 mt-1">
-                    Operator notes and memory stay consistent.
-                  </p>
+                  <p>{status.artifacts_count ?? 0} HTML artifacts saved</p>
+                  <p className="text-xs text-emerald-700 mt-1">Last artifact: {lastArtifactAt}</p>
                 </div>
               </div>
               <div className="field-card">
                 <h3 className="text-sm font-semibold text-emerald-900">Health alerts</h3>
                 <div className="mt-2 text-sm text-emerald-900/80">
-                  <p>{data?.health?.issues?.length ? `${data?.health?.issues?.length} items need review` : 'All systems normal.'}</p>
-                  <p className="text-xs text-emerald-700 mt-1">Watch for connectivity drops.</p>
+                  <p>{unhealthy.length ? `${unhealthy.length} items need review` : 'All systems normal.'}</p>
+                  <p className="text-xs text-emerald-700 mt-1">
+                    Last error: {status.last_error_at ? new Date(status.last_error_at).toLocaleString() : 'None'}
+                  </p>
                 </div>
               </div>
             </div>
