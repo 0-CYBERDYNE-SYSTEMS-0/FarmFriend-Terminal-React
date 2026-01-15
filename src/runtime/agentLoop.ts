@@ -610,6 +610,17 @@ export async function* runAgentTurn(params: {
   let consecutiveNoAction = 0;
   const forceToolCalls = (cfg as any).force_tool_calls ?? true;
 
+  const maybeClearBootstrap = () => {
+    if (!bootstrapActive) return;
+    try {
+      const bootstrapPath = path.join(workspaceDir, "BOOTSTRAP.md");
+      fs.writeFileSync(bootstrapPath, "", "utf8");
+      logger.log("info", "bootstrap_cleared", { session_id: sessionId, turn_id: turnId });
+    } catch {
+      // If we fail to clear bootstrap, keep going to avoid blocking the turn.
+    }
+  };
+
   // Circuit breaker: Track consecutive failures per tool to prevent infinite loops
   const consecutiveToolFailures = new Map<string, number>();
   // Increased threshold to 5 to accommodate imperfect models (e.g., GLM-4.7)
@@ -668,6 +679,8 @@ export async function* runAgentTurn(params: {
       let emittedAnyContent = false;
       let emittedAnyThinking = false;
       let sawAwaitingInput = false;
+      let providerErrorMessage: string | null = null;
+      let retriedWithoutTools = false;
 
       const shouldForceTools = forceToolCalls && consecutiveNoAction >= 2;
 
@@ -694,58 +707,89 @@ export async function* runAgentTurn(params: {
         });
       }
 
-      for await (const ev of provider.streamChat({
-        model,
-        messages: pruning.messages,
-        tools,
-        tool_choice: forceToolChoice,
-        temperature: Number((cfg as any).temperature ?? 0.7),
-        maxTokens: Number((cfg as any).max_tokens ?? 12000),
-        glmThinkingMode,
-        signal,
-        sessionId
-      })) {
-        if (ev.type === "content") {
-          if (ev.delta.includes("[AWAITING_INPUT]")) sawAwaitingInput = true;
-          // Hide stop token from UI if it appears.
-          const cleaned = ev.delta.replace("[AWAITING_INPUT]", "");
-          if (cleaned) {
-            emittedAnyContent = true;
-            yield { kind: "content", delta: cleaned };
-            logger.log("debug", "assistant_delta", {
+      const isToolSchemaError = (message: string) =>
+        /invalid schema for function|invalid_function_parameters/i.test(message);
+
+      let toolsForAttempt = tools;
+      do {
+        providerErrorMessage = null;
+        toolCalls = [];
+        assistantContent = "";
+        emittedAnyContent = false;
+        emittedAnyThinking = false;
+        sawAwaitingInput = false;
+
+        for await (const ev of provider.streamChat({
+          model,
+          messages: pruning.messages,
+          tools: toolsForAttempt,
+          tool_choice: forceToolChoice,
+          temperature: Number((cfg as any).temperature ?? 0.7),
+          maxTokens: Number((cfg as any).max_tokens ?? 12000),
+          glmThinkingMode,
+          signal,
+          sessionId
+        })) {
+          if (ev.type === "content") {
+            if (ev.delta.includes("[AWAITING_INPUT]")) sawAwaitingInput = true;
+            // Hide stop token from UI if it appears.
+            const cleaned = ev.delta.replace("[AWAITING_INPUT]", "");
+            if (cleaned) {
+              emittedAnyContent = true;
+              yield { kind: "content", delta: cleaned };
+              logger.log("debug", "assistant_delta", {
+                session_id: sessionId,
+                turn_id: turnId,
+                iteration: i + 1,
+                delta_preview: truncateForLog(cleaned, 400)
+              });
+            }
+          } else if (ev.type === "thinking") {
+            emittedAnyThinking = true;
+            yield { kind: "thinking", delta: ev.delta };
+          } else if (ev.type === "status") {
+            yield { kind: "status", message: ev.message };
+            logger.log("info", "provider_status", {
               session_id: sessionId,
               turn_id: turnId,
               iteration: i + 1,
-              delta_preview: truncateForLog(cleaned, 400)
+              message: ev.message
             });
+          } else if (ev.type === "error") {
+            providerErrorMessage = ev.message;
+            yield { kind: "error", message: ev.message };
+            logger.log("error", "provider_error", {
+              session_id: sessionId,
+              turn_id: turnId,
+              iteration: i + 1,
+              message: ev.message
+            });
+            break;
+          } else if (ev.type === "final") {
+            if (ev.content.includes("[AWAITING_INPUT]")) sawAwaitingInput = true;
+            assistantContent = ev.content.replace("[AWAITING_INPUT]", "");
+            toolCalls = ev.toolCalls;
           }
-        } else if (ev.type === "thinking") {
-          emittedAnyThinking = true;
-          yield { kind: "thinking", delta: ev.delta };
-        } else if (ev.type === "status") {
-          yield { kind: "status", message: ev.message };
-          logger.log("info", "provider_status", {
-            session_id: sessionId,
-            turn_id: turnId,
-            iteration: i + 1,
-            message: ev.message
-          });
-        } else if (ev.type === "error") {
-          yield { kind: "error", message: ev.message };
-          logger.log("error", "provider_error", {
-            session_id: sessionId,
-            turn_id: turnId,
-            iteration: i + 1,
-            message: ev.message
-          });
-          // Provider error is terminal - stop processing this iteration
-          break;
-        } else if (ev.type === "final") {
-          if (ev.content.includes("[AWAITING_INPUT]")) sawAwaitingInput = true;
-          assistantContent = ev.content.replace("[AWAITING_INPUT]", "");
-          toolCalls = ev.toolCalls;
         }
-      }
+
+        if (
+          providerErrorMessage &&
+          toolsForAttempt?.length &&
+          !retriedWithoutTools &&
+          isToolSchemaError(providerErrorMessage)
+        ) {
+          retriedWithoutTools = true;
+          toolsForAttempt = [];
+          logger.log("info", "provider_retry_no_tools", {
+            session_id: sessionId,
+            turn_id: turnId,
+            iteration: i + 1,
+            message: "Retrying provider request without tools due to tool schema error."
+          });
+          continue;
+        }
+        break;
+      } while (true);
 
     // Some gateways do not stream deltas; ensure final content is displayed at least once.
     if (!emittedAnyContent && assistantContent) {
@@ -761,6 +805,10 @@ export async function* runAgentTurn(params: {
       tool_calls_count: toolCalls.length,
       awaiting_input_seen: sawAwaitingInput
     });
+
+    if (assistantContent && assistantContent.trim()) {
+      maybeClearBootstrap();
+    }
 
     // Thought loop detection: Check if agent is repeating same thinking pattern
     if (assistantContent && assistantContent.length > 10) {

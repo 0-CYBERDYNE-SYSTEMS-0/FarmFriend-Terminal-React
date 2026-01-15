@@ -17,6 +17,7 @@ import { listSessionIndex, upsertSessionIndexEntry } from "../runtime/session/se
 import { loadTaskStore } from "../runtime/scheduling/taskStore.js";
 import { quickHealthCheck } from "../runtime/workspace/healthCheck.js";
 import { listSkillStubs } from "../runtime/tools/implementations/skills.js";
+import { callGateway } from "../gateway/call.js";
 
 // File attachment from web client
 type FileAttachment = {
@@ -188,6 +189,16 @@ function readJsonFileSafe(p: string): any | null {
     return JSON.parse(raw);
   } catch {
     return null;
+  }
+}
+
+async function fetchGatewayStatus(workspaceDir: string): Promise<any | null> {
+  try {
+    const result = await callGateway({ method: "status" });
+    return result;
+  } catch {
+    const statusPath = path.join(workspaceDir, "logs", "gateway", "status.json");
+    return readJsonFileSafe(statusPath);
   }
 }
 
@@ -613,8 +624,7 @@ export async function startWebServer(): Promise<void> {
 
     if (req.method === "GET" && url.pathname === "/api/control/overview") {
       try {
-        const statusPath = path.join(workspaceDir, "logs", "gateway", "status.json");
-        const gatewayStatus = readJsonFileSafe(statusPath);
+        const gatewayStatus = await fetchGatewayStatus(workspaceDir);
         const store = loadTaskStore(workspaceDir);
         const healthIssues = await quickHealthCheck(workspaceDir);
         const contract = {
@@ -661,13 +671,12 @@ export async function startWebServer(): Promise<void> {
 
     if (req.method === "GET" && (url.pathname === "/api/gateway/status" || url.pathname === "/api/control/gateway/status")) {
       try {
-        const statusPath = path.join(workspaceDir, "logs", "gateway", "status.json");
-        if (!fs.existsSync(statusPath)) {
+        const gatewayStatus = await fetchGatewayStatus(workspaceDir);
+        if (!gatewayStatus) {
           sendJson(res, 404, { error: "Gateway status not available" });
           return;
         }
-        res.writeHead(200, { "content-type": "application/json" });
-        res.end(fs.readFileSync(statusPath, "utf8"));
+        sendJson(res, 200, gatewayStatus);
       } catch (err) {
         sendJson(res, 500, { error: err instanceof Error ? err.message : String(err) });
       }
@@ -743,9 +752,14 @@ export async function startWebServer(): Promise<void> {
 
     if (req.method === "GET" && url.pathname === "/api/control/logs/gateway") {
       const limit = Math.min(500, Math.max(10, Number(url.searchParams.get("limit") || 120)));
-      const eventsPath = path.join(workspaceDir, "logs", "gateway", "events.jsonl");
-      const events = tailJsonLines(eventsPath, limit);
-      sendJson(res, 200, { path: eventsPath, events });
+      try {
+        const result = await callGateway({ method: "logs.tail", params: { target: "gateway", limit } });
+        sendJson(res, 200, result);
+      } catch {
+        const eventsPath = path.join(workspaceDir, "logs", "gateway", "events.jsonl");
+        const events = tailJsonLines(eventsPath, limit);
+        sendJson(res, 200, { path: eventsPath, events });
+      }
       return;
     }
 

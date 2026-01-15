@@ -11,6 +11,7 @@
   "scripts": {
     "dev": "tsx src/bin/ff-terminal.ts",
     "dev:daemon": "tsx src/daemon/daemon.ts",
+    "dev:gateway": "tsx src/bin/ff-terminal.ts gateway serve",
     "dev:cli": "tsx src/cli/app.tsx",
     "dev:web": "tsx src/web/server.ts",
     "dev:run": "tsx src/bin/ff-terminal.ts run --prompt \"Hello\"",
@@ -24,12 +25,16 @@
     "test:ui": "vitest --ui",
     "test:coverage": "vitest --coverage",
     "start:daemon": "node dist/daemon/daemon.js",
+    "start:full": "node dist/bin/ff-terminal.js gateway serve & node dist/daemon/daemon.js & node dist/web/server.js",
+    "start:gateway": "node dist/bin/ff-terminal.js gateway serve",
     "start:cli": "node dist/cli/app.js",
     "start:web": "node dist/web/server.js"
   },
   "dependencies": {
     "@ast-grep/cli": "^0.40.1",
+    "@sinclair/typebox": "^0.34.47",
     "@whiskeysockets/baileys": "^6.7.9",
+    "ajv": "^8.17.1",
     "busboy": "^1.6.0",
     "ink": "^5.0.0",
     "inquirer": "^9.2.12",

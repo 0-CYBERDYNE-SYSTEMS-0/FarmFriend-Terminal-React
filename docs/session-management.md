@@ -47,13 +47,13 @@ You can choose how inbound channels map to session keys:
 
 - `main`: all chats map to the main session (default)
 - `per-sender`: each sender/group gets its own session key
-- `clawdbot`: direct chats map to `main`, groups/channels get isolated keys
+- `bridge`: direct chats map to `main`, groups/channels get isolated keys
 
 Example:
 
 ```json
 {
-  "session": { "scope": "clawdbot" }
+  "session": { "scope": "bridge" }
 }
 ```
 

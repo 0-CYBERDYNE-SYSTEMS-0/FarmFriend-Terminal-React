@@ -366,4 +366,4 @@ Potential improvements:
 
 Built with:
 - [Baileys](https://github.com/WhiskeySockets/Baileys) - WhatsApp Web API
-- Inspired by [ClawdBot](https://github.com/clawdbot/clawdbot)
+- Inspired by earlier gateway-first bot designs

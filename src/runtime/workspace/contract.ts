@@ -73,6 +73,15 @@ Long-term facts, preferences, and decisions live here.
   "LOG.md": `# FarmFriend Terminal - Log
 
 Chronological record of notable actions.
+`,
+  "HEARTBEAT.md": `# FarmFriend Terminal - Heartbeat
+
+Optional checklist or reminders for periodic check-ins.
+
+Keep this tiny to avoid prompt bloat. Examples:
+- Check for urgent follow-ups
+- Review scheduled tasks
+- Update memory with recent learnings
 `
 };
 
@@ -150,6 +159,7 @@ export type WorkspaceContractSnapshot = {
   plan?: string;
   tasks?: string;
   log?: string;
+  heartbeat?: string;
 };
 
 export function loadWorkspaceContractSnapshot(workspaceDir: string, maxChars = 6000): WorkspaceContractSnapshot {
@@ -171,7 +181,8 @@ export function loadWorkspaceContractSnapshot(workspaceDir: string, maxChars = 6
     identity: read("IDENTITY.md", Math.floor(maxChars / 6)),
     plan: read("PLAN.md", Math.floor(maxChars / 6)),
     tasks: read("TASKS.md", Math.floor(maxChars / 6)),
-    log: read("LOG.md", Math.floor(maxChars / 10), true)
+    log: read("LOG.md", Math.floor(maxChars / 10), true),
+    heartbeat: read("HEARTBEAT.md", Math.floor(maxChars / 10))
   };
 }
 
@@ -185,7 +196,8 @@ export function formatWorkspaceContractForPrompt(snapshot: WorkspaceContractSnap
     ["IDENTITY.md", snapshot.identity],
     ["PLAN.md", snapshot.plan],
     ["TASKS.md", snapshot.tasks],
-    ["LOG.md (latest)", snapshot.log]
+    ["LOG.md (latest)", snapshot.log],
+    ["HEARTBEAT.md", snapshot.heartbeat]
   ];
 
   const lines: string[] = [];

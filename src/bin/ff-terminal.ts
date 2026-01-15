@@ -31,6 +31,8 @@ import { runAutonomyWizard } from "../runtime/autonomy/wizard.js";
 import { computeNextRunAt, runSchedulerLoop } from "../runtime/scheduling/scheduler.js";
 import { deliverTaskResult } from "../runtime/scheduling/delivery.js";
 import { DateTime } from "luxon";
+import { runGatewayServer } from "../gateway/server.js";
+import { callGateway } from "../gateway/call.js";
 
 function usage(): void {
   // eslint-disable-next-line no-console
@@ -44,7 +46,10 @@ function usage(): void {
   ff-terminal web
   ff-terminal acp [--profile <name>]
   ff-terminal scheduler [--once] [--poll-interval <ms>] [--headless]
+  ff-terminal gateway serve [--port <n>] [--bind <ip>]
   ff-terminal gateway status [--json]
+  ff-terminal gateway health [--json]
+  ff-terminal gateway call <method> [--params <json>] [--json] [--url <ws-url>] [--token <token>] [--password <password>]
   ff-terminal run --prompt "..." [--profile <name>] [--session <id>] [--headless]
   ff-terminal run --scheduled-task <id-or-name> [--profile <name>] [--session <id>] --headless
   ff-terminal autonomy [--profile <name>] --prompt-file <path> [--tasks-file <path>] [--completion-promise <text>]
@@ -667,40 +672,90 @@ async function run(): Promise<void> {
     );
     ensureCanonicalStructure(workspaceDir);
     const subcommand = rest[0] || "status";
-    if (subcommand !== "status") {
-      console.error(`Unknown gateway command: ${subcommand}`);
-      console.log("Usage: ff-terminal gateway status [--json]");
-      process.exit(1);
-    }
-    const statusPath = path.join(workspaceDir, "logs", "gateway", "status.json");
-    if (!fs.existsSync(statusPath)) {
-      console.log("Gateway status not found yet. Start the daemon to initialize.");
+
+    if (subcommand === "serve") {
+      const portRaw = pickArg(rest, "--port");
+      const bind = pickArg(rest, "--bind") || undefined;
+      const port = portRaw ? Number(portRaw) : undefined;
+      await runGatewayServer({ repoRoot, workspaceDir, port, bind: bind ?? undefined });
       return;
     }
-    const raw = fs.readFileSync(statusPath, "utf8");
-    if (hasFlag(rest, "--json")) {
-      console.log(raw.trim());
+
+    if (subcommand === "call") {
+      const method = rest[1];
+      if (!method) {
+        console.error("Missing gateway method name.");
+        process.exit(1);
+      }
+      const paramsRaw = pickArg(rest, "--params") || "{}";
+      let params: unknown = {};
+      try {
+        params = JSON.parse(paramsRaw);
+      } catch (err) {
+        console.error(`Invalid --params JSON: ${String(err)}`);
+        process.exit(1);
+      }
+      const url = pickArg(rest, "--url") || undefined;
+      const token = pickArg(rest, "--token") || undefined;
+      const password = pickArg(rest, "--password") || undefined;
+      const result = await callGateway({ method, params, url, token, password });
+      if (hasFlag(rest, "--json")) {
+        console.log(JSON.stringify(result, null, 2));
+      } else {
+        console.log(JSON.stringify(result, null, 2));
+      }
       return;
     }
-    try {
-      const parsed = JSON.parse(raw);
-      console.log("Gateway Status:");
-      console.log(`- Workspace: ${parsed.workspace_dir}`);
-      console.log(`- Timestamp: ${parsed.timestamp}`);
-      const channels = Array.isArray(parsed.channels) ? parsed.channels : [];
-      if (!channels.length) {
-        console.log("- No channels registered");
+
+    if (subcommand === "health" || subcommand === "status") {
+      const method = subcommand === "health" ? "health" : "status";
+      const url = pickArg(rest, "--url") || undefined;
+      const token = pickArg(rest, "--token") || undefined;
+      const password = pickArg(rest, "--password") || undefined;
+      try {
+        const result = await callGateway({ method, url, token, password });
+        if (hasFlag(rest, "--json")) {
+          console.log(JSON.stringify(result, null, 2));
+          return;
+        }
+        if (method === "health") {
+          console.log("Gateway Health:");
+          console.log(JSON.stringify(result, null, 2));
+          return;
+        }
+        const parsed = result as any;
+        console.log("Gateway Status:");
+        console.log(`- Workspace: ${parsed.workspace_dir || workspaceDir}`);
+        console.log(`- Timestamp: ${parsed.timestamp || new Date().toISOString()}`);
+        const channels = Array.isArray(parsed.channels) ? parsed.channels : [];
+        if (!channels.length) {
+          console.log("- No channels registered");
+          return;
+        }
+        for (const ch of channels) {
+          const status = `${ch.enabled ? "enabled" : "disabled"}${ch.running ? ", running" : ""}${ch.healthy ? "" : ", unhealthy"}`;
+          console.log(`- ${ch.name}: ${status}`);
+          if (ch.last_error) console.log(`  - error: ${ch.last_error}`);
+        }
         return;
+      } catch (err) {
+        console.error(`Gateway ${method} failed: ${String(err)}`);
+        const statusPath = path.join(workspaceDir, "logs", "gateway", "status.json");
+        if (method === "status" && fs.existsSync(statusPath)) {
+          const raw = fs.readFileSync(statusPath, "utf8");
+          console.log(raw.trim());
+          return;
+        }
+        if (method === "status" && !fs.existsSync(statusPath)) {
+          console.error("Gateway status not found yet. Start the gateway service to initialize.");
+        }
+        process.exit(1);
       }
-      for (const ch of channels) {
-        const status = `${ch.enabled ? "enabled" : "disabled"}${ch.running ? ", running" : ""}${ch.healthy ? "" : ", unhealthy"}`;
-        console.log(`- ${ch.name}: ${status}`);
-        if (ch.last_error) console.log(`  - error: ${ch.last_error}`);
-      }
-    } catch {
-      console.log(raw.trim());
     }
-    return;
+
+    console.error(`Unknown gateway command: ${subcommand}`);
+    console.log("Usage: ff-terminal gateway serve|status|health|call");
+    process.exit(1);
   }
 
   if (cmd === "run") {

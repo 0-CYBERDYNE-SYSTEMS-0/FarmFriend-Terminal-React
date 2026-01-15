@@ -17,7 +17,7 @@ export type RuntimeConfig = Record<string, unknown> & {
   session_mode?: "main" | "last" | "new";
   main_session_id?: string;
   session?: {
-    scope?: "main" | "per-sender" | "clawdbot";
+    scope?: "main" | "per-sender" | "bridge";
     idleMinutes?: number;
     autoSummarize?: boolean;
     maxHistoryTokens?: number;
@@ -56,6 +56,34 @@ export type RuntimeConfig = Record<string, unknown> & {
   };
   control_barn_token?: string;
   controlBarnToken?: string;
+  gateway?: {
+    mode?: "local" | "remote";
+    bind?: "loopback" | "all" | "auto";
+    port?: number;
+    tailscale?: {
+      mode?: "serve" | "funnel";
+      resetOnExit?: boolean;
+    };
+    auth?: {
+      mode?: "none" | "token" | "password";
+      token?: string;
+      password?: string;
+      allowTailscale?: boolean;
+    };
+    remote?: {
+      url?: string;
+      token?: string;
+      password?: string;
+    };
+  };
+  telegram?: {
+    enabled?: boolean;
+    token?: string;
+    poll_interval_ms?: number;
+    reply_prefix?: string;
+    allow_from?: string[];
+    allow_groups?: boolean;
+  };
 
   // Forced tool calling configuration
   // force_tool_calls: Enable/disable forced tool calling behavior

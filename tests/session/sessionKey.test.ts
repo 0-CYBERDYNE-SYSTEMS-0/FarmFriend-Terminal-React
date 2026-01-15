@@ -12,9 +12,9 @@ describe("session key", () => {
     expect(key).toBe("main");
   });
 
-  it("returns main for clawdbot direct", () => {
+  it("returns main for bridge direct", () => {
     const key = buildSessionKey({
-      cfg: { session: { scope: "clawdbot" } } as any,
+      cfg: { session: { scope: "bridge" } } as any,
       provider: "whatsapp",
       chatType: "direct",
       chatId: "123"
@@ -22,9 +22,9 @@ describe("session key", () => {
     expect(key).toBe("main");
   });
 
-  it("returns group key for clawdbot group", () => {
+  it("returns group key for bridge group", () => {
     const key = buildSessionKey({
-      cfg: { session: { scope: "clawdbot" } } as any,
+      cfg: { session: { scope: "bridge" } } as any,
       provider: "whatsapp",
       chatType: "group",
       chatId: "group-1"

@@ -28,9 +28,6 @@ import { buildSystemPrompt } from "../runtime/prompts/systemPrompt.js";
 import { ALWAYS_ALLOWED_TOOLS } from "../runtime/hooks/builtin/skillAllowedToolsHook.js";
 import { loadPlanStore, getActivePlan } from "../runtime/planning/planStore.js";
 import { formatPlanForPrompt } from "../runtime/planning/planExtractor.js";
-import { GatewayManager } from "../runtime/gateway/manager.js";
-import { WhatsAppGateway } from "../runtime/gateway/channels/whatsappGateway.js";
-import { IMessageGateway } from "../runtime/gateway/channels/imessageGateway.js";
 import {
   ClientMessage,
   ServerMessage,
@@ -269,43 +266,12 @@ export async function startDaemon(): Promise<void> {
   const registry = new ToolRegistry();
   registerAllTools(registry, { workspaceDir });
 
-  const gateway = new GatewayManager({ workspaceDir });
-  gateway.register(
-    new WhatsAppGateway({
-      config: (runtimeCfg as any).whatsapp,
-      registry,
-      workspaceDir,
-      repoRoot,
-      sessionMode,
-      mainSessionId
-    })
-  );
-  gateway.register(
-    new IMessageGateway({
-      config: (runtimeCfg as any).imessage,
-      registry,
-      workspaceDir,
-      repoRoot
-    })
-  );
-
-  try {
-    await gateway.start();
-    // eslint-disable-next-line no-console
-    console.log("✓ Gateway started");
-  } catch (error) {
-    // eslint-disable-next-line no-console
-    console.error("Failed to start gateway:", error);
-  }
-
   // Cleanup on process exit
   process.on("SIGINT", async () => {
-    await gateway.stop();
     process.exit(0);
   });
 
   process.on("SIGTERM", async () => {
-    await gateway.stop();
     process.exit(0);
   });
 
