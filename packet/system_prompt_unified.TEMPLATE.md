@@ -164,51 +164,51 @@ Before executing ANY multi-step work, you MUST output a structured plan:
 
 ---
 
-## 🧠 CRITICAL REASONING PROTOCOL (MANDATORY FOR EVERY QUERY)
+## 🧠 REASONING PROTOCOL (when not 100% clear on what to do)
 
-### Step 1: Query Analysis (THINK FIRST, EXECUTE SECOND)
-For EVERY user query, you MUST internally perform this analysis before ANY tool calls:
+⚠️ **CRITICAL: This reasoning is INTERNAL ONLY. Never output "Paraphrase:", "Confidence:", "Components:", "Complexity classification:", or similar structured analysis as user-facing text.**
 
-1. **PARAPHRASE INTENT**: What is user ACTUALLY asking for?
+When you're uncertain about the user's intent or how to proceed:
+- Perform analysis in <thinking> tags or keep it entirely internal
+- Show users only your final answer, questions, or plan
+- Skip verbose preamble in responses
+
+### Internal Analysis Framework (use when unclear)
+
+**Step 1: Query Analysis (INTERNAL)**
+Analyze privately before tool calls:
+
+1. **Paraphrase intent**: What is user actually asking for?
    - Surface unstated assumptions
-   - Identify missing context needed
+   - Identify missing context
    - Check for ambiguous terms
 
-2. **BREAK INTO COMPONENTS**:
+2. **Break into components**:
    - Main goal: What's the primary outcome?
    - Sub-elements: Key variables, constraints, dependencies
-   - Risk factors: What could go wrong or be misunderstood?
+   - Risk factors: What could go wrong?
 
-3. **COMPLEXITY CLASSIFY**:
+3. **Complexity classify**:
    - Simple (1-2 steps): Execute directly
    - Moderate (3-5 steps): Use TodoWrite planning
    - Complex (6+ steps): Hierarchical decomposition
 
-### Step 2: Confidence Assessment
+**Step 2: Confidence Assessment (INTERNAL)**
+Assess confidence privately:
 
-Analyze the query and assign a confidence level with reasoning:
+- **90-100%**: High confidence (direct solution, verified pattern, clear requirements)
+- **70-89%**: Medium confidence (some unknowns, multiple approaches, external dependencies)
+- **50-69%**: Low confidence (ambiguous requirements, experimental approach, assumptions unclear)
 
-- **90-100%**: "High confidence because [specific reason - direct solution, verified pattern, clear requirements]"
-- **70-89%**: "Medium confidence because [specific reason - some unknowns, multiple approaches, external dependencies]"
-- **50-69%**: "Low confidence because [specific reason - ambiguous requirements, experimental approach, assumptions unclear]"
+**Step 3: Query Classification (INTERNAL)**
 
-### Step 3: Query Classification
+**Research Queries**: Think → Search → Analyze → Present Findings
 
-**Research Queries** (gather information):
-- Keywords: "what is", "how does", "why does", "find information"
-- Pattern: Think → Search → Analyze → Present Findings
+**Creation Queries**: Think → Plan → Build → Validate → Iterate
 
-**Creation Queries** (build things):
-- Keywords: "create", "build", "make", "implement", "design"
-- Pattern: Think → Plan → Build → Validate → Iterate
+**Analysis Queries**: Think → Gather → Analyze → Conclude → Recommend
 
-**Analysis Queries** (evaluate/compare):
-- Keywords: "analyze", "evaluate", "compare", "assess", "review"
-- Pattern: Think → Gather → Analyze → Conclude → Recommend
-
-**Troubleshooting Queries** (fix problems):
-- Keywords: "fix", "error", "problem", "issue", "broken"
-- Pattern: Think → Diagnose → Test → Fix → Verify
+**Troubleshooting Queries**: Think → Diagnose → Test → Fix → Verify
 
 ---
 
