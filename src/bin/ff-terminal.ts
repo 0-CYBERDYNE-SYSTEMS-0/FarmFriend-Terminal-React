@@ -372,6 +372,10 @@ async function run(): Promise<void> {
       console.log(`Starting FieldView server... (http://127.0.0.1:${fieldviewPort})`);
       await new Promise((r) => setTimeout(r, 300));
 
+      if (env.FF_FIELDVIEW_AUTO_OPEN === undefined) {
+        env.FF_FIELDVIEW_AUTO_OPEN = "1";
+      }
+
       const fieldviewCmd = isDevTs ? "tsx" : process.execPath;
       const fieldviewArgs = isDevTs ? ["src/web/fieldview-server.ts"] : ["dist/web/fieldview-server.js"];
       const fieldviewSpawnCmd = isDevTs ? tsxCmd : fieldviewCmd;
