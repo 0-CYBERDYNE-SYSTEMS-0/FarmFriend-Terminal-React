@@ -1,4 +1,5 @@
-import makeWASocket, {
+import {
+  makeWASocket,
   DisconnectReason,
   useMultiFileAuthState,
   WASocket,
@@ -42,17 +43,18 @@ export class WhatsAppClient {
     try {
       const { state, saveCreds } = await this.authState.getAuthState();
 
-      this.socket = makeWASocket({
+      const socket = makeWASocket({
         auth: state,
         printQRInTerminal: false,
         defaultQueryTimeoutMs: undefined,
       });
+      this.socket = socket;
 
       // Save credentials on update
-      this.socket.ev.on("creds.update", saveCreds);
+      socket.ev.on("creds.update", saveCreds);
 
       // Handle connection updates
-      this.socket.ev.on("connection.update", async (update) => {
+      socket.ev.on("connection.update", async (update) => {
         const { connection, lastDisconnect, qr } = update;
 
         if (qr) {
@@ -96,7 +98,7 @@ export class WhatsAppClient {
       });
 
       // Handle incoming messages
-      this.socket.ev.on("messages.upsert", async ({ messages, type }) => {
+      socket.ev.on("messages.upsert", async ({ messages, type }) => {
         if (type !== "notify") return;
 
         for (const msg of messages) {

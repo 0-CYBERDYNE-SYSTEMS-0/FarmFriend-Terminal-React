@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { type ChatMessage, type FileAttachment } from '@/store/types'
 import { Markdown } from '@/components/ui/Markdown'
+import { buildWsUrls } from '@/utils/ws'
 
 interface EmbeddedChatProps {
   layout?: 'full' | 'embedded'
@@ -28,36 +29,42 @@ export function EmbeddedChat({ layout = 'embedded', sessionId = 'main' }: Embedd
   }>>([])
 
   useEffect(() => {
-    const wsProtocol = window.location.protocol === 'https:' ? 'wss' : 'ws'
-    const host = window.location.hostname || 'localhost'
-    const basePort = window.location.port ? Number(window.location.port) : 8788
-    const wsPort = Number.isFinite(basePort) && basePort > 1 ? basePort - 1 : 8787
-    const wsUrl = `${wsProtocol}://${host}:${wsPort}/ws/terminal/${sessionId}`
-    
     function connect() {
-      const ws = new WebSocket(wsUrl)
-      
-      ws.onopen = () => {
-        setIsConnected(true)
-        console.log('Connected to WebSocket')
+      const wsUrls = buildWsUrls(sessionId)
+      const tryConnect = (index: number) => {
+        const wsUrl = wsUrls[index]
+        let opened = false
+        const ws = new WebSocket(wsUrl)
+
+        ws.onopen = () => {
+          opened = true
+          setIsConnected(true)
+          console.log('Connected to WebSocket')
+        }
+
+        ws.onmessage = (event) => {
+          const msg = JSON.parse(event.data)
+          handleMessage(msg)
+        }
+
+        ws.onclose = () => {
+          if (!opened && index + 1 < wsUrls.length) {
+            tryConnect(index + 1)
+            return
+          }
+          setIsConnected(false)
+          setTimeout(connect, 3000)
+        }
+
+        ws.onerror = (error) => {
+          console.error('WebSocket error:', error)
+          setIsConnected(false)
+        }
+
+        wsRef.current = ws
       }
-      
-      ws.onmessage = (event) => {
-        const msg = JSON.parse(event.data)
-        handleMessage(msg)
-      }
-      
-      ws.onclose = () => {
-        setIsConnected(false)
-        setTimeout(connect, 3000)
-      }
-      
-      ws.onerror = (error) => {
-        console.error('WebSocket error:', error)
-        setIsConnected(false)
-      }
-      
-      wsRef.current = ws
+
+      tryConnect(0)
     }
     
     connect()

@@ -1,6 +1,7 @@
 // WebSocket hook for managing terminal connections
 import { useState, useEffect, useRef, useCallback } from 'react'
 import type { WebClientMessage, WebServerMessage } from '@/store/types'
+import { buildWsUrls } from '@/utils/ws'
 
 interface UseWebSocketOptions {
   sessionId?: string
@@ -26,52 +27,59 @@ export function useWebSocket({
     if (wsRef.current?.readyState === WebSocket.OPEN) return
 
     setIsConnecting(true)
-    // Connect to ff-terminal web server (which proxies to daemon)
-    const wsProtocol = window.location.protocol === 'https:' ? 'wss' : 'ws'
-    const host = window.location.hostname || 'localhost'
-    const basePort = window.location.port ? Number(window.location.port) : 8788
-    const wsPort = Number.isFinite(basePort) && basePort > 1 ? basePort - 1 : 8787
-    const wsUrl = `${wsProtocol}://${host}:${wsPort}/ws/terminal/${sessionId}`
-    
-    try {
-      const ws = new WebSocket(wsUrl)
-      wsRef.current = ws
-      
-      ws.onopen = () => {
-        setIsConnected(true)
-        setIsConnecting(false)
-        onConnect?.()
-      }
-      
-      ws.onmessage = (event) => {
-        try {
-          const msg = JSON.parse(event.data) as WebServerMessage
-          onMessage?.(msg)
-        } catch (error) {
-          console.error('Failed to parse WebSocket message:', error)
+    const wsUrls = buildWsUrls(sessionId)
+
+    const tryConnect = (index: number) => {
+      const wsUrl = wsUrls[index]
+      let opened = false
+
+      try {
+        const ws = new WebSocket(wsUrl)
+        wsRef.current = ws
+
+        ws.onopen = () => {
+          opened = true
+          setIsConnected(true)
+          setIsConnecting(false)
+          onConnect?.()
         }
-      }
-      
-      ws.onclose = () => {
-        setIsConnected(false)
+
+        ws.onmessage = (event) => {
+          try {
+            const msg = JSON.parse(event.data) as WebServerMessage
+            onMessage?.(msg)
+          } catch (error) {
+            console.error('Failed to parse WebSocket message:', error)
+          }
+        }
+
+        ws.onclose = () => {
+          if (!opened && index + 1 < wsUrls.length) {
+            tryConnect(index + 1)
+            return
+          }
+
+          setIsConnected(false)
+          setIsConnecting(false)
+          onDisconnect?.()
+
+          // Auto-reconnect after 3 seconds
+          reconnectTimeoutRef.current = setTimeout(() => {
+            connect()
+          }, 3000)
+        }
+
+        ws.onerror = (error) => {
+          setIsConnecting(false)
+          onError?.(error)
+        }
+      } catch (error) {
         setIsConnecting(false)
-        onDisconnect?.()
-        
-        // Auto-reconnect after 3 seconds
-        reconnectTimeoutRef.current = setTimeout(() => {
-          connect()
-        }, 3000)
+        console.error('Failed to connect WebSocket:', error)
       }
-      
-      ws.onerror = (error) => {
-        setIsConnecting(false)
-        onError?.(error)
-      }
-      
-    } catch (error) {
-      setIsConnecting(false)
-      console.error('Failed to connect WebSocket:', error)
     }
+
+    tryConnect(0)
   }, [sessionId, onConnect, onDisconnect, onError, onMessage])
 
   const disconnect = useCallback(() => {
