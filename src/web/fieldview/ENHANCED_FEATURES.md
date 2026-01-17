@@ -45,7 +45,7 @@ This document describes the enhanced features added to the FieldView template fo
   - Responsive display
 
 ### 6. **Canvas Template**
-- **File**: `canvas-template.html`
+- **File**: `public/canvas-template.html`
 - **Features**:
   - Self-contained HTML editor
   - Live preview with error detection

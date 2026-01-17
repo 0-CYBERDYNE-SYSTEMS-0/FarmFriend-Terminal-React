@@ -1,0 +1,591 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Reverse Engineering Report: FarmFriend Terminal React</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+  <style>
+    :root {
+      color-scheme: dark;
+    }
+    html {
+      scroll-behavior: smooth;
+    }
+    body {
+      background: radial-gradient(1200px 600px at 10% 10%, rgba(99,102,241,0.15), transparent 60%),
+                  radial-gradient(1000px 500px at 90% 20%, rgba(168,85,247,0.12), transparent 60%),
+                  radial-gradient(1000px 700px at 30% 90%, rgba(56,189,248,0.08), transparent 60%),
+                  #05060d;
+    }
+    .glass {
+      background: linear-gradient(135deg, rgba(15,23,42,0.85), rgba(3,7,18,0.9));
+      border: 1px solid rgba(148,163,184,0.15);
+      box-shadow: 0 20px 60px rgba(0,0,0,0.45);
+      backdrop-filter: blur(14px);
+    }
+    .glow {
+      box-shadow: 0 0 0 1px rgba(56,189,248,0.2), 0 10px 40px rgba(56,189,248,0.08);
+    }
+    .card {
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+    .card:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 20px 50px rgba(56,189,248,0.12);
+    }
+    .section-title {
+      background: linear-gradient(90deg, rgba(59,130,246,0.9), rgba(168,85,247,0.9));
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+    }
+    .codeblock {
+      background: #0b1220;
+      border: 1px solid rgba(148,163,184,0.2);
+    }
+    .mermaid-wrapper {
+      position: relative;
+      overflow: hidden;
+      border-radius: 16px;
+      border: 1px solid rgba(148,163,184,0.18);
+      background: linear-gradient(180deg, rgba(15,23,42,0.85), rgba(2,6,23,0.95));
+      padding: 12px;
+    }
+    .mermaid {
+      min-height: 200px;
+    }
+    .sidebar-link {
+      transition: all 0.2s ease;
+    }
+    .sidebar-link:hover {
+      color: #93c5fd;
+      transform: translateX(4px);
+    }
+  </style>
+</head>
+<body class="text-slate-200">
+  <!-- Sidebar -->
+  <aside class="fixed left-0 top-0 h-screen w-64 px-6 py-8 glass">
+    <div class="flex items-center gap-3 mb-8">
+      <div class="h-10 w-10 rounded-xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center">
+        <i class="fa-solid fa-diagram-project text-white"></i>
+      </div>
+      <div>
+        <p class="text-lg font-semibold">FF-Terminal</p>
+        <p class="text-xs text-slate-400">Reverse Engineering</p>
+      </div>
+    </div>
+    <nav class="space-y-3 text-sm">
+      <a href="#overview" class="sidebar-link block text-slate-300">1. Project Overview</a>
+      <a href="#components" class="sidebar-link block text-slate-300">2. Core Components</a>
+      <a href="#loops" class="sidebar-link block text-slate-300">3. Main Execution Loop(s)</a>
+      <a href="#interfaces" class="sidebar-link block text-slate-300">4. Interfaces & Surfaces</a>
+      <a href="#dataflow" class="sidebar-link block text-slate-300">5. Connections & Data Flow</a>
+      <a href="#patterns" class="sidebar-link block text-slate-300">6. Design Patterns & Insights</a>
+      <a href="#summary" class="sidebar-link block text-slate-300">7. Full Summary</a>
+    </nav>
+    <div class="mt-10 text-xs text-slate-500">
+      <p class="uppercase tracking-wider">Workspace</p>
+      <p class="mt-2">/Users/scrimwiggins/ff-terminal-ts</p>
+    </div>
+  </aside>
+
+  <!-- Main Content -->
+  <main class="ml-64 px-10 py-10 space-y-16">
+    <!-- Header -->
+    <header class="glass glow rounded-2xl p-8">
+      <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
+        <div>
+          <h1 class="text-3xl lg:text-4xl font-bold">Reverse Engineering Report: <span class="section-title">FarmFriend Terminal React</span></h1>
+          <p class="text-slate-400 mt-2">Architecture, Loops, Interfaces & Connections</p>
+          <p class="text-xs text-slate-500 mt-1">Project name inferred from README.md and package.json ("ff-terminal-ts")</p>
+        </div>
+        <div class="flex gap-3">
+          <span class="px-3 py-1 rounded-full text-xs bg-slate-800 border border-slate-700">TypeScript</span>
+          <span class="px-3 py-1 rounded-full text-xs bg-slate-800 border border-slate-700">Node 20+</span>
+          <span class="px-3 py-1 rounded-full text-xs bg-slate-800 border border-slate-700">Ink/React</span>
+          <span class="px-3 py-1 rounded-full text-xs bg-slate-800 border border-slate-700">WebSocket</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- Section 1: Project Overview -->
+    <section id="overview" class="space-y-6">
+      <h2 class="text-2xl font-semibold section-title">Section 1: Project Overview</h2>
+      <div class="grid lg:grid-cols-3 gap-6">
+        <div class="glass rounded-2xl p-6 space-y-4">
+          <h3 class="text-lg font-semibold">What This Project Does</h3>
+          <p class="text-sm text-slate-300">
+            AI-powered terminal platform with a daemonized agent runtime, multiple UIs (Ink terminal, Web, FieldView),
+            pluggable tool ecosystem, and multi-provider model support. It mediates user prompts through a tool-aware
+            agent loop and streams structured events to clients over WebSockets.
+          </p>
+          <div class="text-xs text-slate-400 space-y-1">
+            <p><i class="fa-solid fa-gear mr-2"></i>Languages: TypeScript, React</p>
+            <p><i class="fa-solid fa-cubes mr-2"></i>Frameworks: Ink, Vite (web), WebSocket</p>
+            <p><i class="fa-solid fa-brain mr-2"></i>AI Providers: OpenRouter, Anthropic, Z.ai, MiniMax, LM Studio</p>
+          </div>
+        </div>
+        <div class="glass rounded-2xl p-6 space-y-4">
+          <h3 class="text-lg font-semibold">Entry Points</h3>
+          <ul class="text-sm text-slate-300 space-y-2">
+            <li><span class="text-slate-400">CLI bin:</span> <code>src/bin/ff-terminal.ts</code></li>
+            <li><span class="text-slate-400">Daemon:</span> <code>src/daemon/daemon.ts</code></li>
+            <li><span class="text-slate-400">Ink UI:</span> <code>src/cli/app.tsx</code></li>
+            <li><span class="text-slate-400">Web Server:</span> <code>src/web/server.ts</code></li>
+            <li><span class="text-slate-400">FieldView Server:</span> <code>src/web/fieldview-server.ts</code></li>
+            <li><span class="text-slate-400">ACP JSON-RPC:</span> <code>src/acp/server.ts</code></li>
+          </ul>
+        </div>
+        <div class="glass rounded-2xl p-6 space-y-4">
+          <h3 class="text-lg font-semibold">Key Tech/Libraries</h3>
+          <div class="grid grid-cols-2 gap-2 text-xs text-slate-300">
+            <div class="px-3 py-2 rounded-lg bg-slate-900/50 border border-slate-800">WebSocket (ws)</div>
+            <div class="px-3 py-2 rounded-lg bg-slate-900/50 border border-slate-800">Luxon (scheduling)</div>
+            <div class="px-3 py-2 rounded-lg bg-slate-900/50 border border-slate-800">Playwright (browser tool)</div>
+            <div class="px-3 py-2 rounded-lg bg-slate-900/50 border border-slate-800">Busboy (uploads)</div>
+            <div class="px-3 py-2 rounded-lg bg-slate-900/50 border border-slate-800">Ink + React</div>
+            <div class="px-3 py-2 rounded-lg bg-slate-900/50 border border-slate-800">AsyncLocalStorage</div>
+          </div>
+        </div>
+      </div>
+      <div class="mermaid-wrapper">
+        <div class="mermaid">
+          graph TD
+            A[src/bin/ff-terminal.ts<br/>CLI Dispatcher] --> B[src/daemon/daemon.ts<br/>WebSocket Runtime]
+            A --> C[src/cli/app.tsx<br/>Ink UI]
+            A --> D[src/web/server.ts<br/>Web UI Server]
+            A --> E[src/web/fieldview-server.ts<br/>FieldView UI Server]
+            A --> F[src/acp/server.ts<br/>ACP JSON-RPC]
+            B --> G[src/runtime/agentLoop.ts]
+            G --> H[src/runtime/tools/*]
+            G --> I[src/runtime/providers/*]
+            G --> J[src/runtime/session/*]
+            G --> K[src/runtime/prompts/*]
+            H --> L[src/runtime/tools/implementations/*]
+            B --> M[src/whatsapp/*]
+        </div>
+      </div>
+    </section>
+
+    <!-- Section 2: Core Components -->
+    <section id="components" class="space-y-6">
+      <h2 class="text-2xl font-semibold section-title">Section 2: Core Components</h2>
+      <div class="grid lg:grid-cols-2 gap-6">
+        <div class="glass rounded-2xl p-6 card">
+          <h3 class="text-lg font-semibold">CLI Orchestrator</h3>
+          <p class="text-xs text-slate-400">src/bin/ff-terminal.ts</p>
+          <p class="text-sm mt-3">Parses commands, resolves profiles, injects credentials, and spawns daemon + UI processes.</p>
+          <ul class="text-xs text-slate-400 mt-3 space-y-1">
+            <li>Commands: start/local/run/autonomy/schedule/profile/whatsapp</li>
+            <li>Spawns: daemon + Ink UI or web servers</li>
+          </ul>
+          <pre class="codeblock text-xs p-3 rounded-lg mt-3"><code>// pseudo
+parseArgs()
+loadProfile()
+applyCredentials()
+spawn(daemon)
+spawn(ui|web|fieldview)</code></pre>
+        </div>
+        <div class="glass rounded-2xl p-6 card">
+          <h3 class="text-lg font-semibold">Daemon Runtime</h3>
+          <p class="text-xs text-slate-400">src/daemon/daemon.ts</p>
+          <p class="text-sm mt-3">WebSocket server that manages sessions and streams agent output to clients.</p>
+          <ul class="text-xs text-slate-400 mt-3 space-y-1">
+            <li>Protocol: start_turn / cancel_turn / list_tools</li>
+            <li>Streams: chunk events via streamProtocol</li>
+          </ul>
+          <pre class="codeblock text-xs p-3 rounded-lg mt-3"><code>// pseudo
+wss.on('connection')
+  on start_turn:
+    runAgentTurn()
+    stream chunks to client</code></pre>
+        </div>
+        <div class="glass rounded-2xl p-6 card">
+          <h3 class="text-lg font-semibold">Agent Loop</h3>
+          <p class="text-xs text-slate-400">src/runtime/agentLoop.ts</p>
+          <p class="text-sm mt-3">Core control loop: prompt building, provider streaming, tool execution, hooks, plans.</p>
+          <ul class="text-xs text-slate-400 mt-3 space-y-1">
+            <li>Iterative model/tool loop with circuit breakers</li>
+            <li>Structured logging + session storage</li>
+          </ul>
+          <pre class="codeblock text-xs p-3 rounded-lg mt-3"><code>// pseudo
+while iterations < max:
+  provider.streamChat()
+  collect tool calls
+  execute tools
+  append tool results</code></pre>
+        </div>
+        <div class="glass rounded-2xl p-6 card">
+          <h3 class="text-lg font-semibold">Tool System</h3>
+          <p class="text-xs text-slate-400">src/runtime/tools/*</p>
+          <p class="text-sm mt-3">Registry + schema validation + concrete implementations (fs, web, search, media, automation).</p>
+          <ul class="text-xs text-slate-400 mt-3 space-y-1">
+            <li>Parallel execution with ordering preservation</li>
+            <li>macOS automation knowledge base (AppleScript/JXA)</li>
+          </ul>
+          <pre class="codeblock text-xs p-3 rounded-lg mt-3"><code>// pseudo
+registry.register(name, handler)
+executeToolCalls(calls)</code></pre>
+        </div>
+        <div class="glass rounded-2xl p-6 card">
+          <h3 class="text-lg font-semibold">Providers</h3>
+          <p class="text-xs text-slate-400">src/runtime/providers/factory.ts</p>
+          <p class="text-sm mt-3">Adapter/factory for OpenRouter, Anthropic, Z.ai, MiniMax, LM Studio, compat providers.</p>
+          <ul class="text-xs text-slate-400 mt-3 space-y-1">
+            <li>Config-driven enablement</li>
+            <li>Streaming responses to agent loop</li>
+          </ul>
+          <pre class="codeblock text-xs p-3 rounded-lg mt-3"><code>// pseudo
+if use_openrouter -> openRouterProvider()
+else if use_zai -> zaiProvider()</code></pre>
+        </div>
+        <div class="glass rounded-2xl p-6 card">
+          <h3 class="text-lg font-semibold">UIs (Ink/Web/FieldView)</h3>
+          <p class="text-xs text-slate-400">src/cli/app.tsx, src/web/*</p>
+          <p class="text-sm mt-3">Ink terminal UI and Web/FieldView clients consuming daemon streams.</p>
+          <ul class="text-xs text-slate-400 mt-3 space-y-1">
+            <li>Web server proxies WebSocket stream</li>
+            <li>File upload pipeline via Busboy</li>
+          </ul>
+          <pre class="codeblock text-xs p-3 rounded-lg mt-3"><code>// pseudo
+connect ws://daemon
+send start_turn
+render chunks</code></pre>
+        </div>
+        <div class="glass rounded-2xl p-6 card">
+          <h3 class="text-lg font-semibold">Autonomy & Scheduling</h3>
+          <p class="text-xs text-slate-400">src/runtime/autonomy/loop.ts, src/runtime/scheduling/*</p>
+          <p class="text-sm mt-3">Batch autonomous loops and scheduled tasks with lock files and RRULE support.</p>
+          <ul class="text-xs text-slate-400 mt-3 space-y-1">
+            <li>Autonomy loop runs repeated turns</li>
+            <li>Scheduler spawns headless runs</li>
+          </ul>
+          <pre class="codeblock text-xs p-3 rounded-lg mt-3"><code>// pseudo
+for loop in maxLoops:
+  runAgentTurn(prompt)
+  if complete -> stop</code></pre>
+        </div>
+        <div class="glass rounded-2xl p-6 card">
+          <h3 class="text-lg font-semibold">WhatsApp Integration</h3>
+          <p class="text-xs text-slate-400">src/whatsapp/*</p>
+          <p class="text-sm mt-3">Optional WhatsApp gateway using Baileys; routes messages into the agent runtime.</p>
+          <ul class="text-xs text-slate-400 mt-3 space-y-1">
+            <li>Session manager + pairing</li>
+            <li>Message handler -> tool registry</li>
+          </ul>
+          <pre class="codeblock text-xs p-3 rounded-lg mt-3"><code>// pseudo
+onMessage(msg)
+  handleMessage(msg)
+  runAgentTurn()</code></pre>
+        </div>
+      </div>
+      <div class="mermaid-wrapper">
+        <div class="mermaid">
+          graph LR
+            CLI[CLI Dispatcher] --> DAEMON[Daemon WS Server]
+            CLI --> UI[Ink UI]
+            CLI --> WEB[Web Server]
+            DAEMON --> LOOP[Agent Loop]
+            LOOP --> TOOLS[Tool Registry]
+            LOOP --> PROVIDERS[Provider Adapter]
+            LOOP --> SESSIONS[Session Store]
+            LOOP --> HOOKS[Hooks & Plans]
+            TOOLS --> IMPLS[Tool Implementations]
+            DAEMON --> WHATSAPP[WhatsApp Server]
+            WEB --> WEBUI[Web/FieldView UI]
+        </div>
+      </div>
+    </section>
+
+    <!-- Section 3: Main Execution Loop(s) -->
+    <section id="loops" class="space-y-6">
+      <h2 class="text-2xl font-semibold section-title">Section 3: Main Execution Loop(s)</h2>
+      <div class="glass rounded-2xl p-6">
+        <ol class="list-decimal list-inside text-sm text-slate-300 space-y-2">
+          <li>Client sends <code>start_turn</code> to daemon (WebSocket protocol).</li>
+          <li>Daemon creates/loads session and starts <code>runAgentTurn</code>.</li>
+          <li>Agent builds system prompt + context (skills, plans, summaries).</li>
+          <li>Provider streams tokens and tool calls.</li>
+          <li>Tools execute in parallel, results are appended to messages.</li>
+          <li>Loop repeats until completion/iteration limit or cancellation.</li>
+        </ol>
+      </div>
+      <div class="mermaid-wrapper">
+        <div class="mermaid">
+          flowchart TD
+            A[Start Turn] --> B[Load Session & Context]
+            B --> C[Build System Prompt]
+            C --> D[Provider streamChat]
+            D --> E{Tool calls?}
+            E -- yes --> F[executeToolCalls]
+            F --> G[Append tool results]
+            G --> D
+            E -- no --> H[Emit assistant content]
+            H --> I{Max iterations?}
+            I -- no --> D
+            I -- yes --> J[End Turn]
+            J --> A
+        </div>
+      </div>
+      <div class="grid lg:grid-cols-2 gap-6">
+        <div class="glass rounded-2xl p-6">
+          <h3 class="text-lg font-semibold">Autonomy Loop</h3>
+          <p class="text-sm text-slate-300 mt-2">Repeated batch runs that watch task files, detect stall, and optionally invoke an oracle escalation.</p>
+          <div class="mermaid-wrapper mt-4">
+            <div class="mermaid">
+              flowchart LR
+                P[Load prompt + tasks] --> R[runAgentTurn]
+                R --> C{Completion claimed?}
+                C -- yes --> X[Stop]
+                C -- no --> S[Stall detection]
+                S --> W[Sleep]
+                W --> P
+            </div>
+          </div>
+        </div>
+        <div class="glass rounded-2xl p-6">
+          <h3 class="text-lg font-semibold">Scheduler Loop</h3>
+          <p class="text-sm text-slate-300 mt-2">Polls scheduled tasks and spawns headless runs with lock-file protection.</p>
+          <div class="mermaid-wrapper mt-4">
+            <div class="mermaid">
+              flowchart LR
+                L[Acquire lock] --> Q[Load scheduled tasks]
+                Q --> N{Run due?}
+                N -- yes --> S[spawn ff-terminal run --headless]
+                S --> Q
+                N -- no --> T[Sleep poll interval]
+                T --> Q
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Section 4: Interfaces & Surfaces -->
+    <section id="interfaces" class="space-y-6">
+      <h2 class="text-2xl font-semibold section-title">Section 4: Interfaces & Surfaces</h2>
+      <div class="grid lg:grid-cols-2 gap-6">
+        <div class="glass rounded-2xl p-6">
+          <h3 class="text-lg font-semibold">Public Interfaces</h3>
+          <ul class="text-sm text-slate-300 mt-3 space-y-2">
+            <li><i class="fa-solid fa-terminal mr-2"></i>CLI: <code>ff-terminal start/run/autonomy/schedule/profile</code></li>
+            <li><i class="fa-solid fa-network-wired mr-2"></i>WebSocket daemon protocol: <code>start_turn</code>, <code>cancel_turn</code>, <code>list_tools</code></li>
+            <li><i class="fa-solid fa-globe mr-2"></i>Web server: HTTP file upload + WS proxy for UI</li>
+            <li><i class="fa-solid fa-comments mr-2"></i>WhatsApp integration: message ingress → agent runtime</li>
+            <li><i class="fa-solid fa-plug mr-2"></i>ACP JSON-RPC: stdin/stdout streaming (session/update)</li>
+          </ul>
+        </div>
+        <div class="glass rounded-2xl p-6">
+          <h3 class="text-lg font-semibold">Internal Interfaces</h3>
+          <ul class="text-sm text-slate-300 mt-3 space-y-2">
+            <li>Tool Registry + Tool Schemas</li>
+            <li>Provider Adapter (streamChat API)</li>
+            <li>Hook Registry (plan validation, skill tool enforcement)</li>
+            <li>Session Store (JSON persistence)</li>
+          </ul>
+        </div>
+      </div>
+      <div class="mermaid-wrapper">
+        <div class="mermaid">
+          flowchart LR
+            subgraph CLI[CLI Surface]
+              CLIIN((args)) --> CLICORE[ff-terminal.ts]
+              CLICORE --> CLIOUT((spawned processes))
+            end
+
+            subgraph WS[Daemon WebSocket]
+              WSIN((start_turn)) --> DAEMON[daemon.ts]
+              DAEMON --> WSOUT((chunk stream))
+            end
+
+            subgraph HTTP[Web Server]
+              HIN((command + files)) --> WEB[web/server.ts]
+              WEB --> HOUT((UI events))
+            end
+
+            subgraph ACP[ACP JSON-RPC]
+              AIN((stdin JSON-RPC)) --> ACPCORE[acp/server.ts]
+              ACPCORE --> AOUT((stdout JSON-RPC))
+            end
+
+            CLICORE --> DAEMON
+            WEB --> DAEMON
+            ACPCORE --> DAEMON
+        </div>
+      </div>
+    </section>
+
+    <!-- Section 5: Connections & Data Flow -->
+    <section id="dataflow" class="space-y-6">
+      <h2 class="text-2xl font-semibold section-title">Section 5: Connections & Data Flow</h2>
+      <div class="grid lg:grid-cols-2 gap-6">
+        <div class="glass rounded-2xl p-6">
+          <h3 class="text-lg font-semibold">Dependency Graph</h3>
+          <div class="mermaid-wrapper mt-4">
+            <div class="mermaid">
+              graph TD
+                CLI --> DAEMON
+                CLI --> UI
+                CLI --> WEB
+                DAEMON --> LOOP
+                LOOP --> PROVIDER
+                LOOP --> TOOLS
+                TOOLS --> IMPL
+                LOOP --> SESS
+                LOOP --> HOOKS
+                DAEMON --> WHATSAPP
+            </div>
+          </div>
+        </div>
+        <div class="glass rounded-2xl p-6">
+          <h3 class="text-lg font-semibold">Call + Data Flow</h3>
+          <div class="mermaid-wrapper mt-4">
+            <div class="mermaid">
+              flowchart LR
+                U[User Input] -->|control| CLI
+                CLI -->|control| DAEMON
+                DAEMON -->|control| LOOP
+                LOOP -->|data| PROVIDER
+                PROVIDER -->|data| LOOP
+                LOOP -->|control| TOOLS
+                TOOLS -->|data| LOOP
+                LOOP -->|data| DAEMON
+                DAEMON -->|data| UI
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="glass rounded-2xl p-6">
+        <h3 class="text-lg font-semibold">Color-Coded Flow Legend</h3>
+        <div class="mermaid-wrapper mt-4">
+          <div class="mermaid">
+            graph LR
+              A[Control Flow] -->|blue| B
+              C[Data Flow] -->|orange| D
+              E[Async/Event] -->|green| F
+          </div>
+        </div>
+        <div class="mermaid-wrapper mt-6">
+          <div class="mermaid">
+            flowchart TD
+              classDef control stroke:#60a5fa,stroke-width:2px,color:#bfdbfe;
+              classDef data stroke:#f59e0b,stroke-width:2px,color:#fde68a;
+              classDef event stroke:#22c55e,stroke-width:2px,color:#bbf7d0;
+
+              UI[Ink/Web UI]:::control -->|start_turn| DAEMON[Daemon]:::control
+              DAEMON -->|stream chunks| UI:::data
+              DAEMON -->|runAgentTurn| LOOP[Agent Loop]:::control
+              LOOP -->|streamChat| PROVIDER[Provider]:::data
+              PROVIDER -->|tokens/tool calls| LOOP:::data
+              LOOP -->|executeTools| TOOLS[Tool Registry]:::control
+              TOOLS -->|tool outputs| LOOP:::data
+              LOOP -->|emit events| HOOKS[Hooks/Todo/Plans]:::event
+              DAEMON -->|subagent events| UI:::event
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Section 6: Design Patterns & Insights -->
+    <section id="patterns" class="space-y-6">
+      <h2 class="text-2xl font-semibold section-title">Section 6: Design Patterns & Insights</h2>
+      <div class="grid lg:grid-cols-3 gap-6">
+        <div class="glass rounded-2xl p-6">
+          <h3 class="text-lg font-semibold">Patterns Observed</h3>
+          <ul class="text-sm text-slate-300 mt-3 space-y-2">
+            <li>Adapter/Strategy: Provider implementations</li>
+            <li>Registry/Plugin: Tool system</li>
+            <li>Event-driven streaming: WebSocket + chunks</li>
+            <li>Pipeline: prompt → model → tools → response</li>
+          </ul>
+        </div>
+        <div class="glass rounded-2xl p-6">
+          <h3 class="text-lg font-semibold">Strengths</h3>
+          <ul class="text-sm text-slate-300 mt-3 space-y-2">
+            <li>Clear separation between UI and runtime</li>
+            <li>Tool schema validation + circuit breakers</li>
+            <li>Multi-provider support with config overrides</li>
+            <li>Extensive automation tool catalog</li>
+          </ul>
+        </div>
+        <div class="glass rounded-2xl p-6">
+          <h3 class="text-lg font-semibold">Potential Issues</h3>
+          <ul class="text-sm text-slate-300 mt-3 space-y-2">
+            <li>High complexity in agent loop can be hard to debug</li>
+            <li>Multiple UIs with similar protocol mapping paths</li>
+            <li>Tool execution parallelism may race on shared state</li>
+            <li>Heavy reliance on env/config consistency</li>
+          </ul>
+        </div>
+      </div>
+      <div class="glass rounded-2xl p-6">
+        <h3 class="text-lg font-semibold">Improvement Ideas</h3>
+        <ul class="text-sm text-slate-300 mt-3 space-y-2">
+          <li>Centralize protocol translation for Ink/Web/ACP to reduce duplication.</li>
+          <li>Introduce typed event bus for subagent + tool telemetry.</li>
+          <li>Add formal contract tests for tool schemas vs implementations.</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- Section 7: Full Summary -->
+    <section id="summary" class="space-y-6">
+      <h2 class="text-2xl font-semibold section-title">Section 7: Full Summary</h2>
+      <div class="glass rounded-2xl p-6">
+        <ul class="text-sm text-slate-300 space-y-2">
+          <li>Primary execution loop is <code>runAgentTurn</code> streaming provider output and executing tools.</li>
+          <li>Daemon is the hub: WebSocket protocol + session management + tool context.</li>
+          <li>Tool registry is a plugin system with parallel execution and structured logging.</li>
+          <li>Multiple surfaces: CLI, Ink UI, Web UI, FieldView UI, WhatsApp, ACP JSON-RPC.</li>
+          <li>Autonomy + Scheduler enable long-running and scheduled agent workflows.</li>
+        </ul>
+      </div>
+      <div class="mermaid-wrapper">
+        <div class="mermaid">
+          flowchart TB
+            USER[User / External Input] --> CLI
+            CLI --> DAEMON
+            DAEMON --> LOOP
+            LOOP --> PROVIDER
+            LOOP --> TOOLS
+            TOOLS --> ENV[OS/FS/Web/MacOS Tools]
+            PROVIDER --> LOOP
+            LOOP --> DAEMON
+            DAEMON --> UI[Ink/Web/FieldView]
+            DAEMON --> WHATSAPP
+            DAEMON --> ACP
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/panzoom@9.4.3/dist/panzoom.min.js"></script>
+  <script>
+    mermaid.initialize({
+      startOnLoad: true,
+      theme: 'dark',
+      flowchart: { curve: 'basis', useMaxWidth: false },
+      securityLevel: 'loose'
+    });
+
+    function enablePanZoom() {
+      document.querySelectorAll('.mermaid-wrapper svg').forEach((svg) => {
+        if (svg.getAttribute('data-panzoom') === 'true') return;
+        svg.setAttribute('data-panzoom', 'true');
+        panzoom(svg, { maxZoom: 4, minZoom: 0.5, smoothScroll: false });
+      });
+    }
+
+    let attempts = 0;
+    const timer = setInterval(() => {
+      enablePanZoom();
+      attempts += 1;
+      if (attempts > 10) clearInterval(timer);
+    }, 500);
+  </script>
+</body>
+</html>

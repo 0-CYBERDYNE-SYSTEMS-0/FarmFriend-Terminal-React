@@ -1,3 +1,5 @@
+@import url('https://fonts.googleapis.com/css2?family=Archivo+Black&family=IBM+Plex+Mono:wght@400;600&family=Work+Sans:wght@400;600&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -137,6 +139,182 @@ code {
   border: 1px solid rgba(148, 163, 184, 0.3);
   border-radius: 16px;
   color: #f1f5f9;
+}
+
+/* Command Center styles */
+.command-shell {
+  background:
+    linear-gradient(90deg, rgba(15, 15, 15, 0.9), rgba(15, 15, 15, 0.9)),
+    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.05) 0px, rgba(255, 255, 255, 0.05) 1px, transparent 1px, transparent 22px),
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.05) 0px, rgba(255, 255, 255, 0.05) 1px, transparent 1px, transparent 22px);
+  font-family: "Work Sans", "Helvetica Neue", sans-serif;
+  color: #f8fafc;
+}
+
+.command-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 24px;
+  border-bottom: 4px solid #f4f44f;
+  background: rgba(10, 10, 10, 0.95);
+}
+
+.command-eyebrow {
+  text-transform: uppercase;
+  font-size: 12px;
+  letter-spacing: 0.35em;
+  color: #9ca3af;
+}
+
+.command-title {
+  font-family: "Archivo Black", "Arial Black", sans-serif;
+  font-size: 32px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-top: 6px;
+}
+
+.command-button {
+  background: #f4f44f;
+  color: #0f172a;
+  border: 2px solid #0f172a;
+  padding: 8px 14px;
+  font-weight: 700;
+  text-transform: uppercase;
+  font-size: 12px;
+  letter-spacing: 0.1em;
+}
+
+.command-button.ghost {
+  background: transparent;
+  color: #f4f44f;
+  border-color: #f4f44f;
+}
+
+.command-select {
+  background: transparent;
+  color: #f8fafc;
+  border: 2px solid #f4f44f;
+  padding: 8px 12px;
+  text-transform: uppercase;
+  font-size: 12px;
+  letter-spacing: 0.12em;
+}
+
+.command-rail {
+  border: 3px solid #f4f44f;
+  padding: 16px;
+  background: rgba(15, 15, 15, 0.8);
+}
+
+.command-ticker {
+  margin-top: 10px;
+  display: flex;
+  gap: 18px;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 12px;
+  text-transform: uppercase;
+}
+
+.command-grid {
+  display: grid;
+  gap: 20px;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+}
+
+.command-card {
+  background: rgba(18, 18, 18, 0.9);
+  border: 3px solid #f4f44f;
+  padding: 16px;
+  box-shadow: 8px 8px 0 #0f172a;
+}
+
+.command-card.wide {
+  grid-column: 1 / -1;
+}
+
+.command-card-title {
+  font-family: "IBM Plex Mono", monospace;
+  text-transform: uppercase;
+  font-size: 13px;
+  letter-spacing: 0.2em;
+  margin-bottom: 12px;
+}
+
+.command-meter {
+  background: #0f172a;
+  border: 2px solid #f4f44f;
+  height: 16px;
+  margin-bottom: 12px;
+}
+
+.command-meter-bar {
+  height: 100%;
+  background: #4ade80;
+}
+
+.command-meter-bar.amber {
+  background: #fbbf24;
+}
+
+.command-meta {
+  display: flex;
+  justify-content: space-between;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 12px;
+}
+
+.command-socket-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 12px;
+}
+
+.command-socket-list li {
+  display: flex;
+  justify-content: space-between;
+  padding: 6px 0;
+  border-bottom: 1px dashed rgba(244, 244, 79, 0.4);
+}
+
+.command-muted {
+  color: #cbd5f5;
+}
+
+.command-chip {
+  border: 2px solid #f4f44f;
+  padding: 4px 8px;
+  text-transform: uppercase;
+  font-size: 11px;
+  letter-spacing: 0.2em;
+}
+
+.command-queue {
+  display: grid;
+  gap: 18px;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 12px;
+}
+
+.command-queue ul {
+  list-style: none;
+  padding: 0;
+  margin: 8px 0 0 0;
+}
+
+.command-queue li {
+  padding: 4px 0;
+}
+
+.command-chat {
+  background: #0c111a;
+  border: 3px solid #f4f44f;
+  padding: 16px;
+  box-shadow: 8px 8px 0 #0f172a;
 }
 
 /* Mission view styles */

@@ -21,10 +21,18 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `npm run dev -- start --fieldview` - Start with FieldView Classic UI (port 8787)
 - `npm run dev -- local [profile]` - Local workspace mode (creates `ff-terminal-workspace/` in current dir)
 - `npm run dev -- run --prompt "..."` - Single headless execution
-- `npm run dev -- profile setup|list|default` - Profile management
+- `npm run dev -- run --scheduled-task <id> --headless` - Execute scheduled task
+- `npm run dev -- profile setup|list|default|delete|edit` - Profile management
+- `npm run dev -- profile tool-keys` - Tool credential management
+- `npm run dev -- schedule list` - List scheduled tasks
+- `npm run dev -- schedule status <name>` - Show task status
 - `npm run dev -- acp` - Anthropic Claude Protocol server
+- `npm run dev -- autonomy --wizard` - Interactive autonomy loop setup
+- `npm run dev -- autonomy --prompt-file <path>` - Run autonomy loop
+- `npm run dev -- whatsapp <command>` - WhatsApp integration (login, status, approve, help)
 - `--display-mode verbose|clean` - Control output verbosity
 - `--allow-macos-control` / `--allow-browser-use` - Enable restricted tools
+- `--tts` / `--voice <name>` - Text-to-speech output (af_heart, af_bella, af_sarah, am_adam, am_michael, bf_emma, bm_george)
 
 ### Testing & Debugging
 - `FF_LOG_HOOKS_JSONL=true npm run dev` - Enable JSONL tool call logging
@@ -35,6 +43,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ### Build & Install
 Always rebuild after TypeScript changes: `npm run build`
+
+**TypeScript Configuration:**
+- Target: ES2022 with NodeNext modules
+- Strict mode enabled
+- Main tsconfig excludes `src/web/client` and `src/web/fieldview` (they have separate builds)
+- Web frontends have their own tsconfig files
 
 Build process:
 - Main build compiles TypeScript and builds both web frontends
@@ -91,6 +105,12 @@ Two independent React frontends share same backend:
 - `scheduling/` - RRULE task scheduler with OS integration
 - `planning/` - Plan extraction, validation, step tracking
 - `hooks/` - Validation hooks (plan, todo, skill restrictions)
+- `autonomy/` - Autonomous agent loop with Oracle escalation
+
+**WhatsApp (`src/whatsapp/`)**
+- Integration via `@whiskeysockets/baileys`
+- Commands: login (QR code), status, approve pairing, help
+- Session-based connection management
 
 **Web (`src/web/`)**
 - `server.ts` - HTTP+WebSocket server (port 8787)
@@ -200,12 +220,19 @@ System prompts and schemas from `packet/` ensure cross-implementation consistenc
 
 ### System Messages
 - Unified variant (consolidated from A/B/C/D)
-- Template: `packet/system_prompt_unified.TEMPLATE.md`
+- Template: `packet/system_prompt.TEMPLATE.md`
 
 ### Extended Thinking
 - Enable via `enable_thinking: true`
 - Returns `thinking` chunks with XML tags
 - Web UI shows clear visual separation
+
+### Autonomy Loop
+Long-running autonomous agent mode with Oracle escalation:
+- **Oracle modes**: `off`, `critical`, `on_complete`, `on_stall`, `on_high_risk`, `always`
+- **Autonomy request format**: Agent emits `<autonomy_request reason="...">` XML tag with optional `completion_promise`
+- **Session strategies**: How autonomy manages conversation state
+- Run with: `npm run dev -- autonomy --prompt-file <path> [--max-loops <n>] [--oracle <mode>]`
 
 ### Headless & Scheduled
 - One-shot: `npm run dev -- run --prompt "..."`

@@ -1,19 +1,6 @@
 // Simple Markdown renderer without external dependencies
 import React from 'react'
 import { CodeBlock } from './CodeBlock'
-import { 
-  HTMLArtifact, 
-  JSONArtifact, 
-  ImageArtifact, 
-  CodeArtifact 
-} from './ArtifactPreview'
-
-interface ArtifactPreviewProps {
-  content: string
-  title?: string
-  type: 'html' | 'json' | 'image' | 'code' | 'text'
-  lang?: string
-}
 
 interface MarkdownProps {
   content: string
@@ -21,68 +8,6 @@ interface MarkdownProps {
 }
 
 export function Markdown({ content, className = '' }: MarkdownProps) {
-  // Artifact detection
-  const detectArtifact = (content: string): { type: 'html' | 'json' | 'image' | 'code' | 'text' | null } => {
-    const trimmed = content.trim()
-    
-    // HTML detection
-    if (/^<[^>]+>$/.test(trimmed) || trimmed.includes('<html')) {
-      return { type: 'html' }
-    }
-    
-    // JSON detection
-    if ((trimmed.startsWith('{') && trimmed.endsWith('}')) || 
-        (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
-      try {
-        JSON.parse(trimmed)
-        return { type: 'json' }
-      } catch {
-        // Invalid JSON
-      }
-    }
-    
-    // Image URL detection
-    if (/^https?:\/\/.+\.(png|jpg|jpeg|gif|svg|webp)$/i.test(trimmed)) {
-      return { type: 'image' }
-    }
-    
-    // Code block detection (```lang)
-    const codeMatch = trimmed.match(/^```(\w+)?\n([\s\S]*?)\n```$/)
-    if (codeMatch) {
-      return { type: 'code' }
-    }
-    
-    return { type: 'text' }
-  }
-  
-  const artifact = detectArtifact(content)
-  
-  // If it's an artifact, render the appropriate preview
-  if (artifact.type && artifact.type !== 'text') {
-    const getLanguageFromCode = (content: string): string => {
-      const match = content.match(/^```(\w+)?/)
-      return match ? match[1] || 'text' : 'text'
-    }
-    
-    const props: ArtifactPreviewProps & { lang?: string } = {
-      content,
-      title: artifact.type === 'html' ? 'HTML Content' :
-              artifact.type === 'json' ? 'JSON Data' :
-              artifact.type === 'image' ? 'Image' :
-              'Code',
-      type: artifact.type,
-      lang: artifact.type === 'code' ? getLanguageFromCode(content) : undefined
-    }
-    
-    const ArtifactComponent = 
-      artifact.type === 'html' ? HTMLArtifact :
-      artifact.type === 'json' ? JSONArtifact :
-      artifact.type === 'image' ? ImageArtifact :
-      CodeArtifact
-    
-    return <ArtifactComponent {...props} />
-  }
-  
   // Simple markdown parsing and rendering
   const renderMarkdown = (text: string): JSX.Element[] => {
     const lines = text.split('\n')
