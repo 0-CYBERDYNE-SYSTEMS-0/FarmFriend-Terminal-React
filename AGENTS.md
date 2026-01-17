@@ -31,3 +31,6 @@ EOT
 
 ## Reference repository snapshot
 - `clawdbot-clawdbot.txt` is the full Clawdbot GitHub repository snapshot (entire codebase + file tree) captured in a single large file for reference.
+
+## Operational notes
+- iMessage pairing replies are disabled by setting `channels.imessage.dmPolicy` to `disabled` in `~/.clawdbot/clawdbot.json` to prevent sending pairing requests.
