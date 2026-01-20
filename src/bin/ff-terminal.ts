@@ -108,6 +108,25 @@ function safeModel(model?: string): string | undefined {
   return m.length ? m : undefined;
 }
 
+function openBrowser(url: string): void {
+  try {
+    if (process.platform === "darwin") {
+      const child = spawn("open", [url], { stdio: "ignore", detached: true });
+      child.unref();
+      return;
+    }
+    if (process.platform === "win32") {
+      const child = spawn("cmd", ["/c", "start", "", url], { stdio: "ignore", detached: true });
+      child.unref();
+      return;
+    }
+    const child = spawn("xdg-open", [url], { stdio: "ignore", detached: true });
+    child.unref();
+  } catch {
+    // ignore auto-open failures
+  }
+}
+
 function parseOracleMode(raw?: string | null): OracleMode {
   const v = String(raw || "").trim().toLowerCase();
   if (v === "off" || v === "critical" || v === "on_complete" || v === "on_stall" || v === "on_high_risk" || v === "always") {
@@ -349,11 +368,18 @@ async function run(): Promise<void> {
       console.log(`Starting web server... (http://127.0.0.1:${webPort})`);
       await new Promise((r) => setTimeout(r, 300));
 
+      if (env.FF_WEB_AUTO_OPEN === undefined) {
+        env.FF_WEB_AUTO_OPEN = "1";
+      }
+
       const webCmd = isDevTs ? "tsx" : process.execPath;
       const webArgs = isDevTs ? ["src/web/server.ts"] : ["dist/web/server.js"];
       const webSpawnCmd = isDevTs ? tsxCmd : webCmd;
 
       const web = spawn(webSpawnCmd, webArgs, { env, stdio: "inherit", shell: true, cwd: projectDir });
+      if (env.FF_WEB_AUTO_OPEN === "1") {
+        openBrowser(`http://127.0.0.1:${webPort}`);
+      }
 
       const shutdown = () => {
         try {
