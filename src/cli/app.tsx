@@ -4460,15 +4460,6 @@ Use skill_draft first to create the draft, then skill_apply to create the final 
           themeName={themeName}
         />
       ) : null}
-      {isChatMode && isCleanMode ? (
-        <StreamlinedTodoStatus
-          todos={currentTodos}
-          lines={lines}
-          processing={processing}
-          stdoutWidth={stdoutWidth}
-          themeName={themeName}
-        />
-      ) : null}
       {showTranscript ? (
         <Transcript
           lines={lines}
@@ -4487,6 +4478,15 @@ Use skill_draft first to create the draft, then skill_apply to create the final 
         <SubagentSwarm
           agents={Array.from(runningSubagents.values())}
           expanded={subagentsExpanded}
+          themeName={themeName}
+        />
+      ) : null}
+      {isChatMode && isCleanMode ? (
+        <StreamlinedTodoStatus
+          todos={currentTodos}
+          lines={lines}
+          processing={processing}
+          stdoutWidth={stdoutWidth}
           themeName={themeName}
         />
       ) : null}
