@@ -141,6 +141,16 @@ code {
   color: #f1f5f9;
 }
 
+.code-block {
+  max-width: 100%;
+}
+
+.code-block pre,
+.code-block code,
+.code-block .shiki {
+  max-width: 100%;
+}
+
 /* Command Center styles */
 .command-shell {
   background:
