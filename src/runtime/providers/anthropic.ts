@@ -56,29 +56,57 @@ function convertMessages(messages: OpenAIMessage[]): { anthropicMessages: any[];
     const role = m.role === "assistant" ? "assistant" : "user";
 
     // Handle content blocks
-    let content;
-    if (typeof m.content === 'string') {
-      content = [{ type: "text", text: m.content }];
+    const contentBlocks: any[] = [];
+    if (typeof m.content === "string") {
+      if (m.content.trim().length > 0) contentBlocks.push({ type: "text", text: m.content });
     } else if (Array.isArray(m.content)) {
       // Convert image_url blocks to Anthropic image format
-      content = m.content.map(block => {
-        if (block.type === 'image_url' && block.image_url?.url) {
+      for (const block of m.content) {
+        if (block?.type === "image_url" && block.image_url?.url) {
           const match = block.image_url.url.match(/^data:([^;]+);base64,(.+)$/);
           if (match) {
-            return {
+            contentBlocks.push({
               type: "image",
               source: { type: "base64", media_type: match[1], data: match[2] },
               ...(block.cache_control && { cache_control: block.cache_control })
-            };
+            });
+            continue;
           }
         }
-        return block;
-      });
+        if (block?.type === "text" && typeof block.text === "string" && block.text.trim().length === 0) {
+          continue;
+        }
+        contentBlocks.push(block);
+      }
     } else {
-      content = [{ type: "text", text: String(m.content || '') }];
+      const text = String(m.content || "");
+      if (text.trim().length > 0) contentBlocks.push({ type: "text", text });
     }
 
-    out.push({ role, content });
+    // Convert assistant tool_calls to Anthropic tool_use blocks.
+    if (m.role === "assistant" && Array.isArray(m.tool_calls) && m.tool_calls.length > 0) {
+      for (const tc of m.tool_calls) {
+        let input: any = {};
+        if (tc?.function?.arguments) {
+          try {
+            input = JSON.parse(tc.function.arguments);
+          } catch {
+            input = { __raw: String(tc.function.arguments) };
+          }
+        }
+        contentBlocks.push({
+          type: "tool_use",
+          id: tc.id,
+          name: tc.function?.name || "",
+          input
+        });
+      }
+    }
+
+    // Skip empty assistant messages (Anthropic rejects empty content).
+    if (role === "assistant" && contentBlocks.length === 0) continue;
+
+    out.push({ role, content: contentBlocks });
   }
 
   return {

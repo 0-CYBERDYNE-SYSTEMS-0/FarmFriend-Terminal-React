@@ -661,7 +661,7 @@
     "type": "function",
     "function": {
       "name": "macos_control",
-      "description": "Comprehensive macOS automation with 513+ pre-built scripts covering Safari, Chrome, Firefox, Mail, Notes, Calendar, Reminders, Photos, Music, Xcode, VS Code, Terminal, System controls, and more. Supports AppleScript and JXA (JavaScript for Automation). Use 'list_scripts' to browse 90+ categories. Use 'kb_script' to execute pre-built scripts with parameters. Includes educational examples, browser automation, productivity apps, creative apps, developer tools, and advanced workflows. DO NOT use for opening files - use run_command instead.",
+      "description": "Comprehensive macOS automation with 513+ pre-built scripts. Prefer: action=list_scripts to browse, then action=kb_script with kb_script_id + params. For simple automation use open_app/send_keys/click/spotlight_search or script (AppleScript/JXA). DO NOT use to open files; use run_command.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -698,12 +698,7 @@
           }
         },
         "required": [
-          "action",
-          "target",
-          "wait_time",
-          "language",
-          "kb_script_id",
-          "params"
+          "action"
         ]
       }
     }
@@ -1557,7 +1552,7 @@
     "type": "function",
     "function": {
       "name": "TodoWrite",
-      "description": "Manage todo list for multi-step tasks. CRITICAL: Call this to UPDATE task status as you work (pending\u2192in_progress\u2192completed). Don't just create the list at the start - update it throughout execution to show progress. Users see this in real-time.",
+      "description": "Manage todo list for multi-step tasks. CRITICAL: Call this to UPDATE task status as you work (pending→in_progress→completed). Don't just create the list at the start - update it throughout execution to show progress. Users see this in real-time.",
       "parameters": {
         "type": "object",
         "properties": {

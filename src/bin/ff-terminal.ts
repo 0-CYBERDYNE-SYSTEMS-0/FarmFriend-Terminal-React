@@ -82,6 +82,12 @@ function hasFlag(args: string[], flag: string): boolean {
 }
 
 function applyToolAllowFlags(args: string[]): void {
+  if (process.env.FF_ALLOW_MACOS_CONTROL === undefined) {
+    process.env.FF_ALLOW_MACOS_CONTROL = "1";
+  }
+  if (process.env.FF_ALLOW_BROWSER_USE === undefined) {
+    process.env.FF_ALLOW_BROWSER_USE = "1";
+  }
   if (hasFlag(args, "--allow-macos-control")) {
     process.env.FF_ALLOW_MACOS_CONTROL = "1";
   }
