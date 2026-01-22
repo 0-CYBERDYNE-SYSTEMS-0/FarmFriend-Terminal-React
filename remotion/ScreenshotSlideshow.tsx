@@ -6,49 +6,49 @@ import styled from 'styled-components';
 
 const SCREENSHOTS = [
   {
-    file: 'remotion/assets/Screenshot 2026-01-03 at 10.50.38.png',
+    file: 'Screenshot 2026-01-03 at 10.50.38.png',
     title: 'Autonomous Development Environment',
     subtitle: 'AI-powered terminal for any industry',
     startFrame: 0,
     endFrame: 120, // 4 seconds
   },
   {
-    file: 'remotion/assets/Screenshot 2026-01-10 at 17.28.15.png',
+    file: 'Screenshot 2026-01-10 at 17.28.15.png',
     title: 'Dual-Process Architecture',
     subtitle: 'Separates AI daemon from user interface',
     startFrame: 120,
     endFrame: 240, // 4 seconds
   },
   {
-    file: 'remotion/assets/Screenshot 2026-01-17 at 12.44.02.png',
+    file: 'Screenshot 2026-01-17 at 12.44.02.png',
     title: 'Universal Toolset',
     subtitle: '43 tools spanning coding, IoT, and automation',
     startFrame: 240,
     endFrame: 360, // 4 seconds
   },
   {
-    file: 'remotion/assets/Screenshot 2026-01-19 at 09.22.07.png',
+    file: 'Screenshot 2026-01-19 at 09.22.07.png',
     title: 'Skill Ecosystem',
     subtitle: 'Modular skills for any domain expertise',
     startFrame: 360,
     endFrame: 480, // 4 seconds
   },
   {
-    file: 'remotion/assets/Screenshot 2026-01-20 at 18.21.35.png',
+    file: 'Screenshot 2026-01-20 at 18.21.35.png',
     title: 'Production-Grade',
     subtitle: 'Battle-tested in real-world deployments',
     startFrame: 480,
     endFrame: 600, // 4 seconds
   },
   {
-    file: 'remotion/assets/Screenshot 2026-01-22 at 00.26.08.png',
+    file: 'Screenshot 2026-01-22 at 00.26.08.png',
     title: 'Multi-Modal Intelligence',
     subtitle: 'Process images, files, and code naturally',
     startFrame: 600,
     endFrame: 720, // 4 seconds
   },
   {
-    file: 'remotion/assets/Screenshot 2026-01-22 at 08.28.46.png',
+    file: 'Screenshot 2026-01-22 at 08.28.46.png',
     title: 'Your Invisible Assistant',
     subtitle: 'Build automation for farming, manufacturing, and beyond',
     startFrame: 720,
