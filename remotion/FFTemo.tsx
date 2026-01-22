@@ -1,5 +1,5 @@
 import React from 'react';
-import { AbsoluteFill, interpolate, useCurrentFrame, Audio } from 'remotion';
+import { AbsoluteFill, interpolate, useCurrentFrame } from 'remotion';
 import styled from 'styled-components';
 import { TerminalAnimation } from './components/TerminalAnimation';
 import { AgentThinking } from './components/AgentThinking';
@@ -122,7 +122,6 @@ export const FFTerminalDemo: React.FC = () => {
       </div>
 
       {/* Background audio - will be added separately */}
-      <Audio />
     </Background>
   );
 };

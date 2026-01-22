@@ -1,5 +1,5 @@
 import React from 'react';
-import { Composition } from 'remotion';
+import { Composition, registerRoot } from 'remotion';
 import { FFTerminalDemo } from './FFTemo';
 import { Audio } from './components/Audio';
 import { TerminalAnimation } from './components/TerminalAnimation';
@@ -22,3 +22,5 @@ export const RemotionRoot: React.FC = () => {
     </>
   );
 };
+
+registerRoot(RemotionRoot);
