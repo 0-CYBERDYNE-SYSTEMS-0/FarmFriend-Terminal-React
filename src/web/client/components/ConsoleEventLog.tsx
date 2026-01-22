@@ -201,29 +201,32 @@ export function ConsoleEventLog({ events, onClear }: ConsoleEventLogProps) {
                     <div className="bg-black/30 rounded p-2 border-l-2 border-amber-500/50">
                       <div className="text-amber-300 font-semibold mb-1">Input:</div>
                       <div className="text-gray-400 font-mono whitespace-pre-wrap break-all">
-                        {typeof event.metadata.input === 'string' 
+                        {typeof event.metadata.input === "string" 
                           ? event.metadata.input.slice(0, 500)
                           : JSON.stringify(event.metadata.input, null, 2).slice(0, 500)
                         }
-                        {event.metadata.input && (typeof event.metadata.input === 'string' ? event.metadata.input : JSON.stringify(event.metadata.input)).length > 500 && '...'}
+                        {event.metadata.input && (typeof event.metadata.input === "string" ? event.metadata.input : JSON.stringify(event.metadata.input)).length > 500 && "..."}
                       </div>
                     </div>
                   )}
+                  {event.metadata.output && event.metadata.input && (
+                    <div className="border-t border-white/10" />
+                  )}
                   {event.metadata.output && (
                     <div className={`bg-black/30 rounded p-2 border-l-2 ${
-                      event.metadata.status === 'ok' 
-                        ? 'border-green-500/50' 
-                        : 'border-red-500/50'
+                      event.metadata.status === "ok" 
+                        ? "border-green-500/50" 
+                        : "border-red-500/50"
                     }`}>
                       <div className={`font-semibold mb-1 ${
-                        event.metadata.status === 'ok' ? 'text-green-300' : 'text-red-300'
+                        event.metadata.status === "ok" ? "text-green-300" : "text-red-300"
                       }`}>
-                        {event.metadata.status === 'ok' ? '✓ Output:' : '✗ Error:'}
+                        {event.metadata.status === "ok" ? "✓ Output:" : "✗ Error:"}
 
                       </div>
                       <div className="text-gray-400 font-mono whitespace-pre-wrap break-all">
                         {event.metadata.output.slice(0, 500)}
-                        {event.metadata.output.length > 500 && '...'}
+                        {event.metadata.output.length > 500 && "..."}
                       </div>
                     </div>
                   )}

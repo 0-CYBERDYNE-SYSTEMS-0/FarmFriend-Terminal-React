@@ -887,15 +887,7 @@
         "properties": {
           "message": {
             "type": "string",
-            "description": "Brief 1-2 sentence status update (e.g., 'Analyzing files... 50% complete')"
-          },
-          "update_type": {
-            "type": "string",
-            "description": "Type of update: 'progress', 'status', 'milestone'"
-          },
-          "duration": {
-            "type": "number",
-            "description": "How long to display the update in seconds (default: 2.0)"
+            "description": "Brief 1-2 sentence status update"
           }
         },
         "required": [
