@@ -2,6 +2,7 @@ import React from 'react';
 import { Composition, registerRoot } from 'remotion';
 import { FFTerminalDemo } from './FFTemo';
 import { FFDemoV2 } from './FFDemoV2';
+import { ScreenshotSlideshow } from './ScreenshotSlideshow';
 import { Audio } from './components/Audio';
 import { TerminalAnimation } from './components/TerminalAnimation';
 import { AgentThinking } from './components/AgentThinking';
@@ -22,11 +23,22 @@ export const RemotionRoot: React.FC = () => {
         defaultProps={{}}
       />
 
-      {/* New enhanced 60s demo with realistic terminal flow */}
+      {/* Enhanced 60s demo with realistic terminal flow */}
       <Composition
         id="FFDemoV2"
         component={FFDemoV2}
         durationInFrames={1800}
+        fps={30}
+        width={1920}
+        height={1080}
+        defaultProps={{}}
+      />
+
+      {/* Professional Ken Burns screenshot slideshow */}
+      <Composition
+        id="ScreenshotSlideshow"
+        component={ScreenshotSlideshow}
+        durationInFrames={900}
         fps={30}
         width={1920}
         height={1080}
