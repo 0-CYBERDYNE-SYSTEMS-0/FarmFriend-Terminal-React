@@ -66,11 +66,11 @@ const DetailRow = styled.div`
   justify-content: space-between;
   margin-bottom: 12px;
   font-size: 14px;
-`;
 
-const DetailRow:last-child {
-  margin-bottom: 0;
-}
+  &:last-child {
+    margin-bottom: 0;
+  }
+`;
 
 const DetailLabel = styled.span`
   color: #718096;

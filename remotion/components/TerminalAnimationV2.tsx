@@ -86,7 +86,7 @@ const PromptSymbol = styled.span`
 
 const UserInput = styled.span<{ chars: number; maxChars: number }>`
   color: ${TERMINAL_COLORS.USER_INPUT};
-  cursor: ${props => props.chars < props.maxChars ? 'block' : 'default'}`;
+  cursor: ${props => (props.chars < props.maxChars ? 'block' : 'default')};
 `;
 
 const Cursor = styled.span<{ visible: boolean }>`
@@ -95,7 +95,7 @@ const Cursor = styled.span<{ visible: boolean }>`
   height: 22px;
   background: ${TERMINAL_COLORS.PROMPT};
   margin-left: 4px;
-  animation: ${props => props.visible ? 'blink 1s step-end infinite' : 'none'};
+  animation: ${props => (props.visible ? 'blink 1s step-end infinite' : 'none')};
   @keyframes blink {
     0%, 50% { opacity: 1; }
     51%, 100% { opacity: 0; }
@@ -174,13 +174,12 @@ export const TerminalAnimationV2: React.FC<TerminalAnimationV2Props> = ({
 
   // Scroll offset calculation
   const scrollOffset = useMemo(() => {
-    // More events = more scroll
-    const completedEvents = SESSION_EVENTS.filter(e => e.frame < frame).length;
+    const completedEvents = SESSION_EVENTS.filter((e) => e.frame < frame).length;
     return completedEvents * 80; // 80px per event approx
   }, [frame]);
 
   // Calculate user input typing progress
-  const userPromptEvent = SESSION_EVENTS.find(e => e.type === EventType.USER_PROMPT);
+  const userPromptEvent = SESSION_EVENTS.find((e) => e.type === EventType.USER_PROMPT);
   const typingProgress = useMemo(() => {
     if (!userPromptEvent) return { chars: 0, maxChars: 0 };
     const eventDuration = userPromptEvent.duration || 120;
@@ -209,20 +208,22 @@ export const TerminalAnimationV2: React.FC<TerminalAnimationV2Props> = ({
       );
 
       switch (event.type) {
-        case EventType.USER_PROMPT:
+        case EventType.USER_PROMPT: {
           const typedText = (event.text || '').substring(0, typingProgress.chars);
+          const eventEnd = event.duration ? event.frame + event.duration : frame + 1;
+          const shouldShowCursor = cursorVisible && frame < eventEnd;
+
           lines.push(
             <Prompt key={`prompt-${lineIndex++}`} opacity={eventOpacity}>
-              <PromptSymbol>farmfriend></PromptSymbol>
+              <PromptSymbol>farmfriend{'>'}</PromptSymbol>
               <UserInput chars={typingProgress.chars} maxChars={typingProgress.maxChars}>
                 {typedText}
               </UserInput>
-              {cursorVisible && frame < (event.duration ? event.frame + event.duration : frame + 1) && (
-                <Cursor visible={cursorVisible} />
-              )}
+              {shouldShowCursor && <Cursor visible={cursorVisible} />}
             </Prompt>
           );
           break;
+        }
 
         case EventType.AGENT_THINKING:
           lines.push(

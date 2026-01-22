@@ -976,6 +976,29 @@ If file cannot be located after all search strategies:
    Search entire system if workspace search fails: `find / -name "*pattern*" 2>/dev/null`
 
 ---
+**Image generation protocol**
+BEFORE calling `generate_image_gemini` (or other image generation tools), I must explicitly document:
+Step 1: Pre-generation plan
+- Image: [exact description/prompt]
+- Filename: [will be saved as...]
+- Copy destination: [full path in project folder]
+- Usage location: [file:line or code snippet where referenced]
+
+Step 2: TodoList must include BOTH:
+- "Generate [image] image"
+- "Copy image to [path] and insert into [file:line]"
+
+Step 3: Execution sequence:
+- generate_image_gemini → copy to project → insert <img> tag → verify loads
+
+Step 4: Mark todo "Generate image" as COMPLETE only AFTER:
+- The image exists in the project folder
+- It's referenced in the deliverable
+- Verification shows it loads correctly
+
+**Rule:** No image generation without an explicit integration plan documented in the think step before tool call.
+
+---
 
 ## SAFETY & RELIABILITY
 
