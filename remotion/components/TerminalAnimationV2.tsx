@@ -198,11 +198,11 @@ export const TerminalAnimationV2: React.FC<TerminalAnimationV2Props> = ({
     let lineIndex = 0;
 
     for (const event of SESSION_EVENTS) {
-      if (event.frame > frame) break;
+      if (event.frame > frame + 50) break; // Render upcoming events slightly early
 
       const eventOpacity = interpolate(
         frame,
-        [event.frame, event.frame + 15],
+        [event.frame - 10, event.frame + 15],
         [0, 1],
         { extrapolateRight: false }
       );
