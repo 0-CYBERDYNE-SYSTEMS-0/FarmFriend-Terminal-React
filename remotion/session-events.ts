@@ -56,44 +56,42 @@ export interface ArtifactInfo {
  * Total duration: 60 seconds (1800 frames @ 30fps)
  *
  * Flow:
- * 0-60:       Branding/title intro
- * 60-180:     User prompt appears, agent starts thinking
- * 180-360:    First tool call (read sensor data) with diagnostics
- * 360-540:    Network analysis and sensor reset attempt
- * 540-720:    Artifact creation (incident report)
- * 720-900:    Final success message + artifact preview
- * 900-1800:   CTA and outro
+ * 0-120:      Branding/title intro (terminal hidden)
+ * 120-240:    User prompt appears, agent starts thinking
+ * 240-420:    First tool call (read sensor data) with diagnostics
+ * 420-600:    Network analysis and sensor reset attempt
+ * 600-720:    Artifact creation (incident report)
+ * 720-840:    Final success message + artifact preview
+ * 840-1440:   Continued terminal activity
+ * 1440-1800:  CTA and outro (terminal fades out)
  */
 export const SESSION_EVENTS: SessionEvent[] = [
-  // ===== BRANDING / TITLE (0-60s frames) =====
-  { frame: 0, type: EventType.SYSTEM_MESSAGE, text: 'Farm Friend Terminal v3.2.1', duration: 60 },
+  // ===== USER PROMPT (120-240) =====
+  { frame: 120, type: EventType.USER_PROMPT, text: 'Check irrigation sensors in Field 7 — 3 sensors showing offline', duration: 120 },
 
-  // ===== USER PROMPT (60-180) =====
-  { frame: 60, type: EventType.USER_PROMPT, text: 'Check irrigation sensors in Field 7 — 3 sensors showing offline', duration: 120 },
-
-  // ===== AGENT THINKING (180-360) =====
+  // ===== AGENT THINKING (240-420) =====
   {
-    frame: 180,
+    frame: 240,
     type: EventType.AGENT_THINKING,
     message: 'Analyzing sensor connectivity status...',
     duration: 60,
   },
   {
-    frame: 240,
+    frame: 300,
     type: EventType.AGENT_THINKING,
     message: 'Cross-referencing network topology...',
     duration: 60,
   },
   {
-    frame: 300,
+    frame: 360,
     type: EventType.AGENT_THINKING,
     message: 'Identifying failure point: relay node near pump house',
     duration: 60,
   },
 
-  // ===== TOOL CALL: read (360-480) =====
+  // ===== TOOL CALL: read (420-540) =====
   {
-    frame: 360,
+    frame: 420,
     type: EventType.TOOL_CALL,
     text: '> read /sensors/field_7/sensor_logs.json',
     tool: {
@@ -107,9 +105,9 @@ export const SESSION_EVENTS: SessionEvent[] = [
     duration: 120,
   },
 
-  // ===== TOOL OUTPUT: read results (480-600) =====
+  // ===== TOOL OUTPUT: read results (540-660) =====
   {
-    frame: 480,
+    frame: 540,
     type: EventType.TOOL_OUTPUT,
     output: [
       '{',
@@ -130,9 +128,9 @@ export const SESSION_EVENTS: SessionEvent[] = [
     duration: 120,
   },
 
-  // ===== TOOL CALL: exec (ping test) (600-720) =====
+  // ===== TOOL CALL: exec (ping test) (660-780) =====
   {
-    frame: 600,
+    frame: 660,
     type: EventType.TOOL_CALL,
     text: '> exec ping -c 5 relay-node-pump-house.local',
     tool: {
@@ -146,9 +144,9 @@ export const SESSION_EVENTS: SessionEvent[] = [
     duration: 120,
   },
 
-  // ===== TOOL OUTPUT: ping results (720-840) =====
+  // ===== TOOL OUTPUT: ping results (780-900) =====
   {
-    frame: 720,
+    frame: 780,
     type: EventType.TOOL_OUTPUT,
     output: [
       'PING relay-node-pump-house.local (192.168.1.50): 56 data bytes',
@@ -167,9 +165,9 @@ export const SESSION_EVENTS: SessionEvent[] = [
     duration: 120,
   },
 
-  // ===== TOOL CALL: exec (sensor reset) (840-960) =====
+  // ===== TOOL CALL: exec (sensor reset) (900-1020) =====
   {
-    frame: 840,
+    frame: 900,
     type: EventType.TOOL_CALL,
     text: '> exec ssh sensor-node-3 "systemctl restart sensord && systemctl restart wirelessd"',
     tool: {
@@ -183,9 +181,9 @@ export const SESSION_EVENTS: SessionEvent[] = [
     duration: 120,
   },
 
-  // ===== TOOL OUTPUT: reset results (960-1080) =====
+  // ===== TOOL OUTPUT: reset results (1020-1140) =====
   {
-    frame: 960,
+    frame: 1020,
     type: EventType.TOOL_OUTPUT,
     output: [
       '[sensor-node-3] Running systemctl restart sensord...',
@@ -205,9 +203,9 @@ export const SESSION_EVENTS: SessionEvent[] = [
     duration: 120,
   },
 
-  // ===== TOOL CALL: write (artifact creation) (1080-1200) =====
+  // ===== TOOL CALL: write (artifact creation) (1140-1260) =====
   {
-    frame: 1080,
+    frame: 1140,
     type: EventType.TOOL_CALL,
     text: '> write memory/incidents/2026-01-22_field7_sensors.md',
     tool: {
@@ -221,9 +219,9 @@ export const SESSION_EVENTS: SessionEvent[] = [
     duration: 120,
   },
 
-  // ===== SUCCESS MESSAGE (1200-1320) =====
+  // ===== SUCCESS MESSAGE (1260-1380) =====
   {
-    frame: 1200,
+    frame: 1260,
     type: EventType.ARTIFACT_CREATED,
     text: '✓ Incident report created: 2026-01-22_field7_sensors.md',
     artifact: {
@@ -261,9 +259,9 @@ Hardware replacement arriving in 3-5 business days.
     duration: 120,
   },
 
-  // ===== FINAL SUCCESS (1320-1440) =====
+  // ===== FINAL SUCCESS (1380-1500) =====
   {
-    frame: 1320,
+    frame: 1380,
     type: EventType.SUCCESS_MESSAGE,
     text: '✓ All irrigation sensors operational. 3 issues resolved in 2 minutes.',
     duration: 120,
