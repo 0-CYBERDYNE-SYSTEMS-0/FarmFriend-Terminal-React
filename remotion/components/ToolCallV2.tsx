@@ -166,12 +166,15 @@ export const ToolCallV2: React.FC<ToolCallV2Props> = ({
   // Only show when we have a tool call, fade out otherwise
   const displayOpacity = tool ? 1 : 0;
 
-  // Scale animation - only calculate when tool exists
-  const scale = tool ? spring({
-    frame: tool.frame - startTime,
-    fps: 30,
-    config: { stiffness: 100, damping: 15 },
-  }) : 1;
+  // Scale animation - only calculate when tool exists (use if, not ternary)
+  let scale = 1;
+  if (tool) {
+    scale = spring({
+      frame: tool.frame - startTime,
+      fps: 30,
+      config: { stiffness: 100, damping: 15 },
+    });
+  }
 
   // Horizontal slide animation
   const translateX = interpolate(

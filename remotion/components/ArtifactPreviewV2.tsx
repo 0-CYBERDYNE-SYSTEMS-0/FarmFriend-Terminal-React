@@ -160,12 +160,15 @@ export const ArtifactPreviewV2: React.FC<ArtifactPreviewV2Props> = ({
   // Only show when we have an artifact
   const displayOpacity = artifact ? 1 : 0;
 
-  // Scale animation (pop in) - only calculate when artifact exists
-  const scale = artifact ? spring({
-    frame: artifact.frame - startTime,
-    fps: 30,
-    config: { stiffness: 100, damping: 12 },
-  }) : 1;
+  // Scale animation (pop in) - only calculate when artifact exists (use if, not ternary)
+  let scale = 1;
+  if (artifact) {
+    scale = spring({
+      frame: artifact.frame - startTime,
+      fps: 30,
+      config: { stiffness: 100, damping: 12 },
+    });
+  }
 
   if (displayOpacity <= 0.01 || !artifact) return null;
 
