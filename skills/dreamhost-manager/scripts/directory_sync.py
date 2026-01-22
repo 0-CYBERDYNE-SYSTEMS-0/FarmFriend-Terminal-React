@@ -12,7 +12,9 @@ import paramiko
 from dotenv import load_dotenv
 from path_resolver import resolve_path, extract_domain, get_credentials
 
-load_dotenv()
+# Load from skill directory
+script_dir = Path(__file__).parent.parent
+load_dotenv(dotenv_path=script_dir / '.env')
 
 
 class DirectorySync:

@@ -1,0 +1,314 @@
+<html lang="en"><head></head><body><code>
+
+
+
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Desmond Digital Portfolio</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/axios/1.4.0/axios.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        :root {
+            --primary: #1a237e;
+            --secondary: #4CAF50;
+            --accent: #FF9800;
+            --text: #212121;
+            --bg: #fafafa;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', system-ui, sans-serif;
+        }
+
+        body {
+            background: var(--bg);
+            color: var(--text);
+            overflow-x: hidden;
+        }
+
+        .hero {
+            height: 100vh;
+            background: linear-gradient(135deg, #1a237e 0%, #0d47a1 100%);
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .hero-content {
+            text-align: center;
+            z-index: 2;
+        }
+
+        .hero h1 {
+            font-size: 4rem;
+            margin-bottom: 1rem;
+            animation: fadeInDown 1s ease-out;
+        }
+
+        .hero p {
+            font-size: 1.5rem;
+            opacity: 0.9;
+            animation: fadeInUp 1s ease-out 0.5s both;
+        }
+
+        .projects {
+            padding: 4rem 2rem;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .project-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 2rem;
+            margin-top: 2rem;
+        }
+
+        .project-card {
+            background: white;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            transition: transform 0.3s ease;
+        }
+
+        .project-card:hover {
+            transform: translateY(-5px);
+        }
+
+        .project-image {
+            height: 200px;
+            background-size: cover;
+            background-position: center;
+        }
+
+        .project-content {
+            padding: 1.5rem;
+        }
+
+        .project-title {
+            font-size: 1.25rem;
+            color: var(--primary);
+            margin-bottom: 0.5rem;
+        }
+
+        .project-description {
+            color: #666;
+            margin-bottom: 1rem;
+        }
+
+        .project-link {
+            display: inline-block;
+            padding: 0.5rem 1rem;
+            background: var(--primary);
+            color: white;
+            text-decoration: none;
+            border-radius: 4px;
+            transition: background 0.3s ease;
+        }
+
+        .project-link:hover {
+            background: var(--secondary);
+        }
+
+        .section-title {
+            text-align: center;
+            font-size: 2.5rem;
+            margin-bottom: 2rem;
+            color: var(--primary);
+        }
+
+        #particles-js {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            top: 0;
+            left: 0;
+        }
+
+        .floating-farm {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            font-size: 0.8rem;
+            color: var(--secondary);
+            opacity: 0.7;
+            pointer-events: none;
+        }
+
+        @media (max-width: 768px) {
+            .hero h1 {
+                font-size: 2.5rem;
+            }
+            .hero p {
+                font-size: 1.2rem;
+            }
+            .projects {
+                padding: 2rem 1rem;
+            }
+        }
+
+        .category-title {
+            font-size: 2rem;
+            color: var(--primary);
+            margin: 3rem 0 1.5rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 3px solid var(--accent);
+        }
+    </style>
+
+
+    <div class="hero">
+        <div id="particles-js"><canvas class="particles-js-canvas-el" width="2732" height="1962" style="width: 100%; height: 100%;"></canvas></div>
+        <div class="hero-content">
+            <h1 class="animate__animated animate__fadeInDown">Desmond Digital</h1>
+            <p class="animate__animated animate__fadeInUp">Innovative Digital Solutions</p>
+        </div>
+    </div>
+
+    <main class="projects">
+        <h2 class="category-title">Agricultural Technology</h2>
+        <div class="project-grid">
+            <div class="project-card">
+                <div class="project-image" id="ff-vision-image" style="background-image: url(&quot;https://images.unsplash.com/photo-1710264144788-c2301607d735?crop=entropy&amp;cs=tinysrgb&amp;fit=max&amp;fm=jpg&amp;ixid=M3w2NDc1MDF8MHwxfHNlYXJjaHwxfHxhZ3JpY3VsdHVyYWwlMjB0ZWNobm9sb2d5fGVufDB8fHx8MTczMzQ0NTIzOHww&amp;ixlib=rb-4.0.3&amp;q=80&amp;w=1080&quot;);"></div>
+                <div class="project-content">
+                    <h3 class="project-title">FF-Vision</h3>
+                    <p class="project-description">Advanced agricultural vision technology for modern farming.</p>
+                    <a href="https://farm-friend-vision.replit.app/" class="project-link">View Project</a>
+                </div>
+            </div>
+            
+            <div class="project-card">
+                <div class="project-image" id="ff-vision-plus-image" style="background-image: url(&quot;https://images.unsplash.com/photo-1530507629858-e4977d30e9e0?crop=entropy&amp;cs=tinysrgb&amp;fit=max&amp;fm=jpg&amp;ixid=M3w2NDc1MDF8MHwxfHNlYXJjaHwxfHxzbWFydCUyMGZhcm1pbmd8ZW58MHx8fHwxNzMzNDQ1MjM4fDA&amp;ixlib=rb-4.0.3&amp;q=80&amp;w=1080&quot;);"></div>
+                <div class="project-content">
+                    <h3 class="project-title">FF-Vision-Plus</h3>
+                    <p class="project-description">Enhanced vision capabilities for precise agricultural analysis.</p>
+                    <a href="https://farm-friend-vision-plus.replit.app/" class="project-link">View Project</a>
+                </div>
+            </div>
+        </div>
+
+        <h2 class="category-title">Dubai Projects</h2>
+        <div class="project-grid">
+            <div class="project-card">
+                <div class="project-image" id="ohanapal-image" style="background-image: url(&quot;https://images.unsplash.com/photo-1509339022327-1e1e25360a41?crop=entropy&amp;cs=tinysrgb&amp;fit=max&amp;fm=jpg&amp;ixid=M3w2NDc1MDF8MHwxfHNlYXJjaHwxfHxkdWJhaSUyMHRlY2hub2xvZ3l8ZW58MHx8fHwxNzMzNDQ1MjM4fDA&amp;ixlib=rb-4.0.3&amp;q=80&amp;w=1080&quot;);"></div>
+                <div class="project-content">
+                    <h3 class="project-title">OhanaPal</h3>
+                    <p class="project-description">Independence, Redefined - Innovative Solutions for Modern Living</p>
+                    <a href="https://www.ohanapal.app/#faqs" class="project-link">Learn More</a>
+                </div>
+            </div>
+        </div>
+
+        <h2 class="category-title">Enterprise Tools</h2>
+        <div class="project-grid">
+            <div class="project-card">
+                <div class="project-image" id="data-lens-image" style="background-image: url(&quot;https://images.unsplash.com/photo-1666875753105-c63a6f3bdc86?crop=entropy&amp;cs=tinysrgb&amp;fit=max&amp;fm=jpg&amp;ixid=M3w2NDc1MDF8MHwxfHNlYXJjaHwxfHxkYXRhJTIwYW5hbHl0aWNzfGVufDB8fHx8MTczMzQ0NTIzOHww&amp;ixlib=rb-4.0.3&amp;q=80&amp;w=1080&quot;);"></div>
+                <div class="project-content">
+                    <h3 class="project-title">DataLens</h3>
+                    <p class="project-description">Advanced data analytics and visualization platform.</p>
+                    <a href="https://data-lens.replit.app/" class="project-link">Explore Tool</a>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <div class="floating-farm">FARM FRIEND</div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/particles.js/2.0.0/particles.min.js"></script>
+    <script>
+        const unsplashAccessKey = 'E9BIYFasdpb28RjTOstdaclrjITgzZ1a-rVxML9KMbc';
+
+        async function loadProjectImage(elementId, query) {
+            try {
+                const response = await axios.get('https://api.unsplash.com/search/photos', {
+                    headers: {
+                        Authorization: `Client-ID ${unsplashAccessKey}`
+                    },
+                    params: {
+                        query: query,
+                        per_page: 1
+                    }
+                });
+                const imageUrl = response.data.results[0].urls.regular;
+                document.getElementById(elementId).style.backgroundImage = `url(${imageUrl})`;
+            } catch (error) {
+                console.error('Error loading image:', error);
+            }
+        }
+
+        // Load project images
+        loadProjectImage('ff-vision-image', 'agricultural technology');
+        loadProjectImage('ff-vision-plus-image', 'smart farming');
+        loadProjectImage('ohanapal-image', 'dubai technology');
+        loadProjectImage('data-lens-image', 'data analytics');
+
+        // Initialize particles.js
+        particlesJS('particles-js', {
+            particles: {
+                number: {
+                    value: 80,
+                    density: {
+                        enable: true,
+                        value_area: 800
+                    }
+                },
+                color: {
+                    value: '#ffffff'
+                },
+                shape: {
+                    type: 'circle'
+                },
+                opacity: {
+                    value: 0.5,
+                    random: false
+                },
+                size: {
+                    value: 3,
+                    random: true
+                },
+                line_linked: {
+                    enable: true,
+                    distance: 150,
+                    color: '#ffffff',
+                    opacity: 0.4,
+                    width: 1
+                },
+                move: {
+                    enable: true,
+                    speed: 6,
+                    direction: 'none',
+                    random: false,
+                    straight: false,
+                    out_mode: 'out',
+                    bounce: false
+                }
+            },
+            interactivity: {
+                detect_on: 'canvas',
+                events: {
+                    onhover: {
+                        enable: true,
+                        mode: 'repulse'
+                    },
+                    onclick: {
+                        enable: true,
+                        mode: 'push'
+                    },
+                    resize: true
+                }
+            },
+            retina_detect: true
+        });
+    </script>
+
+
+</code></body></html>

@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Contact Us | DDS</title>
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.15/dist/tailwind.min.css" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css" rel="stylesheet">
+  <style>
+    body {
+      font-family: Menlo, monospace;
+    }
+    .parallax {
+      background: url('https://source.unsplash.com/random/1920x1080?skyline') no-repeat center center fixed;
+      background-size: cover;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      color: #fff;
+    }
+    .hero-card {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(0, 0, 0, 0.6);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+    .contact-form {
+      max-width: 100%;
+      margin: 0 auto;
+      padding: 1rem;
+    }
+    .contact-form h2 {
+      font-size: 2rem;
+      font-weight: bold;
+      margin-bottom: 1rem;
+      text-align: center;
+    }
+    .contact-form form {
+      display: flex;
+      flex-wrap: wrap;
+    }
+    .contact-form label,
+    .contact-form input,
+    .contact-form textarea,
+    .contact-form button {
+      width: 100%;
+      margin-top: 1rem;
+      padding: 1rem;
+      border-radius: 0.5rem;
+      box-sizing: border-box;
+    }
+    .contact-form input,
+    .contact-form textarea {
+      border: 1px solid #000;
+      outline: none;
+    }
+    .contact-form textarea {
+      height: 10rem;
+    }
+    .contact-form button {
+      background-color: #007bff;
+      color: #fff;
+      font-weight: bold;
+      cursor: pointer;
+    }
+    .footer {
+      background-color: #333;
+      color: #fff;
+      padding: 2rem;
+      text-align: center;
+    }
+    .footer a {
+      color: #fff;
+      text-decoration: none;
+      font-weight: bold;
+    }
+    .footer a:hover {
+      text-decoration: underline;
+    }
+    .footer .social-icons {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      margin-top: 1rem;
+    }
+    .footer .social-icons a {
+      margin: 0 0.5rem;
+      color: #fff;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Navbar -->
+  <nav class="bg-gray-900 text-white p-4">
+    <div class="container mx-auto flex justify-between items-center">
+      <a href="#" class="text-2xl font-bold">DDS</a>
+      <ul class="flex">
+        <li class="ml-6"><a href="#contact" class="hover:underline">Contact</a></li>
+      </ul>
+    </div>
+  </nav>
+  
+  <!-- Hero Section with Parallax Effect -->
+  <div class="parallax relative">
+    <div class="hero-card w-full h-full absolute z-10"></div>
+    <h1 class="text-4xl md:text-6xl text-center relative z-20">Custom Software Design <br>& Custom Automations</h1>
+  </div>
+  
+  <!-- Contact Form Section -->
+  <section id="contact" class="contact-form py-16 px-4 md:px-0 text-gray-800">
+  <div class="max-w-3xl mx-auto">
+    <h2 class="text-3xl font-bold mb-8 text-center">Get In Touch</h2>
+    <!-- Start of modified form tag -->
+    <form class="p-0 md:p-8 contact-form" action="submit_form.php" method="post">
+      <div class="w-full md:w-1/2 my-4 px-2">
+        <label for="fullName" class="block mb-2">Full Name</label>
+        <input type="text" id="fullName" name="fullName" class="w-full p-4 rounded border" placeholder="Your name" required>
+      </div>
+      <div class="w-full md:w-1/2 my-4 px-2">
+        <label for="email" class="block mb-2">Email Address</label>
+        <input type="email" id="email" name="email" class="w-full p-4 rounded border" placeholder="Your email" required>
+      </div>
+      <div class="w-full my-4 px-2">
+        <label for="message" class="block mb-2">Your Message</label>
+        <textarea id="message" name="message" class="w-full p-4 rounded border h-32" placeholder="Your message" required></textarea>
+      </div>
+      <div class="w-full my-4 px-2">
+        <button type="submit" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-4 px-8 rounded w-full">Send Message</button>
+      </div>
+    </form>
+    <!-- End of modified form tag -->
+  </div>
+</section>
+  
+  <!-- Footer -->
+  <footer class="footer py-8 text-center">
+    <div class="container mx-auto">
+      &copy; 2023 DDS | <a href="https://desmond-digital.com" class="hover:text-white">desmond-digital.com</a>
+      <div class="social-icons">
+        <a href="#"><i class="fab fa-facebook-f text-2xl mx-2"></i></a>
+        <a href="#"><i class="fab fa-twitter text-2xl mx-2"></i></a>
+        <a href="#"><i class="fab fa-instagram text-2xl mx-2"></i></a>
+      </div>
+    </div>
+  </footer>
+
+</body>
+</html>

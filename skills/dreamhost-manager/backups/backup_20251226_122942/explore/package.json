@@ -1,0 +1,12 @@
+{
+  "name": "desmond-digital-explore",
+  "version": "1.0.0",
+  "description": "Desmond Digital Explore Page",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.17.1"
+  }
+}

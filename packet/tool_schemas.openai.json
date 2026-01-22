@@ -899,9 +899,7 @@
           }
         },
         "required": [
-          "message",
-          "update_type",
-          "duration"
+          "message"
         ]
       }
     }

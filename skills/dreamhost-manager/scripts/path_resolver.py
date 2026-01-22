@@ -5,20 +5,13 @@ Resolves domain names to full paths using .env configuration
 """
 
 import os
-from pathlib import Path
 from dotenv import load_dotenv
+from pathlib import Path
 
-def initialize_env(env_file_path: str = None):
-    """Initialize environment variables from optional .env file path"""
-    if env_file_path and os.path.exists(env_file_path):
-        load_dotenv(env_file_path, override=True)
-        print(f"Loaded environment from: {env_file_path}")
-    else:
-        load_dotenv()  # Fallback to default .env loading
-
-# Load environment variables (will be called from scripts)
-# Note: Each script should call initialize_env() with its own .env path
-initialize_env()
+# Load environment variables from skill directory
+script_dir = Path(__file__).parent.parent
+env_path = script_dir / '.env'
+load_dotenv(dotenv_path=env_path)
 
 
 def extract_domain(path_input):

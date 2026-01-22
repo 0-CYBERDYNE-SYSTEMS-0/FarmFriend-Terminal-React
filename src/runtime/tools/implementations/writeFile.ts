@@ -33,7 +33,7 @@ export async function writeFileTool(args: unknown): Promise<string> {
     warnings.push("writing under node_modules is usually unintended");
   }
 
-  // Validate HTML files have proper structure
+  // Validate HTML files have proper structure - warn instead of error
   if (absPath.endsWith('.html') || absPath.endsWith('.htm')) {
     const hasHtmlTag = /<html[^>]*>/i.test(content);
     const hasHeadTag = /<head[^>]*>/i.test(content);
@@ -47,11 +47,7 @@ export async function writeFileTool(args: unknown): Promise<string> {
       if (!hasBodyTag) missing.push('<body>');
       if (!hasClosingHtml) missing.push('</html>');
 
-      throw new Error(
-        `write_file: HTML file validation failed. Missing required tags: ${missing.join(', ')}. ` +
-        `HTML files must have a complete document structure with <html>, <head>, <body>, and </html> tags. ` +
-        `The content appears to be ${content.length} bytes of ${content.trim().startsWith('/*') || content.trim().startsWith('//') || content.trim().startsWith('function') ? 'JavaScript code' : 'content'} without HTML wrapper.`
-      );
+      warnings.push(`HTML file may be incomplete. Missing tags: ${missing.join(', ')}`);
     }
   }
 

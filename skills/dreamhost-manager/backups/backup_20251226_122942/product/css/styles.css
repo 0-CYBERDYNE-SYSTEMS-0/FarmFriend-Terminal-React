@@ -1,0 +1,139 @@
+
+        body, html {
+            margin: 0;
+            padding: 0;
+            background-color: #f4f7f6; /* Light grey background for a techy feel */
+            color: #333;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        header {
+            background-color: #1f2833; /* Dark blue background for header */
+            color: #66fcf1; /* Cyan color for text to stand out */
+            padding: 20px;
+            text-align: center;
+        }
+        .header-title {
+            margin: 0;
+            font-size: 2.5em;
+        }
+        .header-subtitle {
+            font-size: 1.2em;
+        }
+        .product-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr); /* Three columns */
+            gap: 20px; /* Space between thumbnails */
+            padding: 20px;
+            max-width: 1200px;
+            margin: 0 auto; /* Center grid in the middle of the page */
+        }
+        .thumbnail {
+            background-color: #c5c6c7; /* Neutral color for product thumbnails */
+            border-radius: 8px;
+            overflow: hidden;
+            transition: transform 0.3s ease;
+            cursor: pointer;
+        }
+        .thumbnail:hover {
+            transform: translateY(-5px); /* Slight lift effect on hover */
+        }
+        .thumbnail img {
+            width: 100%;
+            display: block;
+        }
+        .thumbnail-info {
+            padding: 10px;
+            text-align: center;
+            background-color: #1f2833; /* Dark background for text info */
+            color: white; /* White text */
+        }
+        .thumbnail-info h3 {
+            margin: 0;
+            padding-bottom: 5px;
+        }
+        .thumbnail-info p {
+            font-size: 0.9em;
+            margin: 0;
+        }
+        /* Navigation Bar Styles */
+        nav {
+            margin-top: 20px;
+            text-align: center;
+        }
+        nav a {
+            color: #66fcf1;
+            text-decoration: none;
+            margin: 0 10px;
+            font-size: 1.1em;
+            padding: 8px 16px;
+            background-color: #1f2833;
+            border-radius: 5px;
+            transition: background-color 0.3s;
+        }
+        nav a:hover {
+            background-color: #0b0f12;
+        }
+        .footer {
+            background-color: #333;
+            color: #fff;
+            padding: 20px;
+            text-align: center;
+        }
+        .footer a {
+            color: #fff;
+            text-decoration: none;
+            margin: 0 10px;
+        }
+        .footer a:hover {
+            color: #4caf50;
+        }
+        .social-links {
+            border: 1px solid #333; /* Add a border */
+            padding: 10px; /* Add some padding */
+            width: fit-content; /* Shrink the div to fit its content */
+            margin: 0 auto; /* Center the div */
+        }
+        
+        .social-links a {
+            color: #f5f8f8;
+            text-decoration: none;
+        }
+    }
+        
+    
+@media (max-width: 768px) {
+    header {
+        padding: 15px 10px; /* Smaller padding for mobile devices */
+    }
+    .navbar {
+        display: flex;
+        flex-direction: column;
+        align-items: center; /* Center navigation links */
+    }
+    .navbar a {
+        padding: 10px;
+        margin: 5px;
+        font-size: 1.2em; /* Larger font for easier tapping on mobile */
+    }
+    .content {
+        margin: 10px;
+        font-size: 1em; /* Adjust font size for readability on smaller screens */
+    }
+    .card {
+        flex-basis: 100%; /* Full width cards on smaller screens */
+    }
+}
+
+@media (max-width: 768px) {
+    .navbar {
+        display: flex;
+        flex-direction: row;
+        justify-content: space-around; /* Ensures equal spacing around items */
+        flex-wrap: wrap; /* Allows items to wrap to the next line if space is limited */
+    }
+    .navbar a {
+        font-size: 0.9em; /* Smaller font size */
+        padding: 8px 12px; /* Adjusted padding */
+        margin: 4px; /* Reduced margin */
+    }
+}

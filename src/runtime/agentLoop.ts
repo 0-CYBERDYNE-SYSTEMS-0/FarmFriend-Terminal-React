@@ -137,8 +137,14 @@ function getToolPreview(toolName: string, output: string, ok: boolean): string {
       }
 
       case "write_file": {
-        const lines = output.split("\n").length;
-        return `Wrote file (${lines} lines)`;
+        try {
+          const data = JSON.parse(output);
+          const bytes = data?.bytes || 0;
+          const lines = Math.max(1, Math.ceil(bytes / 50));
+          return `Wrote file (${lines} lines, ${bytes} bytes)`;
+        } catch {
+          return "File written";
+        }
       }
 
       case "run_command": {
