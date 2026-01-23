@@ -3,6 +3,7 @@ import { Composition, registerRoot } from 'remotion';
 import { FFTerminalDemo } from './FFTemo';
 import { FFDemoV2 } from './FFDemoV2';
 import { ScreenshotSlideshow } from './ScreenshotSlideshow';
+import { WorldClassDemo } from './WorldClassDemo';
 import { Audio } from './components/Audio';
 import { TerminalAnimation } from './components/TerminalAnimation';
 import { AgentThinking } from './components/AgentThinking';
@@ -39,6 +40,17 @@ export const RemotionRoot: React.FC = () => {
         id="ScreenshotSlideshow"
         component={ScreenshotSlideshow}
         durationInFrames={900}
+        fps={30}
+        width={1920}
+        height={1080}
+        defaultProps={{}}
+      />
+
+      {/* WORLD CLASS AGENCY DEMO - slide2 screenshots */}
+      <Composition
+        id="WorldClassDemo"
+        component={WorldClassDemo}
+        durationInFrames={1200}
         fps={30}
         width={1920}
         height={1080}
