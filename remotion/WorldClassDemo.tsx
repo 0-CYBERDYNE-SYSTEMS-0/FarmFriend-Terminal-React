@@ -1,5 +1,5 @@
 import React from 'react';
-import { AbsoluteFill, useCurrentFrame, interpolate, spring, Audio } from 'remotion';
+import { AbsoluteFill, useCurrentFrame, interpolate, spring, staticFile } from 'remotion';
 import styled from 'styled-components';
 
 // ===== SCREENSHOT DATA =====
@@ -307,7 +307,7 @@ export const WorldClassDemo: React.FC = () => {
     <Background>
       <ShotContainer>
         <MainImage
-          src={currentShot.file}
+          src={staticFile(currentShot.file)}
           scale={scale}
           opacity={shotOpacity}
           rotate={rotate}
