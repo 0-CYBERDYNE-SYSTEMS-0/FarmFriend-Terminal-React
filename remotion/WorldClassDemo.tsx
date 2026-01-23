@@ -1,9 +1,9 @@
 import React from 'react';
-import { AbsoluteFill, useCurrentFrame, interpolate, staticFile } from 'remotion';
+import { AbsoluteFill, useCurrentFrame, interpolate, spring, staticFile } from 'remotion';
 import styled from 'styled-components';
 
 // ===== SCREENSHOT DATA =====
-// 8 optimized screenshots for smooth performance
+// 12 screenshots from Sept 2025 - Jan 2026 showing FF Terminal evolution
 
 const SCREENSHOTS = [
   {
@@ -12,23 +12,39 @@ const SCREENSHOTS = [
     subtitle: 'September 2025',
     desc: 'The first version. Simple, powerful.',
     startFrame: 0,
-    endFrame: 150, // 5 seconds
+    endFrame: 90,
+  },
+  {
+    file: 'Screenshot 2025-10-03 at 12.39.40.png',
+    title: 'EVOLVING INTELLIGENCE',
+    subtitle: 'October 2025',
+    desc: 'Adding natural language understanding',
+    startFrame: 90,
+    endFrame: 180,
   },
   {
     file: 'Screenshot 2025-10-21 at 23.29.51.png',
     title: 'CODE GENERATION',
     subtitle: 'October 2025',
     desc: 'The system learns to write its own code',
-    startFrame: 150,
-    endFrame: 300, // 5 seconds
+    startFrame: 180,
+    endFrame: 270,
   },
   {
     file: 'Screenshot 2025-11-01 at 12.00.03.png',
     title: 'MULTI-PROCESS ARCHITECTURE',
     subtitle: 'November 2025',
     desc: 'Separating AI from UI for performance',
-    startFrame: 300,
-    endFrame: 450, // 5 seconds
+    startFrame: 270,
+    endFrame: 360,
+  },
+  {
+    file: 'Screenshot 2025-11-07 at 20.15.37.png',
+    title: 'TOOL ECOSYSTEM BORN',
+    subtitle: 'November 2025',
+    desc: 'The first tools connect to the world',
+    startFrame: 360,
+    endFrame: 450,
   },
   {
     file: 'Screenshot 2025-11-28 at 13.42.04.png',
@@ -36,23 +52,39 @@ const SCREENSHOTS = [
     subtitle: 'November 2025',
     desc: 'Modular skills for any industry',
     startFrame: 450,
-    endFrame: 600, // 5 seconds
+    endFrame: 540,
+  },
+  {
+    file: 'Screenshot 2025-12-04 at 16.29.20.png',
+    title: 'REAL-WORLD DEPLOYMENT',
+    subtitle: 'December 2025',
+    desc: 'Running on actual farms. Real data.',
+    startFrame: 540,
+    endFrame: 630,
   },
   {
     file: 'Screenshot 2025-12-06 at 01.07.47.png',
     title: 'MACHINE LEARNING INTEGRATION',
     subtitle: 'December 2025',
     desc: 'Learning from every interaction',
-    startFrame: 600,
-    endFrame: 750, // 5 seconds
+    startFrame: 630,
+    endFrame: 720,
   },
   {
     file: 'Screenshot 2025-12-29 at 14.04.38.png',
     title: 'CROSS-DOMAIN AWARENESS',
     subtitle: 'December 2025',
     desc: 'One system. Any industry. Any task.',
-    startFrame: 750,
-    endFrame: 900, // 5 seconds
+    startFrame: 720,
+    endFrame: 810,
+  },
+  {
+    file: 'Screenshot 2025-12-31 at 00.55.14.png',
+    title: 'NEW YEAR BREAKTHROUGH',
+    subtitle: 'January 1, 2026',
+    desc: 'The foundation is solid. Scaling begins.',
+    startFrame: 810,
+    endFrame: 900,
   },
   {
     file: 'Screenshot 2026-01-01 at 14.14.02.png',
@@ -60,15 +92,15 @@ const SCREENSHOTS = [
     subtitle: 'January 2026',
     desc: 'AI that works in the background. Always.',
     startFrame: 900,
-    endFrame: 1050, // 5 seconds
+    endFrame: 990,
   },
   {
     file: 'Screenshot 2026-01-22 at 08.28.46.png',
     title: 'THIS IS FARM FRIEND TERMINAL',
     subtitle: 'The Future Is Here',
     desc: 'Autonomous AI. Production-Grade. Ready.',
-    startFrame: 1050,
-    endFrame: 1200, // 5 seconds final
+    startFrame: 990,
+    endFrame: 1200, // Final scene: 7 seconds
   },
 ];
 
@@ -85,6 +117,7 @@ const ShotContainer = styled(AbsoluteFill)`
 const MainImage = styled.img<{
   scale: number;
   opacity: number;
+  rotate: number;
 }>`
   position: absolute;
   width: 110%;
@@ -92,7 +125,7 @@ const MainImage = styled.img<{
   left: -5%;
   top: -5%;
   object-fit: cover;
-  transform: scale(${props => props.scale});
+  transform: scale(${props => props.scale}) rotate(${props => props.rotate}deg);
   opacity: ${props => props.opacity};
 `;
 
@@ -183,6 +216,16 @@ const CTAText = styled.div<{ opacity: number }>`
   opacity: ${props => props.opacity};
 `;
 
+const ScanLine = styled.div<{ y: number; opacity: number }>`
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent 0%, rgba(0, 255, 136, 0.8) 50%, transparent 100%);
+  top: ${props => props.y}%;
+  opacity: ${props => props.opacity};
+`;
+
 // ===== MAIN COMPONENT =====
 
 export const WorldClassDemo: React.FC = () => {
@@ -199,21 +242,26 @@ export const WorldClassDemo: React.FC = () => {
   // Calculate progress within current shot
   const shotProgress = (frame - currentShot.startFrame) / (currentShot.endFrame - currentShot.startFrame);
 
-  // ===== OPTIMIZED ANIMATIONS =====
+  // ===== CINEMATIC ANIMATIONS =====
 
-  // Simple scale (no blur, no rotate for performance)
-  const scale = interpolate(shotProgress, [0, 1], [1.0, 1.2]);
+  // Zoom in/out with rotation for dramatic effect
+  const scale = interpolate(shotProgress, [0, 0.5, 1], [0.9, 1.2, 1.0]); // Zoom out then back in
+  const rotate = interpolate(shotProgress, [0, 1], [0, 2]); // Subtle 2° rotation for perspective
 
   // Smooth transitions
   const fadeIn = interpolate(frame, [currentShot.startFrame - 15, currentShot.startFrame + 15], [0, 1]);
   const fadeOut = interpolate(frame, [currentShot.endFrame - 20, currentShot.endFrame + 20], [1, 0]);
   const shotOpacity = Math.min(fadeIn, fadeOut);
 
-  // Text animations (staggered for effect)
+  // Text animations (staggered for dramatic effect)
   const monthYearOpacity = interpolate(frame, [currentShot.startFrame, currentShot.startFrame + 20], [0, 1]);
   const titleOpacity = interpolate(frame, [currentShot.startFrame + 5, currentShot.startFrame + 30], [0, 1]);
   const descOpacity = interpolate(frame, [currentShot.startFrame + 15, currentShot.startFrame + 40], [0, 1]);
   const ctaOpacity = frame >= 1100 ? interpolate(frame, [1100, 1140], [0, 1]) : 0;
+
+  // Scan line effect (subtle movement)
+  const scanLineY = (frame % 60) / 60 * 100;
+  const scanLineOpacity = interpolate(shotProgress, [0, 0.8], [0.4, 0]);
 
   return (
     <Background>
@@ -222,9 +270,14 @@ export const WorldClassDemo: React.FC = () => {
           src={staticFile(currentShot.file)}
           scale={scale}
           opacity={shotOpacity}
+          rotate={rotate}
         />
         <ImageOverlay />
       </ShotContainer>
+
+      {shotProgress < 0.85 && (
+        <ScanLine y={scanLineY} opacity={scanLineOpacity} />
+      )}
 
       <TextContainer opacity={shotOpacity}>
         <TopText>
@@ -234,7 +287,7 @@ export const WorldClassDemo: React.FC = () => {
 
         <BottomText>
           <Description opacity={descOpacity}>{currentShot.desc}</Description>
-          {currentShot.startFrame >= 1050 && (
+          {currentShot.startFrame >= 990 && (
             <CTAText opacity={ctaOpacity}>BUILD THE FUTURE WITH FF TERMINAL</CTAText>
           )}
         </BottomText>
