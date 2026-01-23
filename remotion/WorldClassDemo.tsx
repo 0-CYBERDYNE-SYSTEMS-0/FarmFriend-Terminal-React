@@ -1,5 +1,5 @@
 import React from 'react';
-import { AbsoluteFill, useCurrentFrame, interpolate, spring, staticFile } from 'remotion';
+import { AbsoluteFill, useCurrentFrame, interpolate, staticFile } from 'remotion';
 import styled from 'styled-components';
 
 // ===== SCREENSHOT DATA =====
@@ -12,95 +12,119 @@ const SCREENSHOTS = [
     subtitle: 'September 2025',
     desc: 'The first version. Simple, powerful.',
     startFrame: 0,
-    endFrame: 90,
+    endFrame: 100,
+    color: '#00ff88', // Green
+    panDirection: 'down',
   },
   {
     file: 'Screenshot 2025-10-03 at 12.39.40.png',
     title: 'EVOLVING INTELLIGENCE',
     subtitle: 'October 2025',
     desc: 'Adding natural language understanding',
-    startFrame: 90,
-    endFrame: 180,
+    startFrame: 100,
+    endFrame: 200,
+    color: '#00d4ff', // Cyan
+    panDirection: 'right',
   },
   {
     file: 'Screenshot 2025-10-21 at 23.29.51.png',
     title: 'CODE GENERATION',
     subtitle: 'October 2025',
     desc: 'The system learns to write its own code',
-    startFrame: 180,
-    endFrame: 270,
+    startFrame: 200,
+    endFrame: 300,
+    color: '#ffd700', // Gold
+    panDirection: 'left',
   },
   {
     file: 'Screenshot 2025-11-01 at 12.00.03.png',
     title: 'MULTI-PROCESS ARCHITECTURE',
     subtitle: 'November 2025',
     desc: 'Separating AI from UI for performance',
-    startFrame: 270,
-    endFrame: 360,
+    startFrame: 300,
+    endFrame: 400,
+    color: '#ff6b6b', // Red
+    panDirection: 'down',
   },
   {
     file: 'Screenshot 2025-11-07 at 20.15.37.png',
     title: 'TOOL ECOSYSTEM BORN',
     subtitle: 'November 2025',
     desc: 'The first tools connect to the world',
-    startFrame: 360,
-    endFrame: 450,
+    startFrame: 400,
+    endFrame: 500,
+    color: '#a855f7', // Purple
+    panDirection: 'right',
   },
   {
     file: 'Screenshot 2025-11-28 at 13.42.04.png',
     title: 'SKILL SYSTEM EMERGES',
     subtitle: 'November 2025',
     desc: 'Modular skills for any industry',
-    startFrame: 450,
-    endFrame: 540,
+    startFrame: 500,
+    endFrame: 600,
+    color: '#a855f7', // Purple
+    panDirection: 'right',
   },
   {
     file: 'Screenshot 2025-12-04 at 16.29.20.png',
     title: 'REAL-WORLD DEPLOYMENT',
     subtitle: 'December 2025',
     desc: 'Running on actual farms. Real data.',
-    startFrame: 540,
-    endFrame: 630,
+    startFrame: 600,
+    endFrame: 700,
+    color: '#68d391', // Orange
+    panDirection: 'left',
   },
   {
     file: 'Screenshot 2025-12-06 at 01.07.47.png',
     title: 'MACHINE LEARNING INTEGRATION',
     subtitle: 'December 2025',
     desc: 'Learning from every interaction',
-    startFrame: 630,
-    endFrame: 720,
+    startFrame: 700,
+    endFrame: 800,
+    color: '#63b3ed', // Light Blue
+    panDirection: 'down',
   },
   {
     file: 'Screenshot 2025-12-29 at 14.04.38.png',
     title: 'CROSS-DOMAIN AWARENESS',
     subtitle: 'December 2025',
     desc: 'One system. Any industry. Any task.',
-    startFrame: 720,
-    endFrame: 810,
+    startFrame: 800,
+    endFrame: 900,
+    color: '#faf089', // Yellow
+    panDirection: 'right',
   },
   {
     file: 'Screenshot 2025-12-31 at 00.55.14.png',
     title: 'NEW YEAR BREAKTHROUGH',
     subtitle: 'January 1, 2026',
     desc: 'The foundation is solid. Scaling begins.',
-    startFrame: 810,
-    endFrame: 900,
+    startFrame: 900,
+    endFrame: 1000,
+    color: '#00ff88', // Green
+    panDirection: 'left',
   },
   {
     file: 'Screenshot 2026-01-01 at 14.14.02.png',
     title: 'INVISIBLE ASSISTANT CONCEPT',
     subtitle: 'January 2026',
     desc: 'AI that works in the background. Always.',
-    startFrame: 900,
-    endFrame: 990,
+    startFrame: 1000,
+    endFrame: 1100,
+    color: '#00d4ff', // Cyan
+    panDirection: 'down',
   },
   {
     file: 'Screenshot 2026-01-22 at 08.28.46.png',
     title: 'THIS IS FARM FRIEND TERMINAL',
     subtitle: 'The Future Is Here',
     desc: 'Autonomous AI. Production-Grade. Ready.',
-    startFrame: 990,
-    endFrame: 1200, // Final scene: 7 seconds
+    startFrame: 1100,
+    endFrame: 1200, // Final scene: 3.3 seconds
+    color: '#00ff88', // Green (brand color)
+    panDirection: 'center',
   },
 ];
 
@@ -117,111 +141,90 @@ const ShotContainer = styled(AbsoluteFill)`
 const MainImage = styled.img<{
   scale: number;
   opacity: number;
-  rotate: number;
+  x: number;
+  y: number;
 }>`
   position: absolute;
   width: 110%;
   height: 110%;
-  left: -5%;
-  top: -5%;
   object-fit: cover;
-  transform: scale(${props => props.scale}) rotate(${props => props.rotate}deg);
+  transform: translate(${props => props.x}%, ${props => props.y}%) scale(${props => props.scale});
   opacity: ${props => props.opacity};
 `;
 
 const ImageOverlay = styled(AbsoluteFill)`
-  background: radial-gradient(circle at 30% 40%, transparent 0%, rgba(0, 0, 0, 0.7) 100%);
+  background: radial-gradient(circle at 50% 50%, transparent 0%, rgba(0, 0, 0, 0.5) 100%);
 `;
 
-const CinematicBars = styled(AbsoluteFill)`
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  pointer-events: none;
-`;
-
-const TopBar = styled.div`
-  height: 60px;
-  background: #000000;
-`;
-
-const BottomBar = styled.div`
-  height: 60px;
-  background: #000000;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-`;
-
-const TextContainer = styled.div<{ opacity: number }>`
+const TextContainer = styled.div<{ opacity: number; color: string }>`
   position: absolute;
-  width: 100%;
-  height: 100%;
+  bottom: 80px;
+  left: 0;
+  right: 0;
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
-  padding: 80px 100px;
-  opacity: ${props => props.opacity};
-`;
-
-const TopText = styled.div<{ opacity: number }>`
+  align-items: center;
   text-align: center;
   opacity: ${props => props.opacity};
 `;
 
-const MonthYear = styled.div`
-  font-family: 'SF Pro Display', -apple-system, sans-serif;
+const ASCIITitle = styled.div<{ opacity: number }>`
+  font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Menlo', monospace;
   font-size: 18px;
-  font-weight: 600;
-  color: #00ff88;
-  letter-spacing: 4px;
-  text-transform: uppercase;
-  margin-bottom: 12px;
-`;
-
-const MainTitle = styled.h1<{ opacity: number }>`
-  font-family: 'SF Pro Display', -apple-system, sans-serif;
-  font-size: 72px;
-  font-weight: 900;
-  color: #ffffff;
-  line-height: 1.1;
-  margin: 0;
-  letter-spacing: -3px;
-  text-shadow: 0 0 60px rgba(255, 255, 255, 0.3);
+  font-weight: 700;
+  color: ${props => props.color || '#00ff88'};
+  background: rgba(0, 0, 0, 0.8);
+  padding: 14px 28px;
+  border-radius: 6px;
+  border: 2px solid ${props => props.color || '#00ff88'};
+  letter-spacing: 1px;
+  text-shadow: 0 0 20px ${props => props.color || '#00ff88'};
   opacity: ${props => props.opacity};
 `;
 
-const BottomText = styled.div<{ opacity: number }>`
-  text-align: center;
+const ASCTIISubtitle = styled.div<{ opacity: number }>`
+  font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Menlo', monospace;
+  font-size: 14px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.9);
+  background: rgba(0, 0, 0, 0.7);
+  padding: 10px 20px;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  margin-top: 10px;
   opacity: ${props => props.opacity};
 `;
 
 const Description = styled.p<{ opacity: number }>`
   font-family: 'SF Pro Text', -apple-system, sans-serif;
-  font-size: 28px;
+  font-size: 22px;
   font-weight: 300;
-  color: rgba(255, 255, 255, 0.9);
-  margin: 0 0 16px 0;
+  color: rgba(255, 255, 255, 0.85);
+  margin: 0 0 20px 0;
   letter-spacing: -0.5px;
   opacity: ${props => props.opacity};
 `;
 
 const CTAText = styled.div<{ opacity: number }>`
-  font-family: 'SF Pro Display', -apple-system, sans-serif;
-  font-size: 24px;
-  font-weight: 700;
+  font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Menlo', monospace;
+  font-size: 26px;
+  font-weight: 800;
   color: #00ff88;
-  letter-spacing: 2px;
+  letter-spacing: 1px;
   text-transform: uppercase;
+  background: rgba(0, 255, 136, 0.15);
+  padding: 14px 36px;
+  border: 2px solid #00ff88;
+  border-radius: 24px;
   opacity: ${props => props.opacity};
 `;
 
-const ScanLine = styled.div<{ y: number; opacity: number }>`
+const ScanLine = styled.div<{ y: number; opacity: number; color: string }>`
   position: absolute;
   left: 0;
   right: 0;
-  height: 2px;
-  background: linear-gradient(90deg, transparent 0%, rgba(0, 255, 136, 0.8) 50%, transparent 100%);
+  height: 1px;
+  background: ${props => props.color};
   top: ${props => props.y}%;
   opacity: ${props => props.opacity};
 `;
@@ -242,26 +245,40 @@ export const WorldClassDemo: React.FC = () => {
   // Calculate progress within current shot
   const shotProgress = (frame - currentShot.startFrame) / (currentShot.endFrame - currentShot.startFrame);
 
-  // ===== CINEMATIC ANIMATIONS =====
+  // ===== SMOOTH, CALM ANIMATIONS =====
 
-  // Zoom in/out with rotation for dramatic effect
-  const scale = interpolate(shotProgress, [0, 0.5, 1], [0.9, 1.2, 1.0]); // Zoom out then back in
-  const rotate = interpolate(shotProgress, [0, 1], [0, 2]); // Subtle 2° rotation for perspective
+  // Pan + very subtle zoom (1.0 to 1.05 - minimal!)
+  let x = 0;
+  let y = 0;
+  const scale = interpolate(shotProgress, [0, 1], [1.0, 1.05]);
 
-  // Smooth transitions
-  const fadeIn = interpolate(frame, [currentShot.startFrame - 15, currentShot.startFrame + 15], [0, 1]);
-  const fadeOut = interpolate(frame, [currentShot.endFrame - 20, currentShot.endFrame + 20], [1, 0]);
+  // Pan direction: slide in from different sides
+  if (currentShot.panDirection === 'down') {
+    y = interpolate(shotProgress, [0, 0.3], [-8, 0]);
+  } else if (currentShot.panDirection === 'left') {
+    x = interpolate(shotProgress, [0, 0.3], [-8, 0]);
+  } else if (currentShot.panDirection === 'right') {
+    x = interpolate(shotProgress, [0, 0.3], [8, 0]);
+  } else {
+    // Center shot (final)
+    x = 0;
+    y = 0;
+  }
+
+  // Smooth transitions (LONGER fade times for smoothness)
+  const fadeIn = interpolate(frame, [currentShot.startFrame - 20, currentShot.startFrame + 30], [0, 1]);
+  const fadeOut = interpolate(frame, [currentShot.endFrame - 30, currentShot.endFrame + 20], [1, 0]);
   const shotOpacity = Math.min(fadeIn, fadeOut);
 
-  // Text animations (staggered for dramatic effect)
-  const monthYearOpacity = interpolate(frame, [currentShot.startFrame, currentShot.startFrame + 20], [0, 1]);
-  const titleOpacity = interpolate(frame, [currentShot.startFrame + 5, currentShot.startFrame + 30], [0, 1]);
-  const descOpacity = interpolate(frame, [currentShot.startFrame + 15, currentShot.startFrame + 40], [0, 1]);
-  const ctaOpacity = frame >= 1100 ? interpolate(frame, [1100, 1140], [0, 1]) : 0;
+  // Text animations (staggered and SLOW)
+  const titleOpacity = interpolate(frame, [currentShot.startFrame + 10, currentShot.startFrame + 40], [0, 1]);
+  const subtitleOpacity = interpolate(frame, [currentShot.startFrame + 20, currentShot.startFrame + 50], [0, 1]);
+  const descOpacity = interpolate(frame, [currentShot.startFrame + 30, currentShot.startFrame + 60], [0, 1]);
+  const ctaOpacity = frame >= 1100 ? interpolate(frame, [1100, 1150], [0, 1]) : 0;
 
-  // Scan line effect (subtle movement)
-  const scanLineY = (frame % 60) / 60 * 100;
-  const scanLineOpacity = interpolate(shotProgress, [0, 0.8], [0.4, 0]);
+  // Scan line (very subtle, per-shot color)
+  const scanLineY = (frame % 80) / 80 * 100;
+  const scanLineOpacity = interpolate(shotProgress, [0, 0.9], [0.15, 0]);
 
   return (
     <Background>
@@ -270,33 +287,39 @@ export const WorldClassDemo: React.FC = () => {
           src={staticFile(currentShot.file)}
           scale={scale}
           opacity={shotOpacity}
-          rotate={rotate}
+          x={x}
+          y={y}
         />
         <ImageOverlay />
-      </ShotContainer>
 
-      {shotProgress < 0.85 && (
-        <ScanLine y={scanLineY} opacity={scanLineOpacity} />
-      )}
+        {shotProgress < 0.9 && (
+          <ScanLine
+            y={scanLineY}
+            opacity={scanLineOpacity}
+            color={currentShot.color}
+          />
+        )}
 
-      <TextContainer opacity={shotOpacity}>
-        <TopText>
-          <MonthYear opacity={monthYearOpacity}>{currentShot.subtitle}</MonthYear>
-          <MainTitle opacity={titleOpacity}>{currentShot.title}</MainTitle>
-        </TopText>
+        <TextContainer opacity={shotOpacity}>
+          <ASCIITitle opacity={titleOpacity} color={currentShot.color}>
+            <div style={{marginBottom: '4px'}}>+-----------------------+</div>
+            <div>{currentShot.title}</div>
+            <div style={{marginTop: '4px'}}>+-----------------------+</div>
+          </ASCIITitle>
 
-        <BottomText>
+          <ASCTIISubtitle opacity={subtitleOpacity}>
+            &gt; {currentShot.subtitle}
+          </ASCTIISubtitle>
+
           <Description opacity={descOpacity}>{currentShot.desc}</Description>
-          {currentShot.startFrame >= 990 && (
-            <CTAText opacity={ctaOpacity}>BUILD THE FUTURE WITH FF TERMINAL</CTAText>
-          )}
-        </BottomText>
-      </TextContainer>
 
-      <CinematicBars>
-        <TopBar />
-        <BottomBar />
-      </CinematicBars>
+          {currentShot.startFrame >= 1100 && (
+            <CTAText opacity={ctaOpacity}>
+              &gt;&gt;&gt; BUILD THE FUTURE &lt;&lt;&lt;
+            </CTAText>
+          )}
+        </TextContainer>
+      </ShotContainer>
     </Background>
   );
 };
