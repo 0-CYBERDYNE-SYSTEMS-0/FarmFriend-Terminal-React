@@ -1,7 +1,0 @@
-Plant ID,Trait 1 - Aroma,Trait 2 - Bud Density,Trait 3 - Coloration,Trait 4 - Resin Production,Trait 5 - Growth Structure,Trait 6 - Leaf Size,Trait 7 - Flowering Speed,Trait 8 - Pest Resistance,Trait 9 - Yield Estimate,Trait 10 - Trichome Density,Trait 11 - Calyx-to-Leaf Ratio,Trait 12 - Stem Thickness,Trait 13 - Internodal Distance,Trait 14 - Water Needs,Trait 15 - Nutrient Sensitivity,Comments
-Plant 1,,,,,,,,,,,,,,,,,
-Plant 2,,,,,,,,,,,,,,,,,
-Plant 3,,,,,,,,,,,,,,,,,
-Plant 4,,,,,,,,,,,,,,,,,
-Plant 5,,,,,,,,,,,,,,,,,
-Comments,Rate on a scale from 1-10 (1 - very weak, 10 - very strong),Rate from 1 (airy) to 5 (rock hard),Describe any unique colors or patterns (e.g., green, purple, striped),Rate from 1 (low) to 10 (very high),Describe (e.g., bushy, tall, compact),Describe (e.g., small, medium, large),Rate days or weeks into flowering (e.g., early, on-time, late),Rate from 1 (low) to 5 (high),Estimate in grams or ounces,Rate from 1 (sparse) to 10 (very dense),Describe ratio (e.g., high, medium, low),Rate from 1 (thin) to 5 (thick),Measure the distance in inches or cm,Rate from 1 (low) to 10 (high),Rate from 1 (low) to 10 (high),"Include any additional notes about the plant's development or particular traits"

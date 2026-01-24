@@ -305,6 +305,10 @@ skills/**/tmp/
 skills/**/*.tmp
 skills/**/*.temp
 
+# Skill backup directories (should not be committed)
+skills/**/backups/
+skills/**/backup*/
+
 # Skill-specific logs
 skills/**/*.log
 skills/**/logs/
@@ -313,6 +317,10 @@ skills/**/logs/
 skills/**/dist/
 skills/**/build/
 skills/**/out/
+
+# Skill backups
+skills/**/backups/
+skills/**/backup*/
 
 # ================================
 # Security & Credential Files

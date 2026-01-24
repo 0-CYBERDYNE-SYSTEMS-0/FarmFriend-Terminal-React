@@ -29,23 +29,36 @@ type SearchLocation = {
 function getSearchLocations(workspaceDir: string, repoRoot?: string): SearchLocation[] {
   const home = os.homedir();
   const locations: SearchLocation[] = [];
+  const mountsConfig = readMountsConfig();
 
-  // User config directories
-  const userConfigDirs = [
-    { dir: path.join(home, ".claude"), label: "~/.claude" },
-    { dir: path.join(home, ".droid"), label: "~/.droid" },
-    { dir: path.join(home, ".factory"), label: "~/.factory" },
+  // App's own directories - always included
+  const appDirs = [
     { dir: path.join(home, ".ff-terminal"), label: "~/.ff-terminal" },
     { dir: path.join(home, ".config", "ff-terminal"), label: "~/.config/ff-terminal" },
   ];
 
-  for (const { dir, label } of userConfigDirs) {
+  for (const { dir, label } of appDirs) {
     if (fs.existsSync(dir) && fs.statSync(dir).isDirectory()) {
       locations.push({ basePath: dir, label });
     }
   }
 
-  // Project-local config directories
+  // External mounts - require explicit opt-in via mounts config
+  if (mountsConfig.mounts.claude) {
+    const dir = path.join(home, ".claude");
+    if (fs.existsSync(dir) && fs.statSync(dir).isDirectory()) {
+      locations.push({ basePath: dir, label: "~/.claude" });
+    }
+  }
+
+  if (mountsConfig.mounts.factory) {
+    const dir = path.join(home, ".factory");
+    if (fs.existsSync(dir) && fs.statSync(dir).isDirectory()) {
+      locations.push({ basePath: dir, label: "~/.factory" });
+    }
+  }
+
+  // Project-local config directories - always check, they're within the repo
   if (repoRoot) {
     const projectDirs = [
       { dir: path.join(repoRoot, ".claude"), label: "<repo>/.claude" },
@@ -56,6 +69,14 @@ function getSearchLocations(workspaceDir: string, repoRoot?: string): SearchLoca
       if (fs.existsSync(dir) && fs.statSync(dir).isDirectory()) {
         locations.push({ basePath: dir, label });
       }
+    }
+  }
+
+  // Add any extra directories configured by the user
+  const extraDirs = mountsConfig.extra_skill_dirs || [];
+  for (const extraDir of extraDirs) {
+    if (fs.existsSync(extraDir) && fs.statSync(extraDir).isDirectory()) {
+      locations.push({ basePath: extraDir, label: `extra: ${extraDir}` });
     }
   }
 

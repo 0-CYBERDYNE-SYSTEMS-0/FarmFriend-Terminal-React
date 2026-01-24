@@ -1,4 +1,4 @@
-# Tool Catalog (43)
+# Tool Catalog (42)
 
 - `analyze_data` — Analyze data using natural language
 - `analyze_image_gemini` — Analyze images using Gemini 2.5 Flash Image vision capabilities. State-of-the-art OCR, object detection, scene understanding, visual Q&A, document analysis, and chart/graph interpretation.
@@ -33,7 +33,6 @@
 - `skill_import` — Import a skill from URL, Git repository, or local file.
 - `skill_loader` — Load a skill's instructions and optional assets when a task needs them.
 - `skill_sequencer` — Execute multi-skill workflows with intelligent sequencing and compatibility checking.
-- `smart_cleanup` — Clean workspace with intelligent rules (age, size, file type).
 - `subagent_tool` — Launch specialized AI subagents for parallel execution and task acceleration. Create multiple subagents simultaneously to handle different aspects of complex projects. Each subagent works autonomously with full tool access - perfect for breaking down large tasks into parallel workstreams for maximum efficiency.
 - `tavily_crawl` — Crawl a website from a base URL (depth and page limit configurable)
 - `tavily_extract` — Extract web page content for specified URLs (supports text and images)

@@ -1,5 +1,5 @@
 import http, { type IncomingMessage, type ServerResponse } from "node:http";
-import { URL } from "node:url";
+import { URL, pathToFileURL } from "node:url";
 import WebSocket, { WebSocketServer } from "ws";
 import fs from "node:fs";
 import path from "node:path";
@@ -409,5 +409,8 @@ process.on("SIGTERM", () => {
   });
 });
 
-// Start the server if this file is run directly
-startFieldviewServer();
+// Only start if run directly (not imported)
+const isDirectRun = import.meta.url === pathToFileURL(process.argv[1] || "").href;
+if (isDirectRun) {
+  startFieldviewServer();
+}
