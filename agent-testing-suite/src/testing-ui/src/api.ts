@@ -6,7 +6,49 @@ export interface TestRun {
   status: "running" | "completed" | "failed" | "partial";
   started_at: string;
   completed_at?: string;
-  results?: any[];
+  results?: TestResult[];
+  metrics?: Metrics;
+}
+
+export interface TestResult {
+  scenario_name: string;
+  status: "passed" | "failed" | "partial" | "timeout";
+  duration_ms: number;
+  errors?: string[];
+  error?: string;
+  output?: string;
+  turn_count?: number;
+  tool_calls?: number;
+  evaluation?: EvaluationResult;
+}
+
+export interface EvaluationResult {
+  passed: boolean;
+  score: number;
+  criteria_results: CriterionResult[];
+  human_review_required: boolean;
+}
+
+export interface CriterionResult {
+  dimension: string;
+  passed: boolean;
+  score: number;
+  notes?: string;
+}
+
+export interface Metrics {
+  success_rate: number;
+  total_turns: number;
+  total_tool_calls: number;
+  total_errors: number;
+  tool_usage: Record<string, ToolUsage>;
+}
+
+export interface ToolUsage {
+  call_count: number;
+  success_count: number;
+  fail_count: number;
+  avg_duration_ms: number;
 }
 
 export const api = {
@@ -91,5 +133,3 @@ export const api = {
     return response.json();
   }
 };
-
-export type { TestRun };

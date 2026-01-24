@@ -1,6 +1,11 @@
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { api, TestRun, ScenarioResult } from "../api";
+import { api, TestRun } from "../api";
+import {
+  getScenarioBadgeClass,
+  normalizeScenarioStatus
+} from "../utils/scenarioStatus";
+import { getDisplayMode } from "../utils/displayMode";
 
 export default function Review() {
   const { runId } = useParams<{ runId: string }>();
@@ -20,10 +25,9 @@ export default function Review() {
 
   const loadRun = async () => {
     try {
-      const { run: data } = await api.getRun(runId);
+      const { run: data } = await api.getRun(runId!);
       setRun(data);
 
-      // Load existing reviews from localStorage
       const saved = localStorage.getItem(`reviews_${runId}`);
       if (saved) {
         setReviews(new Map(JSON.parse(saved)));
@@ -36,10 +40,13 @@ export default function Review() {
   };
 
   const saveReview = () => {
-    if (!run) return;
+    if (!run || !run.results) return;
+
+    const scenario = run.results[currentScenario];
+    if (!scenario) return;
 
     const updatedReviews = new Map(reviews);
-    updatedReviews.set(run.results[currentScenario].scenario_name, {
+    updatedReviews.set(scenario.scenario_name, {
       decision: reviewDecision,
       notes: reviewNotes
     });
@@ -47,14 +54,14 @@ export default function Review() {
     setReviews(updatedReviews);
     localStorage.setItem(`reviews_${runId}`, JSON.stringify([...updatedReviews]));
 
-    // Move to next scenario
     if (currentScenario < run.results.length - 1) {
       nextScenario();
     }
   };
 
   const nextScenario = () => {
-    setCurrentScenario(prev => Math.min(prev + 1, run!.results.length - 1));
+    if (!run || !run.results) return;
+    setCurrentScenario(prev => Math.min(prev + 1, run!.results!.length - 1));
     setReviewNotes("");
     setReviewDecision("skip");
   };
@@ -63,31 +70,26 @@ export default function Review() {
     setCurrentScenario(prev => Math.max(prev - 1, 0));
   };
 
-  const getStatusBadgeClass = (status: string) => {
-    switch (status) {
-      case "passed": return "badge-success";
-      case "failed": return "badge-failed";
-      case "partial": return "badge-partial";
-      case "timeout": return "badge-timeout";
-      default: return "";
-    }
-  };
-
   if (loading) {
     return <div className="text-center py-8">Loading review queue...</div>;
   }
 
-  if (!run) {
-    return <div className="text-center py-8">Run not found</div>;
+  if (!run || !run.results || run.results.length === 0) {
+    return <div className="text-center py-8">No results to review</div>;
   }
 
   const scenario = run.results[currentScenario];
   const review = reviews.get(scenario.scenario_name);
   const progress = ((currentScenario + 1) / run.results.length) * 100;
+  const errorMessages = Array.isArray(scenario.errors)
+    ? scenario.errors
+    : scenario.error
+    ? [scenario.error]
+    : [];
+  const isVerbose = getDisplayMode() === "verbose";
 
   return (
     <div>
-      {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
           <h2 className="text-2xl font-bold mb-2">Human Review</h2>
@@ -100,7 +102,6 @@ export default function Review() {
         </div>
       </div>
 
-      {/* Progress Bar */}
       <div className="bg-white p-4 rounded shadow-md mb-6">
         <div className="flex items-center justify-between mb-2">
           <span className="text-sm font-medium">Review Progress</span>
@@ -114,9 +115,8 @@ export default function Review() {
         </div>
       </div>
 
-      {/* Scenario List */}
       <div className="bg-white p-6 rounded shadow-md mb-6">
-        <h3 className="text-lg font-bold mb-4">Scenarios Requiring Review</h3>
+        <h3 className="text-lg font-bold mb-4">Scenarios</h3>
         <div className="grid grid-cols-10 gap-2">
           {run.results.map((s, idx) => {
             const hasReview = reviews.has(s.scenario_name);
@@ -141,51 +141,51 @@ export default function Review() {
         </div>
       </div>
 
-      {/* Scenario Details */}
       <div className="bg-white p-6 rounded shadow-md mb-6">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-bold">{scenario.scenario_name}</h3>
-          <span className={`badge ${getStatusBadgeClass(scenario.status)}`}>
-            {scenario.status}
+          <span className={`badge ${getScenarioBadgeClass(scenario.status)}`}>
+            {normalizeScenarioStatus(scenario.status)}
           </span>
         </div>
 
-        {/* Metrics */}
         <div className="grid grid-cols-4 gap-4 mb-6">
           <div className="bg-gray-50 p-4 rounded">
             <p className="text-sm text-gray-600">Duration</p>
             <p className="text-2xl font-bold">{(scenario.duration_ms / 1000).toFixed(1)}s</p>
           </div>
-          <div className="bg-gray-50 p-4 rounded">
-            <p className="text-sm text-gray-600">Turns</p>
-            <p className="text-2xl font-bold">{scenario.turn_count}</p>
-          </div>
-          <div className="bg-gray-50 p-4 rounded">
-            <p className="text-sm text-gray-600">Tool Calls</p>
-            <p className="text-2xl font-bold">{scenario.tool_calls}</p>
-          </div>
-          <div className="bg-gray-50 p-4 rounded">
-            <p className="text-sm text-gray-600">Errors</p>
-            <p className="text-2xl font-bold text-red-600">{scenario.errors.length}</p>
-          </div>
+          {isVerbose && (
+            <>
+              <div className="bg-gray-50 p-4 rounded">
+                <p className="text-sm text-gray-600">Turns</p>
+                <p className="text-2xl font-bold">{scenario.turn_count ?? "N/A"}</p>
+              </div>
+              <div className="bg-gray-50 p-4 rounded">
+                <p className="text-sm text-gray-600">Tool Calls</p>
+                <p className="text-2xl font-bold">{scenario.tool_calls ?? "N/A"}</p>
+              </div>
+              <div className="bg-gray-50 p-4 rounded">
+                <p className="text-sm text-gray-600">Errors</p>
+                <p className="text-2xl font-bold text-red-600">{errorMessages.length}</p>
+              </div>
+            </>
+          )}
         </div>
 
-        {/* Errors */}
-        {scenario.errors.length > 0 && (
+        {errorMessages.length > 0 && (
           <div className="mb-6">
             <h4 className="text-md font-bold mb-2">Errors</h4>
             <div className="bg-red-50 p-4 rounded">
-              <ul className="list-disc list-inside">
-                {scenario.errors.map((err, idx) => (
-                  <li key={idx} className="text-red-700">{err}</li>
+              <ul className="list-disc pl-5 space-y-1 text-red-700">
+                {errorMessages.map((message, index) => (
+                  <li key={`${scenario.scenario_name}-error-${index}`}>{message}</li>
                 ))}
               </ul>
             </div>
           </div>
         )}
 
-        {/* Evaluation Result */}
-        {scenario.evaluation && (
+        {isVerbose && scenario.evaluation && (
           <div className="mb-6">
             <h4 className="text-md font-bold mb-2">Automated Evaluation</h4>
             <div className="bg-gray-50 p-4 rounded">
@@ -197,7 +197,7 @@ export default function Review() {
                 </p>
               )}
 
-              {scenario.evaluation.criteria_results.length > 0 && (
+              {scenario.evaluation.criteria_results?.length > 0 && (
                 <div className="mt-4">
                   <h5 className="text-sm font-bold mb-2">Criteria Results</h5>
                   <table>
@@ -231,7 +231,6 @@ export default function Review() {
         )}
       </div>
 
-      {/* Human Review Form */}
       {review ? (
         <div className="bg-white p-6 rounded shadow-md mb-6">
           <h3 className="text-lg font-bold mb-4">Previous Review</h3>
@@ -248,13 +247,11 @@ export default function Review() {
           <h3 className="text-lg font-bold mb-4">Submit Review</h3>
 
           <div className="mb-4">
-            <label className="block text-sm font-medium mb-2">
-              Your Decision
-            </label>
+            <label className="block text-sm font-medium mb-2">Your Decision</label>
             <select
               className="w-full border rounded p-2"
               value={reviewDecision}
-              onChange={(e) => setReviewDecision(e.target.value as any)}
+              onChange={(e) => setReviewDecision(e.target.value as "pass" | "fail" | "skip")}
             >
               <option value="skip">Skip</option>
               <option value="pass">Pass</option>
@@ -263,9 +260,7 @@ export default function Review() {
           </div>
 
           <div className="mb-4">
-            <label className="block text-sm font-medium mb-2">
-              Review Notes
-            </label>
+            <label className="block text-sm font-medium mb-2">Review Notes</label>
             <textarea
               className="w-full border rounded p-2 h-32"
               placeholder="Provide reasoning for your decision..."
@@ -284,7 +279,7 @@ export default function Review() {
             </button>
             <button
               className="btn btn-secondary"
-              onClick={() => setReviewDecision("")}
+              onClick={() => setReviewDecision("skip")}
             >
               Clear
             </button>
@@ -292,7 +287,6 @@ export default function Review() {
         </div>
       )}
 
-      {/* Navigation */}
       <div className="bg-white p-6 rounded shadow-md">
         <div className="flex items-center justify-between">
           <button
@@ -300,7 +294,7 @@ export default function Review() {
             onClick={previousScenario}
             disabled={currentScenario === 0}
           >
-            ← Previous
+            Previous
           </button>
 
           <div className="flex gap-4">
@@ -314,7 +308,7 @@ export default function Review() {
             onClick={nextScenario}
             disabled={currentScenario === run.results.length - 1}
           >
-            Next →
+            Next
           </button>
         </div>
       </div>

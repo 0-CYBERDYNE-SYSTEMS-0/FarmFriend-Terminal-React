@@ -1,6 +1,12 @@
 import React, { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { api } from "../api";
+import {
+  isFailedStatus,
+  isPartialStatus,
+  isPassedStatus,
+  normalizeScenarioStatus
+} from "../utils/scenarioStatus";
 
 export default function ResearchResults() {
   const { runId } = useParams<{ runId: string }>();
@@ -53,8 +59,9 @@ export default function ResearchResults() {
   }
 
   const results = run.results || [];
-  const passed = results.filter((r: any) => r.status === "passed").length;
-  const failed = results.filter((r: any) => r.status === "failed").length;
+  const passed = results.filter((r: any) => isPassedStatus(r.status)).length;
+  const failed = results.filter((r: any) => isFailedStatus(r.status)).length;
+  const partial = results.filter((r: any) => isPartialStatus(r.status)).length;
   const successRate = results.length > 0 ? (passed / results.length) * 100 : 0;
 
   return (
@@ -102,7 +109,7 @@ export default function ResearchResults() {
             </span>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-6">
             <div className="bg-slate-50 rounded-lg p-4">
               <h3 className="text-sm font-medium text-slate-600 mb-2 uppercase">
                 Total Scenarios
@@ -120,6 +127,12 @@ export default function ResearchResults() {
                 Failed
               </h3>
               <p className="text-3xl font-bold text-red-600">{failed}</p>
+            </div>
+            <div className="bg-yellow-50 rounded-lg p-4">
+              <h3 className="text-sm font-medium text-slate-600 mb-2 uppercase">
+                Partial
+              </h3>
+              <p className="text-3xl font-bold text-yellow-600">{partial}</p>
             </div>
             <div className="bg-indigo-50 rounded-lg p-4">
               <h3 className="text-sm font-medium text-slate-600 mb-2 uppercase">
@@ -169,7 +182,9 @@ export default function ResearchResults() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200">
-                {results.map((result: any, idx) => (
+                {results.map((result: any, idx) => {
+                  const normalizedStatus = normalizeScenarioStatus(result.status);
+                  return (
                   <tr key={idx} className="hover:bg-slate-50 transition-colors">
                     <td className="px-6 py-4">
                       <code className="text-sm bg-slate-100 px-2 py-1 rounded font-mono">
@@ -181,13 +196,13 @@ export default function ResearchResults() {
                     </td>
                     <td className="px-6 py-4">
                       <span className={`inline-flex px-3 py-1 rounded-full text-xs font-bold uppercase ${
-                        result.status === "passed"
+                        normalizedStatus === "passed"
                           ? "bg-green-100 text-green-700"
-                          : result.status === "failed"
+                          : normalizedStatus === "failed"
                           ? "bg-red-100 text-red-700"
                           : "bg-yellow-100 text-yellow-700"
                       }`}>
-                        {result.status}
+                        {normalizedStatus}
                       </span>
                     </td>
                     <td className="px-6 py-4 text-sm text-slate-600">
@@ -214,7 +229,8 @@ export default function ResearchResults() {
                       )}
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           )}

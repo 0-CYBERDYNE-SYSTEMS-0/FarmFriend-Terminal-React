@@ -1,6 +1,13 @@
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
-import { api, TestRun, ScenarioResult } from "../api";
+import { api, TestRun } from "../api";
+import {
+  getScenarioBadgeClass,
+  isFailedStatus,
+  isPassedStatus,
+  normalizeScenarioStatus
+} from "../utils/scenarioStatus";
+import { getDisplayMode } from "../utils/displayMode";
 
 export default function TestRunDetail() {
   const { runId } = useParams<{ runId: string }>();
@@ -16,7 +23,7 @@ export default function TestRunDetail() {
 
   const loadRun = async () => {
     try {
-      const { run: data } = await api.getRun(runId);
+      const { run: data } = await api.getRun(runId!);
       setRun(data);
     } catch (err: any) {
       setError(err.message || "Failed to load test run");
@@ -37,32 +44,25 @@ export default function TestRunDetail() {
     );
   }
 
-  const metrics = run.metrics;
   const results = run.results || [];
 
-  const getStatusBadgeClass = (status: string) => {
-    switch (status) {
-      case "passed": return "badge-success";
-      case "failed": return "badge-failed";
-      case "partial": return "badge-partial";
-      default: return "";
-    }
-  };
+  const passedCount = results.filter(r => isPassedStatus(r.status)).length;
+  const failCount = results.filter(r => isFailedStatus(r.status)).length;
+  const totalDuration = results.reduce((sum, r) => sum + r.duration_ms, 0);
+  const metrics = run.metrics;
+  const isVerbose = getDisplayMode() === "verbose";
 
   return (
     <div>
-      {/* Header */}
       <div className="bg-white p-6 rounded shadow-md mb-6">
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-2xl font-bold mb-2">{run.id}</h2>
             <p className="text-gray-600">{run.suite_name}</p>
           </div>
-          <div className="flex items-center gap-4">
-            <span className={`badge badge-${run.status}`}>
-              {run.status}
-            </span>
-          </div>
+          <span className={`badge badge-${run.status}`}>
+            {run.status}
+          </span>
         </div>
         <div className="mt-4 text-sm text-gray-600">
           <p>Started: {new Date(run.started_at).toLocaleString()}</p>
@@ -72,8 +72,26 @@ export default function TestRunDetail() {
         </div>
       </div>
 
-      {/* Metrics Summary */}
-      {metrics && (
+      <div className="grid grid-cols-4 gap-6 mb-6">
+        <div className="bg-white p-6 rounded shadow-md">
+          <h3 className="text-gray-600 mb-2">Total Scenarios</h3>
+          <p className="text-2xl font-bold">{results.length}</p>
+        </div>
+        <div className="bg-white p-6 rounded shadow-md">
+          <h3 className="text-gray-600 mb-2">Passed</h3>
+          <p className="text-2xl font-bold text-green-600">{passedCount}</p>
+        </div>
+        <div className="bg-white p-6 rounded shadow-md">
+          <h3 className="text-gray-600 mb-2">Failed</h3>
+          <p className="text-2xl font-bold text-red-600">{failCount}</p>
+        </div>
+        <div className="bg-white p-6 rounded shadow-md">
+          <h3 className="text-gray-600 mb-2">Total Duration</h3>
+          <p className="text-2xl font-bold">{(totalDuration / 1000).toFixed(1)}s</p>
+        </div>
+      </div>
+
+      {isVerbose && metrics && (
         <div className="grid grid-cols-4 gap-6 mb-6">
           <div className="bg-white p-6 rounded shadow-md">
             <h3 className="text-gray-600 mb-2">Success Rate</h3>
@@ -81,17 +99,14 @@ export default function TestRunDetail() {
               {(metrics.success_rate * 100).toFixed(1)}%
             </p>
           </div>
-
           <div className="bg-white p-6 rounded shadow-md">
             <h3 className="text-gray-600 mb-2">Total Turns</h3>
             <p className="text-2xl font-bold">{metrics.total_turns}</p>
           </div>
-
           <div className="bg-white p-6 rounded shadow-md">
             <h3 className="text-gray-600 mb-2">Tool Calls</h3>
             <p className="text-2xl font-bold">{metrics.total_tool_calls}</p>
           </div>
-
           <div className="bg-white p-6 rounded shadow-md">
             <h3 className="text-gray-600 mb-2">Errors</h3>
             <p className="text-2xl font-bold text-red-600">{metrics.total_errors}</p>
@@ -99,16 +114,19 @@ export default function TestRunDetail() {
         </div>
       )}
 
-      {/* Scenario Results */}
-      <div className="bg-white p-6 rounded shadow-md mb-6">
+      <div className="bg-white p-6 rounded shadow-md">
         <h3 className="text-xl font-bold mb-4">Scenario Results</h3>
         <table>
           <thead>
             <tr>
               <th>Scenario</th>
               <th>Status</th>
-              <th>Turns</th>
-              <th>Tool Calls</th>
+              {isVerbose && (
+                <>
+                  <th>Turns</th>
+                  <th>Tool Calls</th>
+                </>
+              )}
               <th>Duration</th>
             </tr>
           </thead>
@@ -117,12 +135,16 @@ export default function TestRunDetail() {
               <tr key={idx}>
                 <td>{result.scenario_name}</td>
                 <td>
-                  <span className={`badge ${getStatusBadgeClass(result.status)}`}>
-                    {result.status}
+                  <span className={`badge ${getScenarioBadgeClass(result.status)}`}>
+                    {normalizeScenarioStatus(result.status)}
                   </span>
                 </td>
-                <td>{result.turn_count}</td>
-                <td>{result.tool_calls}</td>
+                {isVerbose && (
+                  <>
+                    <td>{result.turn_count ?? "N/A"}</td>
+                    <td>{result.tool_calls ?? "N/A"}</td>
+                  </>
+                )}
                 <td>{(result.duration_ms / 1000).toFixed(1)}s</td>
               </tr>
             ))}
@@ -130,8 +152,7 @@ export default function TestRunDetail() {
         </table>
       </div>
 
-      {/* Tool Usage */}
-      {metrics && (
+      {isVerbose && metrics && (
         <div className="bg-white p-6 rounded shadow-md">
           <h3 className="text-xl font-bold mb-4">Tool Usage</h3>
           <table>
@@ -145,7 +166,7 @@ export default function TestRunDetail() {
               </tr>
             </thead>
             <tbody>
-              {Object.entries(metrics.tool_usage).map(([toolName, usage]: [string, any]) => (
+              {Object.entries(metrics.tool_usage || {}).map(([toolName, usage]: [string, any]) => (
                 <tr key={toolName}>
                   <td>{toolName}</td>
                   <td>{usage.call_count}</td>

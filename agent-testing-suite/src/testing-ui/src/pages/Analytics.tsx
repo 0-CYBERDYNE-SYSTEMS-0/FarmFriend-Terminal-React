@@ -2,6 +2,11 @@ import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { BarChart, LineChart, DonutChart, StatCard } from "../components/Charts";
 import { api } from "../api";
+import {
+  isFailedStatus,
+  isPartialStatus,
+  isPassedStatus
+} from "../utils/scenarioStatus";
 
 export default function Analytics() {
   const navigate = useNavigate();
@@ -33,8 +38,12 @@ export default function Analytics() {
     if (runs.length === 0) return null;
 
     const totalScenarios = runs.reduce((sum, r) => sum + (r.results?.length || 0), 0);
-    const passedScenarios = runs.reduce((sum, r) => 
-      sum + (r.results?.filter((res: any) => res.status === "passed").length || 0), 0);
+    const passedScenarios = runs.reduce((sum, r) =>
+      sum + (r.results?.filter((res: any) => isPassedStatus(res.status)).length || 0), 0);
+    const failedScenarios = runs.reduce((sum, r) =>
+      sum + (r.results?.filter((res: any) => isFailedStatus(res.status)).length || 0), 0);
+    const partialScenarios = runs.reduce((sum, r) =>
+      sum + (r.results?.filter((res: any) => isPartialStatus(res.status)).length || 0), 0);
     const totalDuration = runs.reduce((sum, r) => sum + (r.duration_ms || 0), 0);
     const totalTurns = runs.reduce((sum, r) => sum + (r.total_turns || 0), 0);
 
@@ -45,8 +54,8 @@ export default function Analytics() {
     // Status distribution
     const statusDist = {
       passed: passedScenarios,
-      failed: totalScenarios - passedScenarios,
-      partial: 0
+      failed: failedScenarios,
+      partial: partialScenarios
     };
 
     return {
