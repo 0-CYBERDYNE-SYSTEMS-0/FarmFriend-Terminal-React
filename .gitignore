@@ -92,6 +92,11 @@ jspm_packages/
 # Optional REPL history
 .node_repl_history
 
+# Python bytecode
+__pycache__/
+*.pyc
+*.pyo
+
 # Output of 'npm pack'
 *.tgz
 
@@ -115,6 +120,12 @@ dist
 # Storybook build outputs
 .out
 .storybook-out
+
+# agent-testing-suite artifacts
+agent-testing-suite/node_modules/
+agent-testing-suite/dist/
+agent-testing-suite/ff-terminal-workspace/
+agent-testing-suite/server.log
 
 # ================================
 # IDE & Editor Files

@@ -1,0 +1,1298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FF-Terminal Labs | Agrarian Brutalism Style Guide</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Bebar+Neue:wght@400;700&family=Instrument+Sans:wght@400;500;600&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        /* ============================================
+           FF-TERMINAL LABS — AGRARIAN BRUTALISM
+           Raw. Honest. Functional. Agricultural.
+           ============================================ */
+
+        /* RESET & BASE */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            /* Earth tones - Agrarian palette */
+            --rust-orange: #C45C26;
+            --sage-green: #4A5D23;
+            --concrete-gray: #8B8680;
+            --weathered-steel: #5A5A5A;
+            --soil-brown: #3D2B1F;
+            --harvest-gold: #D4A84B;
+            
+            /* Neutrals */
+            --off-white: #F5F3EF;
+            --cream: #E8E4DD;
+            --dark: #1A1A1A;
+            --darker: #0F0F0F;
+            
+            /* Accents */
+            --accent-green: #2E3A1D;
+            --accent-rust: #8B4022;
+            
+            /* Additional category colors */
+            --color-thermal: #FF6B35;
+            --color-ai: #4A5D23;
+            --color-camera: #4A90D9;
+            --color-humidity: #D4A84B;
+            --color-temperature: #E74C3C;
+            --color-solar: #27AE60;
+            --color-power: #C45C26;
+            
+            /* Typography */
+            --font-display: 'Bebas Neue', sans-serif;
+            --font-heading: 'Archivo Black', sans-serif;
+            --font-body: 'Instrument Sans', sans-serif;
+            --font-mono: 'Space Mono', monospace;
+            
+            /* Spacing */
+            --space-xs: 0.5rem;      /* 8px */
+            --space-sm: 1rem;         /* 16px */
+            --space-md: 2rem;         /* 32px */
+            --space-lg: 4rem;         /* 64px */
+            --space-xl: 8rem;         /* 128px */
+            
+            /* Borders */
+            --border-thin: 1px solid var(--concrete-gray);
+            --border-thick: 3px solid var(--rust-orange);
+            --border-brutal: 4px solid var(--dark);
+        }
+
+        html {
+            scroll-behavior: smooth;
+            font-size: 16px;
+        }
+
+        body {
+            font-family: var(--font-body);
+            background-color: var(--off-white);
+            color: var(--dark);
+            line-height: 1.6;
+            overflow-x: hidden;
+        }
+
+        /* ============================================
+           HEADER & NAVIGATION
+           ============================================ */
+        .style-guide-header {
+            background: var(--dark);
+            color: var(--off-white);
+            padding: var(--space-lg) 0;
+            border-bottom: var(--border-brutal);
+        }
+
+        .header-container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 0 var(--space-md);
+        }
+
+        .style-guide-title {
+            font-family: var(--font-heading);
+            font-size: clamp(2.5rem, 5vw, 4rem);
+            line-height: 1;
+            text-transform: uppercase;
+            margin-bottom: var(--space-sm);
+        }
+
+        .style-guide-subtitle {
+            font-family: var(--font-mono);
+            font-size: 0.875rem;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            color: var(--concrete-gray);
+        }
+
+        .style-guide-accent {
+            color: var(--rust-orange);
+        }
+
+        .navigation {
+            position: sticky;
+            top: 0;
+            background: var(--off-white);
+            border-bottom: var(--border-thin);
+            z-index: 1000;
+            padding: var(--space-sm) 0;
+        }
+
+        .nav-container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 0 var(--space-md);
+            display: flex;
+            align-items: center;
+            gap: var(--space-md);
+            overflow-x: auto;
+        }
+
+        .nav-link {
+            font-family: var(--font-mono);
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            text-decoration: none;
+            color: var(--dark);
+            white-space: nowrap;
+            padding: var(--space-xs) var(--space-sm);
+            border: 1px solid transparent;
+            transition: all 0.2s;
+        }
+
+        .nav-link:hover {
+            color: var(--rust-orange);
+            border-color: var(--rust-orange);
+        }
+
+        /* ============================================
+           SECTIONS
+           ============================================ */
+        .section {
+            padding: var(--space-xl) 0;
+            border-bottom: var(--border-thin);
+        }
+
+        .section:last-child {
+            border-bottom: none;
+        }
+
+        .section-alt {
+            background: var(--cream);
+        }
+
+        .section-dark {
+            background: var(--dark);
+            color: var(--off-white);
+        }
+
+        .section-container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 0 var(--space-md);
+        }
+
+        .section-header {
+            margin-bottom: var(--space-lg);
+        }
+
+        .section-label {
+            display: block;
+            font-family: var(--font-mono);
+            font-size: 0.625rem;
+            text-transform: uppercase;
+            letter-spacing: 0.2em;
+            color: var(--rust-orange);
+            margin-bottom: var(--space-sm);
+        }
+
+        .section-dark .section-label {
+            color: var(--rust-orange);
+        }
+
+        .section-title {
+            font-family: var(--font-heading);
+            font-size: clamp(2rem, 4vw, 3rem);
+            line-height: 1;
+            text-transform: uppercase;
+            margin-bottom: var(--space-sm);
+        }
+
+        .section-description {
+            font-family: var(--font-body);
+            color: var(--weathered-steel);
+            max-width: 700px;
+        }
+
+        .section-dark .section-description {
+            color: var(--concrete-gray);
+        }
+
+        /* ============================================
+           COLOR PALETTE
+           ============================================ */
+        .color-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: var(--space-md);
+            margin-top: var(--space-lg);
+        }
+
+        .color-card {
+            border: var(--border-brutal);
+            background: var(--off-white);
+        }
+
+        .color-swatch {
+            height: 120px;
+            border-bottom: var(--border-thin);
+        }
+
+        .color-info {
+            padding: var(--space-sm);
+        }
+
+        .color-name {
+            font-family: var(--font-heading);
+            font-size: 0.875rem;
+            text-transform: uppercase;
+            margin-bottom: var(--space-xs);
+        }
+
+        .color-hex {
+            font-family: var(--font-mono);
+            font-size: 0.75rem;
+            color: var(--weathered-steel);
+        }
+
+        .color-usage {
+            font-family: var(--font-body);
+            font-size: 0.8125rem;
+            color: var(--weathered-steel);
+            margin-top: var(--space-sm);
+            padding-top: var(--space-sm);
+            border-top: 1px solid var(--concrete-gray);
+        }
+
+        /* ============================================
+           TYPOGRAPHY
+           ============================================ */
+        .type-scale {
+            display: flex;
+            flex-direction: column;
+            gap: var(--space-md);
+        }
+
+        .type-example {
+            padding: var(--space-md);
+            border: var(--border-thin);
+            background: var(--off-white);
+        }
+
+        .type-label {
+            font-family: var(--font-mono);
+            font-size: 0.625rem;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            color: var(--rust-orange);
+            margin-bottom: var(--space-xs);
+        }
+
+        .type-display {
+            font-family: var(--font-display);
+            font-size: 3rem;
+            line-height: 1;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .type-heading {
+            font-family: var(--font-heading);
+            font-size: 2rem;
+            line-height: 1;
+            text-transform: uppercase;
+        }
+
+        .type-body {
+            font-family: var(--font-body);
+            font-size: 1rem;
+            line-height: 1.6;
+        }
+
+        .type-mono {
+            font-family: var(--font-mono);
+            font-size: 0.875rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .font-info {
+            font-family: var(--font-mono);
+            font-size: 0.625rem;
+            text-transform: uppercase;
+            color: var(--weathered-steel);
+            margin-top: var(--space-sm);
+        }
+
+        /* ============================================
+           BUTTONS
+           ============================================ */
+        .button-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: var(--space-md);
+        }
+
+        .button-showcase {
+            padding: var(--space-md);
+            border: var(--border-thin);
+            background: var(--off-white);
+        }
+
+        .button-label {
+            font-family: var(--font-mono);
+            font-size: 0.625rem;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            color: var(--rust-orange);
+            margin-bottom: var(--space-sm);
+        }
+
+        .btn-primary,
+        .btn-secondary,
+        .btn-card,
+        .btn-submit {
+            display: inline-flex;
+            align-items: center;
+            gap: var(--space-xs);
+            padding: 1rem 2rem;
+            font-family: var(--font-mono);
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            text-decoration: none;
+            border: none;
+            cursor: pointer;
+            transition: all 0.2s;
+            position: relative;
+            margin-bottom: var(--space-sm);
+        }
+
+        .btn-primary {
+            background: var(--dark);
+            color: var(--off-white);
+        }
+
+        .btn-primary::before {
+            content: '';
+            position: absolute;
+            top: 4px;
+            left: 4px;
+            right: -4px;
+            bottom: -4px;
+            background: var(--rust-orange);
+            z-index: -1;
+            transition: all 0.2s;
+        }
+
+        .btn-primary:hover {
+            transform: translate(2px, 2px);
+        }
+
+        .btn-primary:hover::before {
+            transform: translate(-2px, -2px);
+        }
+
+        .btn-secondary {
+            background: transparent;
+            color: var(--dark);
+            border: var(--border-thick);
+        }
+
+        .btn-secondary::before {
+            content: '';
+            position: absolute;
+            top: 4px;
+            left: 4px;
+            right: -4px;
+            bottom: -4px;
+            background: var(--sage-green);
+            z-index: -1;
+            transition: all 0.2s;
+        }
+
+        .btn-secondary:hover {
+            transform: translate(2px, 2px);
+            background: var(--sage-green);
+            color: var(--off-white);
+        }
+
+        .btn-card {
+            width: 100%;
+            justify-content: center;
+            background: var(--rust-orange);
+            color: var(--off-white);
+        }
+
+        .btn-card:hover {
+            background: var(--accent-rust);
+        }
+
+        .btn-submit {
+            width: 100%;
+            background: var(--rust-orange);
+            color: var(--off-white);
+        }
+
+        .btn-submit:hover {
+            background: var(--accent-rust);
+        }
+
+        .btn-large {
+            font-size: 0.875rem;
+            padding: 1.25rem 2.5rem;
+        }
+
+        /* ============================================
+           CARDS & COMPONENTS
+           ============================================ */
+        .card-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: var(--space-md);
+        }
+
+        .card {
+            padding: var(--space-md);
+            background: var(--off-white);
+            border: var(--border-brutal);
+            position: relative;
+        }
+
+        .card.featured {
+            border-color: var(--rust-orange);
+            box-shadow: 8px 8px 0 var(--rust-orange);
+        }
+
+        .card.accent {
+            border: var(--border-thick);
+            background: var(--cream);
+        }
+
+        .card-badge {
+            display: inline-block;
+            padding: var(--space-xs) var(--space-sm);
+            background: var(--rust-orange);
+            color: var(--off-white);
+            font-family: var(--font-mono);
+            font-size: 0.625rem;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            margin-bottom: var(--space-sm);
+        }
+
+        .card-title {
+            font-family: var(--font-heading);
+            font-size: 1.5rem;
+            text-transform: uppercase;
+            margin-bottom: var(--space-sm);
+        }
+
+        .card-text {
+            font-family: var(--font-body);
+            color: var(--weathered-steel);
+            margin-bottom: var(--space-md);
+        }
+
+        .card-price {
+            font-family: var(--font-display);
+            font-size: 3rem;
+            line-height: 1;
+            color: var(--rust-orange);
+        }
+
+        /* ============================================
+           SPACING & LAYOUT
+           ============================================ */
+        .spacing-demo {
+            display: flex;
+            flex-direction: column;
+            gap: var(--space-md);
+            padding: var(--space-md);
+            border: var(--border-thin);
+            background: var(--off-white);
+        }
+
+        .spacing-box {
+            display: flex;
+            align-items: center;
+            padding: var(--space-sm);
+            background: var(--cream);
+            border: var(--border-thin);
+        }
+
+        .spacing-box.xs { height: var(--space-xs); }
+        .spacing-box.sm { height: var(--space-sm); }
+        .spacing-box.md { height: var(--space-md); }
+        .spacing-box.lg { height: var(--space-lg); }
+        .spacing-box.xl { height: var(--space-xl); }
+
+        .spacing-label {
+            font-family: var(--font-mono);
+            font-size: 0.625rem;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            color: var(--rust-orange);
+        }
+
+        .grid-demo {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: var(--space-md);
+            margin-top: var(--space-lg);
+        }
+
+        .grid-cell {
+            padding: var(--space-md);
+            background: var(--rust-orange);
+            color: var(--off-white);
+            font-family: var(--font-mono);
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            border: var(--border-brutal);
+        }
+
+        /* ============================================
+           BORDERS & SHADOWS
+           ============================================ */
+        .border-demo {
+            display: flex;
+            flex-direction: column;
+            gap: var(--space-md);
+        }
+
+        .border-showcase {
+            padding: var(--space-md);
+            border: var(--border-thin);
+            background: var(--off-white);
+        }
+
+        .border-thin-demo {
+            padding: var(--space-md);
+            border: var(--border-thin);
+        }
+
+        .border-thick-demo {
+            padding: var(--space-md);
+            border: var(--border-thick);
+        }
+
+        .border-brutal-demo {
+            padding: var(--space-md);
+            border: var(--border-brutal);
+            box-shadow: 6px 6px 0 var(--rust-orange);
+        }
+
+        .border-label {
+            font-family: var(--font-mono);
+            font-size: 0.625rem;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            color: var(--rust-orange);
+            margin-top: var(--space-sm);
+        }
+
+        /* ============================================
+           ANIMATIONS
+           ============================================ */
+        .animation-demo {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: var(--space-md);
+        }
+
+        .animation-card {
+            padding: var(--space-md);
+            border: var(--border-brutal);
+            background: var(--off-white);
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .animation-card:hover {
+            transform: translate(4px, 4px);
+            box-shadow: -4px -4px 0 var(--rust-orange);
+        }
+
+        .animation-label {
+            font-family: var(--font-mono);
+            font-size: 0.625rem;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            color: var(--rust-orange);
+            margin-bottom: var(--space-sm);
+        }
+
+        /* ============================================
+           RESPONSIVE BREAKPOINTS
+           ============================================ */
+        .breakpoint-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: var(--space-lg);
+        }
+
+        .breakpoint-table th,
+        .breakpoint-table td {
+            padding: var(--space-sm);
+            text-align: left;
+            border: var(--border-thin);
+            font-family: var(--font-mono);
+            font-size: 0.75rem;
+        }
+
+        .breakpoint-table th {
+            background: var(--dark);
+            color: var(--off-white);
+            text-transform: uppercase;
+        }
+
+        /* ============================================
+           FOOTER
+           ============================================ */
+        .style-guide-footer {
+            background: var(--darker);
+            color: var(--off-white);
+            padding: var(--space-lg) 0;
+            border-top: var(--border-brutal);
+        }
+
+        .footer-container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 0 var(--space-md);
+        }
+
+        .footer-text {
+            font-family: var(--font-mono);
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--concrete-gray);
+        }
+
+        .footer-text .accent {
+            color: var(--rust-orange);
+        }
+
+        /* ============================================
+           RESPONSIVE
+           ============================================ */
+        @media (max-width: 768px) {
+            .hero-container {
+                grid-template-columns: 1fr;
+            }
+            
+            .nav-container {
+                padding: 0 var(--space-sm);
+            }
+            
+            .color-grid {
+                grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+            }
+        }
+
+        @media (max-width: 480px) {
+            .type-display {
+                font-size: 2rem;
+            }
+            
+            .type-heading {
+                font-size: 1.5rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Header -->
+    <header class="style-guide-header">
+        <div class="header-container">
+            <h1 class="style-guide-title">FF-Terminal Labs</h1>
+            <p class="style-guide-subtitle">
+                <span class="style-guide-accent">Agrarian Brutalism</span> — Style Guide
+            </p>
+            <p class="style-guide-subtitle" style="margin-top: var(--space-sm); color: var(--off-white);">
+                Raw. Honest. Functional. Agricultural.
+            </p>
+        </div>
+    </header>
+
+    <!-- Navigation -->
+    <nav class="navigation">
+        <div class="nav-container">
+            <a href="#overview" class="nav-link">Overview</a>
+            <a href="#colors" class="nav-link">Colors</a>
+            <a href="#typography" class="nav-link">Typography</a>
+            <a href="#buttons" class="nav-link">Buttons</a>
+            <a href="#cards" class="nav-link">Cards</a>
+            <a href="#spacing" class="nav-link">Spacing</a>
+            <a href="#borders" class="nav-link">Borders & Shadows</a>
+            <a href="#animations" class="nav-link">Animations</a>
+            <a href="#breakpoints" class="nav-link">Breakpoints</a>
+        </div>
+    </nav>
+
+    <!-- Overview -->
+    <section id="overview" class="section">
+        <div class="section-container">
+            <div class="section-header">
+                <span class="section-label">01 / Overview</span>
+                <h2 class="section-title">Design Philosophy</h2>
+                <p class="section-description">
+                    Agrarian Brutalism is a design language that embraces raw, honest aesthetics rooted in agricultural 
+                    utility. It combines the functional simplicity of brutalism with earth tones and organic textures 
+                    found in farming environments. The style prioritizes clarity, utility, and an unpretentious 
+                    approach to modern agricultural technology.
+                </p>
+            </div>
+
+            <div style="margin-top: var(--space-lg); padding: var(--space-md); border: var(--border-brutal); background: var(--cream);">
+                <h3 style="font-family: var(--font-heading); font-size: 1.25rem; text-transform: uppercase; margin-bottom: var(--space-sm);">
+                    Core Principles
+                </h3>
+                <ul style="font-family: var(--font-body); color: var(--weathered-steel); margin-left: var(--space-md);">
+                    <li style="margin-bottom: var(--space-xs);"><strong>Raw & Honest:</strong> No decorative flourishes — every element serves a purpose</li>
+                    <li style="margin-bottom: var(--space-xs);"><strong>Functional First:</strong> Utility drives design decisions</li>
+                    <li style="margin-bottom: var(--space-xs);"><strong>Earth-Based:</strong> Color palette inspired by soil, rust, and harvest</li>
+                    <li style="margin-bottom: var(--space-xs);"><strong>Thick Borders:</strong> Brutalist 3-4px borders for structural definition</li>
+                    <li style="margin-bottom: var(--space-xs);"><strong>Offset Shadows:</strong> Shadow effects that create depth without softness</li>
+                    <li><strong>Clear Typography:</strong> Mix of display, heading, body, and mono fonts for hierarchy</li>
+                </ul>
+            </div>
+        </div>
+    </section>
+
+    <!-- Colors -->
+    <section id="colors" class="section section-alt">
+        <div class="section-container">
+            <div class="section-header">
+                <span class="section-label">02 / Colors</span>
+                <h2 class="section-title">Color Palette</h2>
+                <p class="section-description">
+                    An earth-tone palette inspired by agricultural environments — soil, rust, harvest, and weathered 
+                    machinery. Each color serves a specific purpose in the design hierarchy.
+                </p>
+            </div>
+
+            <div class="color-grid">
+                <!-- Primary Colors -->
+                <div class="color-card">
+                    <div class="color-swatch" style="background: var(--rust-orange);"></div>
+                    <div class="color-info">
+                        <div class="color-name">Rust Orange</div>
+                        <div class="color-hex">#C45C26</div>
+                        <div class="color-usage">Primary accent, buttons, highlights, active states</div>
+                    </div>
+                </div>
+
+                <div class="color-card">
+                    <div class="color-swatch" style="background: var(--sage-green);"></div>
+                    <div class="color-info">
+                        <div class="color-name">Sage Green</div>
+                        <div class="color-hex">#4A5D23</div>
+                        <div class="color-usage">Secondary accents, success states, AI/category badges</div>
+                    </div>
+                </div>
+
+                <div class="color-card">
+                    <div class="color-swatch" style="background: var(--concrete-gray);"></div>
+                    <div class="color-info">
+                        <div class="color-name">Concrete Gray</div>
+                        <div class="color-hex">#8B8680</div>
+                        <div class="color-usage">Borders, dividers, secondary text</div>
+                    </div>
+                </div>
+
+                <div class="color-card">
+                    <div class="color-swatch" style="background: var(--weathered-steel);"></div>
+                    <div class="color-info">
+                        <div class="color-name">Weathered Steel</div>
+                        <div class="color-hex">#5A5A5A</div>
+                        <div class="color-usage">Body text, descriptions, muted content</div>
+                    </div>
+                </div>
+
+                <div class="color-card">
+                    <div class="color-swatch" style="background: var(--soil-brown);"></div>
+                    <div class="color-info">
+                        <div class="color-name">Soil Brown</div>
+                        <div class="color-hex">#3D2B1F</div>
+                        <div class="color-usage">Deep accents, footers, dark backgrounds</div>
+                    </div>
+                </div>
+
+                <div class="color-card">
+                    <div class="color-swatch" style="background: var(--harvest-gold);"></div>
+                    <div class="color-info">
+                        <div class="color-name">Harvest Gold</div>
+                        <div class="color-hex">#D4A84B</div>
+                        <div class="color-usage">Special highlights, warnings, humidity badges</div>
+                    </div>
+                </div>
+
+                <!-- Neutrals -->
+                <div class="color-card">
+                    <div class="color-swatch" style="background: var(--off-white);"></div>
+                    <div class="color-info">
+                        <div class="color-name">Off White</div>
+                        <div class="color-hex">#F5F3EF</div>
+                        <div class="color-usage">Page background, card backgrounds</div>
+                    </div>
+                </div>
+
+                <div class="color-card">
+                    <div class="color-swatch" style="background: var(--cream);"></div>
+                    <div class="color-info">
+                        <div class="color-name">Cream</div>
+                        <div class="color-hex">#E8E4DD</div>
+                        <div class="color-usage">Section alternates, accent backgrounds</div>
+                    </div>
+                </div>
+
+                <div class="color-card">
+                    <div class="color-swatch" style="background: var(--dark);"></div>
+                    <div class="color-info">
+                        <div class="color-name">Dark</div>
+                        <div class="color-hex">#1A1A1A</div>
+                        <div class="color-usage">Headers, footers, primary buttons, text on light</div>
+                    </div>
+                </div>
+
+                <div class="color-card">
+                    <div class="color-swatch" style="background: var(--darker);"></div>
+                    <div class="color-info">
+                        <div class="color-name">Darker</div>
+                        <div class="color-hex">#0F0F0F</div>
+                        <div class="color-usage">Deep backgrounds, active states</div>
+                    </div>
+                </div>
+
+                <!-- Category Colors -->
+                <div class="color-card">
+                    <div class="color-swatch" style="background: var(--color-thermal);"></div>
+                    <div class="color-info">
+                        <div class="color-name">Thermal</div>
+                        <div class="color-hex">#FF6B35</div>
+                        <div class="color-usage">Temperature/thermal category badges</div>
+                    </div>
+                </div>
+
+                <div class="color-card">
+                    <div class="color-swatch" style="background: var(--color-camera);"></div>
+                    <div class="color-info">
+                        <div class="color-name">Camera Blue</div>
+                        <div class="color-hex">#4A90D9</div>
+                        <div class="color-usage">Camera/vision category badges</div>
+                    </div>
+                </div>
+
+                <div class="color-card">
+                    <div class="color-swatch" style="background: var(--color-temperature);"></div>
+                    <div class="color-info">
+                        <div class="color-name">Temperature Red</div>
+                        <div class="color-hex">#E74C3C</div>
+                        <div class="color-usage">Temperature/hot category badges</div>
+                    </div>
+                </div>
+
+                <div class="color-card">
+                    <div class="color-swatch" style="background: var(--color-solar);"></div>
+                    <div class="color-info">
+                        <div class="color-name">Solar Green</div>
+                        <div class="color-hex">#27AE60</div>
+                        <div class="color-usage">Solar/energy category badges</div>
+                    </div>
+                </div>
+
+                <div class="color-card">
+                    <div class="color-swatch" style="background: var(--accent-green);"></div>
+                    <div class="color-info">
+                        <div class="color-name">Accent Green</div>
+                        <div class="color-hex">#2E3A1D</div>
+                        <div class="color-usage">Deep green accents, secondary backgrounds</div>
+                    </div>
+                </div>
+
+                <div class="color-card">
+                    <div class="color-swatch" style="background: var(--accent-rust);"></div>
+                    <div class="color-info">
+                        <div class="color-name">Accent Rust</div>
+                        <div class="color-hex">#8B4022</div>
+                        <div class="color-usage">Hover states, secondary rust accent</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Typography -->
+    <section id="typography" class="section">
+        <div class="section-container">
+            <div class="section-header">
+                <span class="section-label">03 / Typography</span>
+                <h2 class="section-title">Type System</h2>
+                <p class="section-description">
+                    A deliberate combination of four font families that create hierarchy and character. Display fonts 
+                    for impact, heading fonts for structure, body fonts for readability, and mono for technical details.
+                </p>
+            </div>
+
+            <div class="type-scale">
+                <!-- Display -->
+                <div class="type-example">
+                    <div class="type-label">DISPLAY — Bebas Neue</div>
+                    <div class="type-display">ABCDEFGHIJKLMNOPQRSTUVWXYZ</div>
+                    <div class="type-display">abcdefghijklmnopqrstuvwxyz</div>
+                    <div class="type-display">0123456789</div>
+                    <div class="font-info">Google Fonts • 400, 700 • All Caps • Letter Spacing: 0.05em</div>
+                    <div class="font-info" style="margin-top: var(--space-xs);">Usage: Large headlines, numbers, labels, hero text</div>
+                </div>
+
+                <!-- Heading -->
+                <div class="type-example">
+                    <div class="type-label">HEADING — Archivo Black</div>
+                    <div class="type-heading">ABCDEFGHIJKLMNOPQRSTUVWXYZ</div>
+                    <div class="type-heading">abcdefghijklmnopqrstuvwxyz</div>
+                    <div class="type-heading">0123456789</div>
+                    <div class="font-info">Google Fonts • 900 • All Caps • Tight Leading</div>
+                    <div class="font-info" style="margin-top: var(--space-xs);">Usage: Section titles, card titles, bold statements</div>
+                </div>
+
+                <!-- Body -->
+                <div class="type-example">
+                    <div class="type-label">BODY — Instrument Sans</div>
+                    <div class="type-body">ABCDEFGHIJKLMNOPQRSTUVWXYZ</div>
+                    <div class="type-body">abcdefghijklmnopqrstuvwxyz</div>
+                    <div class="type-body">0123456789</div>
+                    <div class="font-info">Google Fonts • 400, 500, 600 • Mixed Case • Line Height: 1.6</div>
+                    <div class="font-info" style="margin-top: var(--space-xs);">Usage: Paragraph text, descriptions, body content</div>
+                </div>
+
+                <!-- Mono -->
+                <div class="type-example">
+                    <div class="type-label">MONO — Space Mono</div>
+                    <div class="type-mono">ABCDEFGHIJKLMNOPQRSTUVWXYZ</div>
+                    <div class="type-mono">abcdefghijklmnopqrstuvwxyz</div>
+                    <div class="type-mono">0123456789</div>
+                    <div class="font-info">Google Fonts • 400, 700 • All Caps • Letter Spacing: 0.05em</div>
+                    <div class="font-info" style="margin-top: var(--space-xs);">Usage: Labels, buttons, technical text, badges, nav links</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Buttons -->
+    <section id="buttons" class="section section-alt">
+        <div class="section-container">
+            <div class="section-header">
+                <span class="section-label">04 / Buttons</span>
+                <h2 class="section-title">Button Styles</h2>
+                <p class="section-description">
+                    Buttons use the brutalist offset shadow pattern. Primary buttons have dark backgrounds with 
+                    rust-colored shadows. Secondary buttons are transparent with sage-green shadows.
+                </p>
+            </div>
+
+            <div class="button-grid">
+                <!-- Primary -->
+                <div class="button-showcase">
+                    <div class="button-label">PRIMARY BUTTON</div>
+                    <button class="btn-primary">Get Started</button>
+                    <button class="btn-primary btn-large">Large Button</button>
+                    <div class="font-info" style="margin-top: var(--space-sm);">
+                        Background: var(--dark)<br>
+                        Shadow: var(--rust-orange)<br>
+                        Hover: Translate 2px
+                    </div>
+                </div>
+
+                <!-- Secondary -->
+                <div class="button-showcase">
+                    <div class="button-label">SECONDARY BUTTON</div>
+                    <button class="btn-secondary">Learn More</button>
+                    <button class="btn-secondary btn-large">Large Secondary</button>
+                    <div class="font-info" style="margin-top: var(--space-sm);">
+                        Background: Transparent<br>
+                        Border: var(--rust-orange)<br>
+                        Shadow: var(--sage-green)<br>
+                        Hover: Fill with sage
+                    </div>
+                </div>
+
+                <!-- Card Button -->
+                <div class="button-showcase">
+                    <div class="button-label">CARD BUTTON</div>
+                    <button class="btn-card">View Details</button>
+                    <div class="font-info" style="margin-top: var(--space-sm);">
+                        Background: var(--rust-orange)<br>
+                        Width: 100%<br>
+                        Hover: var(--accent-rust)
+                    </div>
+                </div>
+
+                <!-- Submit Button -->
+                <div class="button-showcase">
+                    <div class="button-label">SUBMIT BUTTON</div>
+                    <button class="btn-submit">Submit Form</button>
+                    <div class="font-info" style="margin-top: var(--space-sm);">
+                        Background: var(--rust-orange)<br>
+                        Width: 100%<br>
+                        Hover: var(--accent-rust)
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Cards -->
+    <section id="cards" class="section">
+        <div class="section-container">
+            <div class="section-header">
+                <span class="section-label">05 / Cards</span>
+                <h2 class="section-title">Card Components</h2>
+                <p class="section-description">
+                    Cards provide content containers with optional badges, titles, and actions. Featured cards use 
+                    thick borders and offset shadows for emphasis.
+                </p>
+            </div>
+
+            <div class="card-grid">
+                <!-- Standard Card -->
+                <div class="card">
+                    <span class="card-badge">STANDARD</span>
+                    <h3 class="card-title">Basic Card</h3>
+                    <p class="card-text">Standard card with thin border and off-white background.</p>
+                    <button class="btn-card">Learn More</button>
+                </div>
+
+                <!-- Featured Card -->
+                <div class="card featured">
+                    <span class="card-badge">FEATURED</span>
+                    <h3 class="card-title">Featured Card</h3>
+                    <p class="card-text">Card with thick rust border and offset shadow for emphasis.</p>
+                    <button class="btn-card">Get Started</button>
+                </div>
+
+                <!-- Accent Card -->
+                <div class="card accent">
+                    <span class="card-badge" style="background: var(--sage-green);">ACCENT</span>
+                    <h3 class="card-title">Accent Card</h3>
+                    <p class="card-text">Card with cream background and thick accent border.</p>
+                    <button class="btn-secondary">View Details</button>
+                </div>
+
+                <!-- Pricing Card -->
+                <div class="card featured">
+                    <span class="card-badge">MOST POPULAR</span>
+                    <h3 class="card-title">Professional</h3>
+                    <div class="card-price">$299</div>
+                    <p class="card-text" style="margin-top: var(--space-sm);">Full access to all features</p>
+                    <ul style="font-family: var(--font-body); color: var(--weathered-steel); margin: var(--space-md) 0;">
+                        <li>• All features included</li>
+                        <li>• Priority support</li>
+                        <li>• API access</li>
+                    </ul>
+                    <button class="btn-card">Subscribe</button>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Spacing -->
+    <section id="spacing" class="section section-alt">
+        <div class="section-container">
+            <div class="section-header">
+                <span class="section-label">06 / Spacing & Layout</span>
+                <h2 class="section-title">Spacing System</h2>
+                <p class="section-description">
+                    A consistent 8px-based spacing scale. Use these values for margins, padding, and gaps 
+                    throughout the design system.
+                </p>
+            </div>
+
+            <div class="spacing-demo">
+                <div class="spacing-box xs">
+                    <span class="spacing-label">XS — 8px (0.5rem)</span>
+                </div>
+                <div class="spacing-box sm">
+                    <span class="spacing-label">SM — 16px (1rem)</span>
+                </div>
+                <div class="spacing-box md">
+                    <span class="spacing-label">MD — 32px (2rem)</span>
+                </div>
+                <div class="spacing-box lg">
+                    <span class="spacing-label">LG — 64px (4rem)</span>
+                </div>
+                <div class="spacing-box xl">
+                    <span class="spacing-label">XL — 128px (8rem)</span>
+                </div>
+            </div>
+
+            <h3 style="font-family: var(--font-heading); font-size: 1.5rem; text-transform: uppercase; margin-top: var(--space-xl); margin-bottom: var(--space-md);">
+                Grid Layout Demo
+            </h3>
+            <div class="grid-demo">
+                <div class="grid-cell">Cell 1</div>
+                <div class="grid-cell">Cell 2</div>
+                <div class="grid-cell">Cell 3</div>
+                <div class="grid-cell">Cell 4</div>
+            </div>
+            <p style="font-family: var(--font-mono); font-size: 0.75rem; color: var(--weathered-steel); margin-top: var(--space-sm);">
+                Grid: repeat(auto-fit, minmax(250px, 1fr)) • Gap: var(--space-md)
+            </p>
+        </div>
+    </section>
+
+    <!-- Borders & Shadows -->
+    <section id="borders" class="section">
+        <div class="section-container">
+            <div class="section-header">
+                <span class="section-label">07 / Borders & Shadows</span>
+                <h2 class="section-title">Border Styles</h2>
+                <p class="section-description">
+                    The brutalist aesthetic is defined by thick borders and offset shadows. Use thin borders 
+                    for subtle divisions and thick borders for structural elements.
+                </p>
+            </div>
+
+            <div class="border-demo">
+                <div class="border-showcase">
+                    <div class="border-thin-demo">Thin Border</div>
+                    <div class="border-label">var(--border-thin) — 1px solid var(--concrete-gray)</div>
+                </div>
+
+                <div class="border-showcase">
+                    <div class="border-thick-demo">Thick Border</div>
+                    <div class="border-label">var(--border-thick) — 3px solid var(--rust-orange)</div>
+                </div>
+
+                <div class="border-showcase">
+                    <div class="border-brutal-demo">Brutal Border + Offset Shadow</div>
+                    <div class="border-label">var(--border-brutal) — 4px solid var(--dark) • box-shadow: 6px 6px 0 var(--rust-orange)</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Animations -->
+    <section id="animations" class="section section-alt">
+        <div class="section-container">
+            <div class="section-header">
+                <span class="section-label">08 / Animations</span>
+                <h2 class="section-title">Motion Patterns</h2>
+                <p class="section-description">
+                    Subtle, functional animations that enhance interaction without distracting from content. 
+                    Hover effects use the offset shadow pattern for consistency.
+                </p>
+            </div>
+
+            <div class="animation-demo">
+                <div class="animation-card">
+                    <div class="animation-label">HOVER: LIFT</div>
+                    <h3 style="font-family: var(--font-heading); font-size: 1.25rem; text-transform: uppercase; margin-bottom: var(--space-xs);">
+                        Hover Me
+                    </h3>
+                    <p style="font-family: var(--font-body); font-size: 0.875rem; color: var(--weathered-steel);">
+                        Card lifts up with offset shadow
+                    </p>
+                </div>
+
+                <div class="animation-card">
+                    <div class="animation-label">HOVER: BUTTON SHIFT</div>
+                    <button class="btn-primary">Button Hover</button>
+                    <button class="btn-secondary">Secondary Hover</button>
+                </div>
+
+                <div class="animation-card">
+                    <div class="animation-label">KEYFRAME: FADE IN</div>
+                    <div style="font-family: var(--font-body); color: var(--weathered-steel);">
+                        @keyframes fadeInUp {<br>
+                        &nbsp;&nbsp;from { opacity: 0; transform: translateY(30px); }<br>
+                        &nbsp;&nbsp;to { opacity: 1; transform: translateY(0); }<br>
+                        }
+                    </div>
+                </div>
+
+                <div class="animation-card">
+                    <div class="animation-label">TRANSITION: FAST</div>
+                    <p style="font-family: var(--font-mono); font-size: 0.75rem;">
+                        transition: all 0.2s
+                    </p>
+                    <p style="font-family: var(--font-body); font-size: 0.875rem; color: var(--weathered-steel); margin-top: var(--space-xs);">
+                        Use 0.2s for most hover effects
+                    </p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Breakpoints -->
+    <section id="breakpoints" class="section section-dark">
+        <div class="section-container">
+            <div class="section-header">
+                <span class="section-label">09 / Responsive Design</span>
+                <h2 class="section-title">Breakpoints</h2>
+                <p class="section-description">
+                    Mobile-first responsive design with breakpoints at key screen sizes. Use CSS Grid and 
+                    Flexbox for layouts that adapt naturally to different screen sizes.
+                </p>
+            </div>
+
+            <table class="breakpoint-table">
+                <thead>
+                    <tr>
+                        <th>Breakpoint</th>
+                        <th>Size</th>
+                        <th>Usage</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Mobile</td>
+                        <td>< 480px</td>
+                        <td>Single column, stacked layouts, smaller fonts</td>
+                    </tr>
+                    <tr>
+                        <td>Tablet</td>
+                        <td>481px - 768px</td>
+                        <td>2-column grids, adjusted spacing</td>
+                    </tr>
+                    <tr>
+                        <td>Desktop</td>
+                        <td>769px - 1200px</td>
+                        <td>3-4 column grids, full navigation</td>
+                    </tr>
+                    <tr>
+                        <td>Large</td>
+                        <td>> 1200px</td>
+                        <td>Maximum content width (1400px), multi-column</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <div style="margin-top: var(--space-lg); padding: var(--space-md); border: var(--border-brutal); background: var(--darker);">
+                <h3 style="font-family: var(--font-heading); font-size: 1.25rem; text-transform: uppercase; margin-bottom: var(--space-sm); color: var(--off-white);">
+                    Best Practices
+                </h3>
+                <ul style="font-family: var(--font-body); color: var(--concrete-gray); margin-left: var(--space-md);">
+                    <li style="margin-bottom: var(--space-xs);">Use clamp() for fluid typography</li>
+                    <li style="margin-bottom: var(--space-xs);">Use CSS Grid auto-fit for responsive card layouts</li>
+                    <li style="margin-bottom: var(--space-xs);">Max-width: 1400px for main container</li>
+                    <li style="margin-bottom: var(--space-xs);">Padding: var(--space-md) for side margins</li>
+                    <li>Test on all breakpoints before deployment</li>
+                </ul>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="style-guide-footer">
+        <div class="footer-container">
+            <p class="footer-text">
+                <span class="accent">FF-Terminal Labs</span> — Agrarian Brutalism Style Guide
+            </p>
+            <p class="footer-text" style="margin-top: var(--space-sm);">
+                Version 1.0 • Last Updated: January 2026
+            </p>
+        </div>
+    </footer>
+</body>
+</html>
