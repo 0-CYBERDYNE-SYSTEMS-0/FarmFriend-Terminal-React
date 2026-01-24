@@ -14,22 +14,73 @@ const repoRoot = findRepoRoot();
 const isDevelopment = fs.existsSync(path.join(repoRoot, "src"));
 const fieldviewDistDir = path.join(repoRoot, isDevelopment ? "src" : "dist", "web", "fieldview", "dist");
 
-// Create WebSocket server for fieldview
-const wsPort = PORT + 100; // WebSocket on fieldviewPort + 100
+// Create HTTP server for static files
+const server = http.createServer((req: IncomingMessage, res: ServerResponse) => {
+  // Health endpoint
+  if (req.url === "/health") {
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end(JSON.stringify({ ok: true }) + "\n");
+    return;
+  }
 
+  // Serve static files from fieldview dist
+  if (!fs.existsSync(fieldviewDistDir)) {
+    res.writeHead(500, { "content-type": "text/plain" });
+    res.end("FieldView not built. Run 'npm run build:fieldview' first.\n");
+    return;
+  }
+
+  const url = new URL(req.url ?? "/", `http://${req.headers.host ?? "localhost"}`);
+  const pathname = decodeURIComponent(url.pathname);
+  const rel = pathname === "/" ? "/index.html" : pathname;
+  const filePath = path.join(fieldviewDistDir, rel);
+
+  // Prevent path traversal
+  if (!filePath.startsWith(fieldviewDistDir)) {
+    res.writeHead(400);
+    res.end();
+    return;
+  }
+
+  let actualPath = filePath;
+  if (!fs.existsSync(actualPath) || fs.statSync(actualPath).isDirectory()) {
+    actualPath = path.join(fieldviewDistDir, "index.html");
+  }
+
+  try {
+    const ext = path.extname(actualPath).toLowerCase();
+    const contentType =
+      ext === ".html"
+        ? "text/html; charset=utf-8"
+        : ext === ".js"
+          ? "application/javascript; charset=utf-8"
+          : ext === ".css"
+            ? "text/css; charset=utf-8"
+            : ext === ".svg"
+              ? "image/svg+xml"
+              : ext === ".json"
+                ? "application/json; charset=utf-8"
+                : "application/octet-stream";
+    res.writeHead(200, { "content-type": contentType });
+    res.end(fs.readFileSync(actualPath));
+  } catch {
+    res.writeHead(500);
+    res.end();
+  }
+});
+
+// Create WebSocket server for fieldview on the same port as HTTP
 let wss: WebSocketServer;
 try {
-  wss = new WebSocketServer({ port: wsPort });
-  console.log(`FieldView WebSocket server listening on ws://${HOST}:${wsPort}`);
+  wss = new WebSocketServer({ server });
+  console.log(`FieldView WebSocket server attached to http://${HOST}:${PORT}`);
 } catch (error: any) {
-  if (error.code === 'EADDRINUSE') {
-    console.error(`WebSocket port ${wsPort} already in use. Please try a different port.`);
+  if (error.code === "EADDRINUSE") {
+    console.error(`Port ${PORT} already in use. Please try a different port.`);
     process.exit(1);
   }
   throw error;
 }
-
-console.log(`FieldView WebSocket server listening on ws://${HOST}:${wsPort}`);
 
 type FileAttachment = {
   name: string;
@@ -145,7 +196,7 @@ function parseSessionId(req?: IncomingMessage): string {
   const url = req?.url || "/";
   const match = url.match(/\/ws\/terminal\/([^/?#]+)/);
   if (match && match[1]) return decodeURIComponent(match[1]);
-  const parsed = new URL(url, `http://${HOST}:${wsPort}`);
+  const parsed = new URL(url, `http://${HOST}:${PORT}`);
   return parsed.searchParams.get("sessionId") || "default-session";
 }
 
@@ -331,63 +382,15 @@ wss.on("connection", (ws: any, req: IncomingMessage) => {
 // Start connection to daemon
 connectToDaemon();
 
-// Create HTTP server for static files
-const server = http.createServer((req: IncomingMessage, res: ServerResponse) => {
-  // Health endpoint
-  if (req.url === "/health") {
-    res.writeHead(200, { "content-type": "application/json" });
-    res.end(JSON.stringify({ ok: true }) + "\n");
-    return;
-  }
-
-  // Serve static files from fieldview dist
-  if (!fs.existsSync(fieldviewDistDir)) {
-    res.writeHead(500, { "content-type": "text/plain" });
-    res.end("FieldView not built. Run 'npm run build:fieldview' first.\n");
-    return;
-  }
-
-  const url = new URL(req.url ?? "/", `http://${req.headers.host ?? "localhost"}`);
-  const pathname = decodeURIComponent(url.pathname);
-  const rel = pathname === "/" ? "/index.html" : pathname;
-  const filePath = path.join(fieldviewDistDir, rel);
-
-  // Prevent path traversal
-  if (!filePath.startsWith(fieldviewDistDir)) {
-    res.writeHead(400);
-    res.end();
-    return;
-  }
-
-  let actualPath = filePath;
-  if (!fs.existsSync(actualPath) || fs.statSync(actualPath).isDirectory()) {
-    actualPath = path.join(fieldviewDistDir, "index.html");
-  }
-
-  try {
-    const ext = path.extname(actualPath).toLowerCase();
-    const contentType =
-      ext === ".html"
-        ? "text/html; charset=utf-8"
-        : ext === ".js"
-          ? "application/javascript; charset=utf-8"
-          : ext === ".css"
-            ? "text/css; charset=utf-8"
-            : ext === ".svg"
-              ? "image/svg+xml"
-              : ext === ".json"
-                ? "application/json; charset=utf-8"
-                : "application/octet-stream";
-    res.writeHead(200, { "content-type": contentType });
-    res.end(fs.readFileSync(actualPath));
-  } catch {
-    res.writeHead(500);
-    res.end();
-  }
-});
-
 export async function startFieldviewServer(): Promise<void> {
   return new Promise((resolve) => {
+    server.on("error", (error: any) => {
+      if (error.code === "EADDRINUSE") {
+        console.error(`Port ${PORT} already in use. Please try a different port.`);
+        process.exit(1);
+      }
+      throw error;
+    });
     // Start server
     server.listen(PORT, HOST, () => {
       console.log(`FieldView server listening on http://${HOST}:${PORT}`);

@@ -407,6 +407,9 @@ web-frontend-dist/
 news-card-deck.html
 ducks_red_raiders_game.html
 
+# DDS prototypes
+dds-enterprise-prototypes/
+
 # Session artifacts (thoughts, todos, memories)
 ff-terminal-workspace/thoughts/
 ff-terminal-workspace/todos/
