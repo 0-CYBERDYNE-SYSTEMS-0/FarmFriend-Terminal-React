@@ -1,15 +1,6 @@
 #  FarmFriend Terminal React
-
 <div align="center">
 
-```
-                
-      
-                       
-                       
-                         
-                                 
-```
 
 **Next-Generation AI-Powered Terminal Interface**
 
@@ -23,7 +14,6 @@
 ---
 
 ##  Features
-
 ###  **Interactive Terminal UI**
 - Beautiful, responsive terminal interface built with **Ink** and **React**
 - Real-time WebSocket communication with AI daemon
@@ -54,14 +44,12 @@
 ---
 
 ##  Installation
-
 ### Prerequisites
 - **Node.js** >= 20.0.0
 - **npm** or **yarn**
 - Git
 
 ### Quick Start
-
 ```bash
 # Clone the repository
 git clone https://github.com/0-CYBERDYNE-SYSTEMS-0/FarmFriend-Terminal-React.git
@@ -84,10 +72,8 @@ npm run start:daemon
 
 # Launch the terminal interface (in another terminal)
 npm run start:cli
-```
 
 ### Install the CLI launcher
-
 1. Run `npm run build` (again if you already built once).
 2. Install the launcher into `~/.local/bin`:
    ```bash
@@ -110,7 +96,6 @@ Start the UI with `ff-terminal start` (and pass a profile name or `--display-mod
 ---
 
 ##  Getting Started
-
 ### 1. **Launch the Application**
 ```bash
 # Interactive launcher with provider selection
@@ -118,10 +103,8 @@ npm run dev -- start
 
 # Or direct development mode
 npm run dev:cli
-```
 
 ### 2. **Configure AI Provider**
-
 #### Option A: Profile Setup (Recommended)
 ```bash
 # Create a new profile
@@ -139,7 +122,6 @@ npm run dev -- profile default my-profile
 
 # Launch with specific profile
 npm run dev -- start my-profile
-```
 
 #### Option B: Environment Configuration
 Create a `.env` file in the project root:
@@ -157,10 +139,9 @@ use_zai=true
 # LM Studio (Local)
 use_lm_studio=true
 lm_studio_base_url=http://localhost:1234
-```
 
 ### 3. **Start Chatting**
-```
+
  FarmFriend Terminal React v1.0.0
 
 > Hello! I'm FarmFriend. How can I help you today?
@@ -171,7 +152,6 @@ Type /help for commands or just start chatting!
 ---
 
 ##  Usage Examples
-
 ### **Basic Interaction**
 ```bash
 # Ask questions directly
@@ -182,14 +162,13 @@ Type /help for commands or just start chatting!
 /mode
 /init
 /quit
-```
 
 ### **Skill Utilization**
 ```bash
 # Code assistance
 > Help me refactor this component for better performance
 
-# Design consultation  
+# Design consultation
 > Create a modern dashboard layout for e-commerce
 
 # Research tasks
@@ -197,7 +176,6 @@ Type /help for commands or just start chatting!
 
 # Automation
 > Set up a deployment pipeline for this project
-```
 
 ### **Advanced Features**
 ```bash
@@ -210,15 +188,12 @@ npm run dev -- run --scheduled-task daily-report --headless
 # Web interface (alternative UI)
 # Note: Run npm run build first to build the web frontend
 npm run dev:web
-```
 
 ---
 
 ##  Architecture
-
 ### **System Components**
 
-```
     WebSocket    
    Ink Terminal      AI Daemon      
    (React UI)                       (Node.js)      
@@ -232,10 +207,8 @@ npm run dev:web
                    • MiniMax      
                                        • LM Studio    
                                      
-```
 
 ### **Key Components**
-
 - ** Terminal UI (`/src/cli/`)** - Ink-based React interface
 - ** AI Daemon (`/src/daemon/`)** - Background processing service  
 - ** Runtime (`/src/runtime/`)** - Core logic and provider management
@@ -250,9 +223,7 @@ npm run dev:web
 ---
 
 ##  Development
-
 ### **Available Scripts**
-
 | Command | Description |
 |---------|-------------|
 | `npm run dev` | Start development mode |
@@ -267,7 +238,6 @@ npm run dev:web
 | `npm start:web` | Production web server |
 
 ### **Development Workflow**
-
 1. **Start the daemon** (background service)
 2. **Launch terminal UI** (interactive development)
 3. **Make changes** to source code
@@ -275,7 +245,6 @@ npm run dev:web
 5. **Build and deploy** when ready
 
 ### **Web Frontend Development**
-
 The web UI is a separate Vite project located in `src/web/client/`:
 
 ```bash
@@ -286,17 +255,14 @@ npm run build:web
 cd src/web/client
 npm install
 npm run dev  # Starts Vite dev server on port 5173
-```
 
 **Important:** If the web UI shows a blank page, it usually means the frontend hasn't been built:
 ```bash
 cd src/web/client
 npm install && npm run build
 cd ../..
-```
 
 ### **Troubleshooting Web UI Issues**
-
 If you encounter a blank white page when using `--web` flag:
 
 1. **Check if web frontend is built:**
@@ -323,7 +289,6 @@ If you encounter a blank white page when using `--web` flag:
 
 ### **Project Structure**
 
-```
 src/
  bin/              # CLI entry points
  cli/              # Terminal UI (Ink/React)
@@ -334,12 +299,10 @@ src/
     tools/        # Skill system
  web/              # Web interface
  types/            # TypeScript definitions
-```
 
 ---
 
 ##  Configuration
-
 ### **Profile Configuration**
 Profiles are stored in `~/.ff-terminal-profiles.json` with secure credential storage via Keychain (when available).
 
@@ -394,12 +357,10 @@ Individual skills can be enabled/disabled and customized:
     }
   }
 }
-```
 
 ---
 
 ##  Contributing
-
 We welcome contributions! Please see our contributing guidelines:
 
 1. **Fork** the repository
@@ -421,18 +382,15 @@ npm test
 
 # Build and verify
 npm run build
-```
 
 ---
 
 ##  License
-
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ---
 
 ##  Acknowledgments
-
 - **Ink** team for the amazing terminal UI framework
 - **React** team for the powerful UI library
 - **OpenAI** and other AI providers for API access
@@ -441,7 +399,6 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ---
 
 ##  Support
-
 - **Documentation**: Check the `/docs` directory for detailed guides
 - **Issues**: Report bugs and request features via GitHub Issues
 - **Discussions**: Join our community discussions
