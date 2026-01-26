@@ -21,6 +21,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `npm run dev -- run --prompt "..."` - Single headless execution
 - `npm run dev -- profile setup|list|default` - Profile management
 - `npm run dev -- acp` - Anthropic Claude Protocol server
+- `npm run dev -- gateway serve` - Start gateway server (messaging bridges)
+- `npm run dev -- gateway status|health|call` - Gateway management commands
 - `--display-mode verbose|clean` - Control output verbosity
 - `--allow-macos-control` / `--allow-browser-use` - Enable restricted tools
 
@@ -51,7 +53,7 @@ ff-terminal start
 Daemon persists independently of UI crashes.
 
 ### Entry Point: `src/bin/ff-terminal.ts`
-Central router for: `daemon`, `ui`, `start`, `local`, `run`, `profile`, `schedule`, `web`, `acp`
+Central router for: `daemon`, `ui`, `start`, `local`, `run`, `profile`, `schedule`, `web`, `acp`, `gateway`
 
 ### Core Modules
 
@@ -83,6 +85,27 @@ Central router for: `daemon`, `ui`, `start`, `local`, `run`, `profile`, `schedul
   - Mobile: bottom drawer (45vh) slides over chat
   - Smart scroll, thinking display, file upload
   - Build separately: `cd src/web/client && npm install && npm run build`
+
+**Gateway (`src/gateway/`)**
+- `server.ts` - WebSocket RPC server for messaging bridges
+- `protocol/` - JSON-RPC protocol validation (RequestFrame, ResponseFrame, EventFrame)
+- `bridges/` - Messaging platform integrations (WhatsApp, Telegram, iMessage)
+  - `whatsappBridge.ts` - Baileys library integration with QR pairing
+  - `telegramBridge.ts` - Telegram Bot API with polling/webhook support
+  - `imessageBridge.ts` - macOS iMessage integration via AppleScript
+- `server-methods/` - RPC method handlers (agent, bridge, chat, config, sessions, cron)
+- `bridgeManager.ts` - Lifecycle management for all bridges
+- `bridgeSubscriptions.ts` - Event subscriptions for bridge status changes
+- `auth.ts` - Authentication (password, bearer token, Tailscale)
+- `call.ts` - Client for calling gateway methods
+- `client.ts` - WebSocket client implementation
+
+**Telegram (`src/telegram/`)**
+- `pairingManager.ts` - Code-based user pairing system
+  - Generate 6-digit hex codes for new users
+  - Persistent allowlist in `workspace/telegram/allowlist.json`
+  - Configurable TTL (default 24h)
+  - Approve pairings via gateway or CLI
 
 ### Tool System
 **52 native tools** in 14 categories:
@@ -123,6 +146,66 @@ Central router for: `daemon`, `ui`, `start`, `local`, `run`, `profile`, `schedul
 
 **Skill-based tools:** 37+ available as external skills (Discord, Shopify, DreamHost, etc.)
 
+## Gateway System
+
+The gateway provides a WebSocket RPC server for messaging platform integrations, enabling AI agent interactions through WhatsApp, Telegram, and iMessage.
+
+### Architecture
+- **Protocol**: JSON-RPC over WebSocket with typed frames (Request/Response/Event)
+- **Bridges**: Pluggable messaging platform adapters implementing `GatewayBridge` interface
+- **Authentication**: Password, bearer token, or Tailscale Funnel
+- **Session Management**: Per-sender, per-bridge, or shared main session modes
+
+### Running the Gateway
+```bash
+npm run dev:gateway              # Start gateway server
+npm run dev -- gateway serve     # Alternative command
+npm run dev -- gateway status    # Check bridge health
+npm run dev -- gateway health    # System health check
+npm run dev -- gateway call <method> --params <json>  # Call RPC method
+```
+
+### Bridge Configuration
+
+**Telegram Bridge** (`src/gateway/bridges/telegramBridge.ts`):
+- Bot API with long polling or webhooks
+- Pairing system for new users (6-digit hex codes)
+- Allowlist stored in `workspace/telegram/allowlist.json`
+- Session scope: `main`, `per-sender`, or `bridge`
+- Reply/mention gating for group chats
+- File download support (photos, documents, audio, video)
+
+**WhatsApp Bridge** (`src/gateway/bridges/whatsappBridge.ts`):
+- Baileys library integration
+- QR code pairing via terminal
+- Session persistence in `workspace/whatsapp/auth/`
+
+**iMessage Bridge** (`src/gateway/bridges/imessageBridge.ts`):
+- macOS AppleScript integration
+- Requires macOS with Messages.app
+
+### Gateway RPC Methods
+Available via `gateway call <method>`:
+- `agent.query` - Send agent turn request
+- `bridge.start/stop` - Control bridge lifecycle
+- `bridge.status` - Get bridge health
+- `chat.send` - Send message through bridge
+- `config.get/set` - Runtime configuration
+- `sessions.list/history/reset` - Session management
+- `cron.list/add/remove` - Scheduled tasks
+
+### Session Scopes
+- `main` - All messages share one persistent session
+- `per-sender` - Each user gets isolated session
+- `bridge` - Each bridge has shared session
+
+### Pairing Flow (Telegram)
+1. User sends `/pair` to bot
+2. Bot generates 6-digit hex code
+3. Admin approves via `gateway call bridge.approvePairing --params '{"code":"ABC123"}'`
+4. User automatically added to allowlist
+5. Future messages processed normally
+
 ## Configuration
 
 ### Config Hierarchy
@@ -154,7 +237,14 @@ memory_core/
 projects/<project_name>/
 logs/sessions/<session-id>.jsonl
 logs/runs/<run-id>.jsonl
+logs/gateway/status.json
 sessions/<sessionId>.json
+telegram/
+├── pairings.json
+├── allowlist.json
+└── downloads/
+whatsapp/
+└── auth/
 ```
 
 **Local Mode:**
@@ -220,7 +310,7 @@ System prompts and schemas from `packet/` ensure cross-implementation consistenc
     "main_session_id": "main",
     "session": {
       "idleMinutes": 0,
-      "autoSummarize": false,
+      "autoSummarize": true,
       "maxHistoryTokens": 100000
     }
   }
@@ -334,6 +424,14 @@ Hacker News Scraper & Dashboard tests: API integration, file I/O, multi-language
 - Vite dev server: `cd src/web/client && npm run dev`
 - Tailwind dark theme: `bg-neutral-950`, `text-neutral-100`
 - No external state library (React hooks only)
+
+### Gateway Issues
+- Bridge not connecting: check `logs/gateway/status.json`
+- Telegram polling: verify `telegram.enabled: true` and `telegram.token` in config
+- WhatsApp QR: check terminal output for QR code display
+- iMessage not working: macOS only, requires Messages.app access
+- Auth failing: verify password/token in gateway config or use Tailscale mode
+- Pairing codes: stored in `telegram/pairings.json`, expire after TTL (default 24h)
 
 ### Environment Variables
 - `FF_WORKSPACE_DIR` - Custom workspace location

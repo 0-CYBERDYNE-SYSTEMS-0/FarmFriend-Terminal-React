@@ -409,7 +409,7 @@ The workspace directory stores sessions, logs, and project data. It defaults to 
     "session": {
       "scope": "main",
       "idleMinutes": 0,
-      "autoSummarize": false,
+      "autoSummarize": true,
       "maxHistoryTokens": 100000,
       "contextPruning": {
         "enabled": false,

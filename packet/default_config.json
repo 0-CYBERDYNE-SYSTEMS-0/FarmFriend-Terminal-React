@@ -30,7 +30,7 @@
   "session": {
     "scope": "main",
     "idleMinutes": 0,
-    "autoSummarize": false,
+    "autoSummarize": true,
     "maxHistoryTokens": 100000,
     "contextPruning": {
       "enabled": false,

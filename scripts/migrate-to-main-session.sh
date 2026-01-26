@@ -3,7 +3,9 @@ set -euo pipefail
 
 WORKSPACE_DIR="${FF_WORKSPACE_DIR:-}"
 if [[ -z "${WORKSPACE_DIR}" ]]; then
-  if [[ -d "./ff-terminal-workspace" ]]; then
+  if [[ -d "$HOME/fft_box" ]]; then
+    WORKSPACE_DIR="$HOME/fft_box"
+  elif [[ -d "./ff-terminal-workspace" ]]; then
     WORKSPACE_DIR="$(pwd)/ff-terminal-workspace"
   elif [[ -d "$HOME/ff-terminal-workspace" ]]; then
     WORKSPACE_DIR="$HOME/ff-terminal-workspace"

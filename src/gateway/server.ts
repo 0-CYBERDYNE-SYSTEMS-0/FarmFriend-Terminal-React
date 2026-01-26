@@ -105,7 +105,55 @@ export async function runGatewayServer(opts: GatewayServerOptions = {}): Promise
 
   const methods = createGatewayMethods();
 
-  const server = http.createServer();
+  const telegramWebhookPath = String((runtimeCfg as any).telegram?.webhook?.path || "/telegram/webhook").trim() || "/telegram/webhook";
+
+  const server = http.createServer((req, res) => {
+    const method = req.method || "GET";
+    const url = req.url || "/";
+    const parsedUrl = new URL(url, "http://localhost");
+    if (method === "POST" && parsedUrl.pathname === telegramWebhookPath) {
+      const secret = String((runtimeCfg as any).telegram?.webhook?.secret_token || "").trim();
+      const header = String(req.headers["x-telegram-bot-api-secret-token"] || "");
+      if (secret && header !== secret) {
+        res.writeHead(401, { "Content-Type": "text/plain" });
+        res.end("unauthorized");
+        return;
+      }
+      let body = "";
+      req.setEncoding("utf8");
+      req.on("data", (chunk) => {
+        body += chunk;
+      });
+      req.on("end", async () => {
+        const telegramBridge = bridges.find((b) => b instanceof TelegramBridge) as TelegramBridge | undefined;
+        if (!telegramBridge) {
+          res.writeHead(503, { "Content-Type": "text/plain" });
+          res.end("telegram bridge unavailable");
+          return;
+        }
+        let update: any;
+        try {
+          update = JSON.parse(body || "{}");
+        } catch {
+          res.writeHead(400, { "Content-Type": "text/plain" });
+          res.end("invalid json");
+          return;
+        }
+        try {
+          await telegramBridge.handleWebhookUpdate(update);
+        } catch {
+          res.writeHead(500, { "Content-Type": "text/plain" });
+          res.end("error");
+          return;
+        }
+        res.writeHead(200, { "Content-Type": "text/plain" });
+        res.end("ok");
+      });
+      return;
+    }
+    res.writeHead(404, { "Content-Type": "text/plain" });
+    res.end("not found");
+  });
   const wss = new WebSocketServer({ server });
 
   let seq = 0;

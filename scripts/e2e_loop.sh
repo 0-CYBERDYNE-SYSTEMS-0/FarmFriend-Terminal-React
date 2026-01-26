@@ -36,6 +36,7 @@ fi
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
+WORKSPACE_DIR="${FF_WORKSPACE_DIR:-$HOME/fft_box}"
 echo "Running ${#PROMPTS[@]} prompts using profile=${PROFILE}, session=${SESSION_ID}"
 
 for prompt in "${PROMPTS[@]}"; do
@@ -51,4 +52,4 @@ for prompt in "${PROMPTS[@]}"; do
 done
 
 echo "----------------------------------------------------------------"
-echo "Done. Session logs (truth source): $HOME/ff-terminal-workspace/logs/sessions/session_${SESSION_ID}.jsonl"
+echo "Done. Session logs (truth source): ${WORKSPACE_DIR}/logs/sessions/session_${SESSION_ID}.jsonl"

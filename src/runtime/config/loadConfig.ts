@@ -83,6 +83,20 @@ export type RuntimeConfig = Record<string, unknown> & {
     reply_prefix?: string;
     allow_from?: string[];
     allow_groups?: boolean;
+    admin_from?: string[];
+    mention_gate?: boolean;
+    reply_gate?: boolean;
+    session_scope?: "main" | "per-sender" | "bridge";
+    pairing?: {
+      enabled?: boolean;
+      code_ttl_minutes?: number;
+    };
+    webhook?: {
+      enabled?: boolean;
+      url?: string;
+      secret_token?: string;
+      path?: string;
+    };
   };
 
   // Forced tool calling configuration

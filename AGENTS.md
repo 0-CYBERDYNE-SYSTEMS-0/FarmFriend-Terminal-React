@@ -34,3 +34,6 @@ EOT
 
 ## Operational notes
 - iMessage pairing replies are disabled by setting `channels.imessage.dmPolicy` to `disabled` in `~/.clawdbot/clawdbot.json` to prevent sending pairing requests.
+
+## Agent readiness report
+- See `AGENT_READINESS_REPORT.md` for the latest Factory readiness summary.
