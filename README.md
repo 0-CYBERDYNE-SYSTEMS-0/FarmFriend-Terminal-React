@@ -1,14 +1,14 @@
-# 🚜 FarmFriend Terminal React
+#  FarmFriend Terminal React
 
 <div align="center">
 
 ```
-███████╗ █████╗ ██████╗ ███╗   ███╗    ██████╗ ███████╗ ██████╗████████╗███████╗██████╗ ███╗   ███╗
-██╔════╝██╔══██╗██╔══██╗████╗ ████║    ██╔══██╗██╔════╝██╔════╝╚══██╔══╝██╔════╝██╔══██╗████╗ ████║
-█████╗  ███████║██████╔╝██╔████╔██║    ██║  ██║█████╗  ██║        ██║   █████╗  ██████╔╝██╔████╔██║
-██╔══╝  ██╔══██║██╔══██╗██║╚██╔╝██║    ██║  ██║██╔══╝  ██║        ██║   ██╔══╝  ██╔══██╗██║╚██╔╝██║
-██║     ██║  ██║██║  ██║██║ ╚═╝ ██║    ██████╔╝███████╗╚██████╗   ██║   ███████╗██║  ██║██║ ╚═╝ ██║
-╚═╝     ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝     ╚═╝    ╚═════╝ ╚══════╝ ╚═════╝   ╚═╝   ╚══════╝╚═╝  ╚═╝╚═╝     ╚═╝
+                
+      
+                       
+                       
+                         
+                                 
 ```
 
 **Next-Generation AI-Powered Terminal Interface**
@@ -22,21 +22,21 @@
 
 ---
 
-## 🌟 Features
+##  Features
 
-### 🚀 **Interactive Terminal UI**
+###  **Interactive Terminal UI**
 - Beautiful, responsive terminal interface built with **Ink** and **React**
 - Real-time WebSocket communication with AI daemon
 - Multi-provider AI support with seamless switching
 - Intuitive slash commands and keyboard shortcuts
 
-### 🤖 **Multi-Provider AI Integration**
+###  **Multi-Provider AI Integration**
 - **OpenRouter** - OpenAI-compatible API with streaming support
 - **Z.ai** - High-performance Anthropic-compatible API
 - **MiniMax** - Advanced AI model access
 - **LM Studio** - Local AI model support
 
-### 🛠️ **Extensible Skill System**
+###  **Extensible Skill System**
 - 30+ pre-built skills covering diverse use cases:
   - **Development** - Code assistance, testing, deployment
   - **Design** - UI/UX, branding, responsive design
@@ -44,7 +44,7 @@
   - **Automation** - Scripting, workflow optimization
   - **Specialized** - Domain-specific tools and integrations
 
-### 🎯 **Smart Features**
+###  **Smart Features**
 - **Profile Management** - Multiple AI provider configurations
 - **Workspace Integration** - Seamless project context awareness
 - **Scheduling System** - Background task execution
@@ -53,7 +53,7 @@
 
 ---
 
-## 📦 Installation
+##  Installation
 
 ### Prerequisites
 - **Node.js** >= 20.0.0
@@ -109,7 +109,7 @@ Start the UI with `ff-terminal start` (and pass a profile name or `--display-mod
 
 ---
 
-## 🚀 Getting Started
+##  Getting Started
 
 ### 1. **Launch the Application**
 ```bash
@@ -161,8 +161,8 @@ lm_studio_base_url=http://localhost:1234
 
 ### 3. **Start Chatting**
 ```
-🌾 FarmFriend Terminal React v1.0.0
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ FarmFriend Terminal React v1.0.0
+
 > Hello! I'm FarmFriend. How can I help you today?
 
 Type /help for commands or just start chatting!
@@ -170,7 +170,7 @@ Type /help for commands or just start chatting!
 
 ---
 
-## 🎮 Usage Examples
+##  Usage Examples
 
 ### **Basic Interaction**
 ```bash
@@ -214,33 +214,33 @@ npm run dev:web
 
 ---
 
-## 🏗️ Architecture
+##  Architecture
 
 ### **System Components**
 
 ```
-┌─────────────────┐    WebSocket    ┌─────────────────┐
-│   Ink Terminal  │ ◄─────────────► │  AI Daemon      │
-│   (React UI)    │                 │  (Node.js)      │
-└─────────────────┘                 └─────────────────┘
-         │                                   │
-         │                                   ▼
-         ▼                           ┌─────────────────┐
-┌─────────────────┐                 │  AI Providers   │
-│  Skill System   │                 │  • OpenRouter   │
-│  (30+ Skills)   │                 │  • Z.ai         │
-└─────────────────┘                 │  • MiniMax      │
-                                     │  • LM Studio    │
-                                     └─────────────────┘
+    WebSocket    
+   Ink Terminal      AI Daemon      
+   (React UI)                       (Node.js)      
+                 
+                                            
+                                            
+                                    
+                   AI Providers   
+  Skill System                      • OpenRouter   
+  (30+ Skills)                      • Z.ai         
+                   • MiniMax      
+                                       • LM Studio    
+                                     
 ```
 
 ### **Key Components**
 
-- **🖥️ Terminal UI (`/src/cli/`)** - Ink-based React interface
-- **⚡ AI Daemon (`/src/daemon/`)** - Background processing service  
-- **🔧 Runtime (`/src/runtime/`)** - Core logic and provider management
-- **🛠️ Tools (`/src/tools/`)** - Skill system and tool integrations
-- **📡 Web Server (`/src/web/`)** - Alternative web-based interface
+- ** Terminal UI (`/src/cli/`)** - Ink-based React interface
+- ** AI Daemon (`/src/daemon/`)** - Background processing service  
+- ** Runtime (`/src/runtime/`)** - Core logic and provider management
+- ** Tools (`/src/tools/`)** - Skill system and tool integrations
+- ** Web Server (`/src/web/`)** - Alternative web-based interface
 
 ### **Communication Protocol**
 - **WebSocket** for real-time bidirectional communication
@@ -249,7 +249,7 @@ npm run dev:web
 
 ---
 
-## 🛠️ Development
+##  Development
 
 ### **Available Scripts**
 
@@ -325,20 +325,20 @@ If you encounter a blank white page when using `--web` flag:
 
 ```
 src/
-├── bin/              # CLI entry points
-├── cli/              # Terminal UI (Ink/React)
-├── daemon/           # AI daemon service
-├── runtime/          # Core logic
-│   ├── config/       # Configuration management
-│   ├── profiles/     # Provider profiles
-│   └── tools/        # Skill system
-├── web/              # Web interface
-└── types/            # TypeScript definitions
+ bin/              # CLI entry points
+ cli/              # Terminal UI (Ink/React)
+ daemon/           # AI daemon service
+ runtime/          # Core logic
+    config/       # Configuration management
+    profiles/     # Provider profiles
+    tools/        # Skill system
+ web/              # Web interface
+ types/            # TypeScript definitions
 ```
 
 ---
 
-## 🔧 Configuration
+##  Configuration
 
 ### **Profile Configuration**
 Profiles are stored in `~/.ff-terminal-profiles.json` with secure credential storage via Keychain (when available).
@@ -398,7 +398,7 @@ Individual skills can be enabled/disabled and customized:
 
 ---
 
-## 🤝 Contributing
+##  Contributing
 
 We welcome contributions! Please see our contributing guidelines:
 
@@ -425,13 +425,13 @@ npm run build
 
 ---
 
-## 📄 License
+##  License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ---
 
-## 🙏 Acknowledgments
+##  Acknowledgments
 
 - **Ink** team for the amazing terminal UI framework
 - **React** team for the powerful UI library
@@ -440,7 +440,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ---
 
-## 📞 Support
+##  Support
 
 - **Documentation**: Check the `/docs` directory for detailed guides
 - **Issues**: Report bugs and request features via GitHub Issues
@@ -451,7 +451,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 <div align="center">
 
-**Built with ❤️ by the FarmFriend Team**
+**Built with  by the FarmFriend Team**
 
 [![Star on GitHub](https://img.shields.io/github/stars/0-CYBERDYNE-SYSTEMS-0/FarmFriend-Terminal-React?style=social)](https://github.com/0-CYBERDYNE-SYSTEMS-0/FarmFriend-Terminal-React)
 [![Follow on GitHub](https://img.shields.io/github/followers/0-CYBERDYNE-SYSTEMS-0?style=social)](https://github.com/0-CYBERDYNE-SYSTEMS-0)
