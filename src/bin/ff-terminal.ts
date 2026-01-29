@@ -829,6 +829,9 @@ async function run(): Promise<void> {
       scheduledTaskId = task.id;
       scheduledTaskProfile = task.profile;
       scheduledTaskModel = task.model;
+      if (task.announceback) {
+        announceback = task.announceback;
+      }
 
       if (task.thinking) {
         process.env.FF_THINKING = task.thinking;

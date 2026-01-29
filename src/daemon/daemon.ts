@@ -287,6 +287,7 @@ export async function startDaemon(): Promise<void> {
     const events = drainAnnounceback(workspaceDir, "daemon", 50);
     if (events.length === 0) return;
     for (const event of events) {
+      if (event.target.kind !== "daemon") continue;
       const targetSessionId = event.target.sessionId;
       if (!targetSessionId) continue;
       for (const [ws, sessionKey] of connectionSessions.entries()) {

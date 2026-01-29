@@ -1014,6 +1014,53 @@
           "delivery_include_logs": {
             "type": "boolean",
             "description": "Include log file path in delivery payload (default: false)"
+          },
+          "announceback": {
+            "type": "object",
+            "description": "Optional announce-back target for scheduled task results.",
+            "properties": {
+              "target": {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "description": "Target kind: 'daemon' or 'gateway'"
+                  },
+                  "sessionId": {
+                    "type": "string",
+                    "description": "Daemon session id to post results into (for CLI/web UI)"
+                  },
+                  "provider": {
+                    "type": "string",
+                    "description": "Gateway provider: 'telegram' or 'whatsapp'"
+                  },
+                  "chatId": {
+                    "type": "string",
+                    "description": "Chat id for the gateway provider"
+                  },
+                  "chatType": {
+                    "type": "string",
+                    "description": "Chat type: 'direct' or 'group'"
+                  }
+                }
+              },
+              "label": {
+                "type": "string",
+                "description": "Optional label included in the announce-back message"
+              },
+              "prefix": {
+                "type": "string",
+                "description": "Optional prefix added before the announce-back message"
+              },
+              "parentSessionId": {
+                "type": "string",
+                "description": "Optional parent session id for bookkeeping"
+              },
+              "sourceSessionId": {
+                "type": "string",
+                "description": "Optional source session id for bookkeeping"
+              }
+            }
           }
         },
         "required": [

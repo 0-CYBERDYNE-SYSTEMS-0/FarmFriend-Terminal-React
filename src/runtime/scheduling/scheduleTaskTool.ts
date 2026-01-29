@@ -8,6 +8,7 @@ import { findRepoRoot } from "../config/repoRoot.js";
 import fs from "node:fs";
 import path from "node:path";
 import { spawn } from "node:child_process";
+import type { AnnouncebackRequest } from "../announceback/queue.js";
 
 type Args = {
   action: "add" | "list" | "remove" | "enable" | "disable" | "status" | "run" | "update" | "history";
@@ -43,6 +44,7 @@ type Args = {
   delivery_best_effort?: boolean;
   delivery_include_output?: boolean;
   delivery_include_logs?: boolean;
+  announceback?: AnnouncebackRequest;
 };
 
 type ParsedTime =
@@ -250,6 +252,7 @@ export async function scheduleTaskTool(argsRaw: unknown, workspaceDir: string): 
     if (args.session_target !== undefined) task.session_target = args.session_target;
     if (args.post_to_main_prefix !== undefined) task.post_to_main_prefix = args.post_to_main_prefix;
     if (args.wake_mode !== undefined) task.wake_mode = args.wake_mode;
+    if (args.announceback !== undefined) task.announceback = args.announceback;
 
     if (args.schedule_type || args.hour !== undefined || args.minute !== undefined || args.weekdays !== undefined || args.interval_seconds !== undefined || args.execution_timestamp !== undefined || args.schedule_rule !== undefined || args.timezone !== undefined || args.start_datetime !== undefined) {
       const hourMinute = resolveHourMinute(args);
@@ -399,6 +402,7 @@ export async function scheduleTaskTool(argsRaw: unknown, workspaceDir: string): 
       timeout_seconds: args.timeout_seconds,
       wake_mode: args.wake_mode,
       delivery,
+      announceback: args.announceback,
       schedule: {
         schedule_type,
         hour: hourMinute?.hour ?? args.hour,

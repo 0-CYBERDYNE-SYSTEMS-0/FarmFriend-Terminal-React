@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { ensureDir, writeJson } from "../config/loadConfig.js";
 import type { DeliveryConfig } from "./delivery.js";
+import type { AnnouncebackRequest } from "../announceback/queue.js";
 
 export type PayloadType =
   | { kind: "agentTurn"; prompt?: string; workflow?: string }
@@ -23,6 +24,7 @@ export type ScheduledTask = {
   thinking?: string;
   wake_mode?: "next-heartbeat" | "now";
   delivery?: DeliveryConfig;
+  announceback?: AnnouncebackRequest;
   schedule: {
     schedule_type: "one_time" | "daily" | "weekly" | "interval" | "rrule";
     hour?: number;
