@@ -209,6 +209,7 @@ export class TelegramBridge implements GatewayBridge {
         this.webhookConfigured = false;
         return;
       }
+      this.lastError = null;
       this.webhookConfigured = true;
     } catch (err) {
       this.lastError = err instanceof Error ? err.message : String(err);
@@ -231,8 +232,8 @@ export class TelegramBridge implements GatewayBridge {
 
   private async pollOnce(): Promise<void> {
     if (this.processing) return;
-    this.processing = true;
     if (!this.config.token) return;
+    this.processing = true;
     try {
       const params = new URLSearchParams();
       if (this.lastUpdateId !== null) params.set("offset", String(this.lastUpdateId + 1));
@@ -247,7 +248,11 @@ export class TelegramBridge implements GatewayBridge {
         return;
       }
       const body = await res.json();
-      if (!body || !Array.isArray(body.result)) return;
+      if (!body || !Array.isArray(body.result)) {
+        this.lastError = "Telegram getUpdates returned invalid response";
+        return;
+      }
+      this.lastError = null;
       const updates: TelegramUpdate[] = body.result;
       for (const update of updates) {
         await this.processUpdate(update);
@@ -269,6 +274,7 @@ export class TelegramBridge implements GatewayBridge {
     const msg = update.message;
     if (!msg) return;
     if (msg.from?.is_bot) return;
+    this.lastError = null;
     await this.handleInbound(update);
   }
 
@@ -608,7 +614,9 @@ export class TelegramBridge implements GatewayBridge {
       });
       if (!res.ok) {
         this.lastError = `Telegram sendMessage failed: ${res.status}`;
+        return;
       }
+      this.lastError = null;
     } catch (err) {
       this.lastError = err instanceof Error ? err.message : String(err);
     }
