@@ -24,6 +24,7 @@ import {
 import { resetSessionWithArchive, compactSessionWithSummary } from "../runtime/session/resetHelpers.js";
 import { listSessionIndex, getOrCreateSessionIdForKey, upsertSessionIndexEntry } from "../runtime/session/sessionIndex.js";
 import { patchSessionOverrides, getSessionOverrides } from "../runtime/session/sessionOverrides.js";
+import { loadSession } from "../runtime/session/sessionStore.js";
 import { buildSystemPrompt } from "../runtime/prompts/systemPrompt.js";
 import { ALWAYS_ALLOWED_TOOLS } from "../runtime/hooks/builtin/skillAllowedToolsHook.js";
 import { loadPlanStore, getActivePlan } from "../runtime/planning/planStore.js";
@@ -307,6 +308,35 @@ export async function startDaemon(): Promise<void> {
           msg.messageLimit
         );
         send(ws, { type: "sessions_list", sessions: rows });
+        return;
+      }
+
+      if (msg.type === "get_history") {
+        const resolvedSessionId = resolveSessionId({
+          requested: msg.sessionId,
+          workspaceDir,
+          cfg: runtimeCfg,
+          mode: sessionMode
+        });
+        const sessionDir = path.join(workspaceDir, "sessions");
+        const session = loadSession(resolvedSessionId, sessionDir);
+        const includeSystem = msg.includeSystem === true;
+        const includeTool = msg.includeTool === true;
+        const limitRaw = Number(msg.limit ?? 0);
+        const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? Math.floor(limitRaw) : 0;
+        const conversation = Array.isArray(session?.conversation) ? session!.conversation : [];
+        const filtered = conversation.filter((entry) => {
+          if (entry.role === "user" || entry.role === "assistant") return true;
+          if (entry.role === "system") return includeSystem;
+          if (entry.role === "tool") return includeTool;
+          return false;
+        });
+        const messages = limit > 0 ? filtered.slice(-limit) : filtered;
+        send(ws, {
+          type: "history",
+          sessionId: resolvedSessionId,
+          messages
+        });
         return;
       }
 

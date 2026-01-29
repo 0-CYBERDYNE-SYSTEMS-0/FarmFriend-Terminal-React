@@ -24,6 +24,7 @@ type ChatMessage = {
   content: string
   timestamp: number
   toolName?: string
+  historyIndex?: number
   attachments?: Array<{ name: string; type: string; size: number; data: string }>
 }
 
@@ -41,6 +42,8 @@ type ConsoleEvent = {
   timestamp: number
   metadata?: any
 }
+
+const HISTORY_PAGE_SIZE = 200
 
 type GatewayChannelStatus = {
   name: string
@@ -340,12 +343,17 @@ function AppContent({
   const [showConsole, setShowConsole] = useState(false)
   const [consoleEvents, setConsoleEvents] = useState<ConsoleEvent[]>([])
   const [isMobile, setIsMobile] = useState(false)
+  const [historyLoading, setHistoryLoading] = useState(false)
+  const [hasMoreHistory, setHasMoreHistory] = useState(true)
 
   const wsRef = useRef<WebSocket | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const messagesContainerRef = useRef<HTMLDivElement>(null)
   const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const draftRestoredRef = useRef(false)
+  const historyLoadedRef = useRef(false)
+  const historyModeRef = useRef<'initial' | 'more' | null>(null)
+  const oldestIndexRef = useRef<number | null>(null)
 
   // Streaming optimization: buffer content and update smoothly
   const streamBufferRef = useRef<string>('')
@@ -385,6 +393,21 @@ function AppContent({
     scrollToBottom()
   }, [messages, assistantContent, scrollToBottom])
 
+  const requestHistory = useCallback((mode: 'initial' | 'more') => {
+    const ws = wsRef.current
+    if (!ws || ws.readyState !== WebSocket.OPEN) return
+    historyModeRef.current = mode
+    setHistoryLoading(true)
+    const beforeIndex = mode === 'more' ? oldestIndexRef.current : undefined
+    ws.send(JSON.stringify({ type: 'get_history', limit: HISTORY_PAGE_SIZE, beforeIndex }))
+  }, [])
+
+  const handleLoadMore = useCallback(() => {
+    if (historyLoading || !hasMoreHistory) return
+    if (oldestIndexRef.current === null) return
+    requestHistory('more')
+  }, [hasMoreHistory, historyLoading, requestHistory])
+
   // Restore draft input from localStorage
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -422,7 +445,9 @@ function AppContent({
           setIsConnected(true)
           console.log('Connected to FarmFriend Terminal')
           try {
-            ws.send(JSON.stringify({ type: 'get_history' }))
+            if (!historyLoadedRef.current) {
+              requestHistory('initial')
+            }
           } catch {
             // ignore history fetch failures
           }
@@ -433,18 +458,52 @@ function AppContent({
 
           if (msg.type === 'history') {
             try {
-              const parsed = JSON.parse(msg.content || '[]') as Array<{ role: string; content: string; timestamp?: number }>
-              setMessages(prev => {
-                if (prev.length) return prev
-                const hydrated = parsed.map((item, idx) => ({
-                  id: `${item.timestamp || Date.now()}-${idx}-history`,
+              const parsed = JSON.parse(msg.content || '[]') as Array<{ role: string; content: string; timestamp?: number; index?: number }>
+              const mode = historyModeRef.current === 'more' ? 'more' : 'initial'
+              historyModeRef.current = null
+              setHistoryLoading(false)
+
+              const hydrated = parsed.map((item, idx) => {
+                const ts = item.timestamp || Date.now()
+                const historyIndex = typeof item.index === 'number' ? item.index : undefined
+                const id = historyIndex !== undefined ? `history-${historyIndex}` : `${ts}-${idx}-history`
+                return {
+                  id,
                   role: (item.role as ChatMessage['role']) || 'assistant',
                   content: item.content || '',
-                  timestamp: item.timestamp || Date.now()
-                }))
-                return hydrated
+                  timestamp: ts,
+                  historyIndex
+                }
               })
+
+              if (hydrated.length > 0) {
+                const firstIndex = hydrated[0].historyIndex
+                if (typeof firstIndex === 'number') {
+                  oldestIndexRef.current = firstIndex
+                }
+              } else if (mode === 'more') {
+                setHasMoreHistory(false)
+              }
+
+              if (hydrated.length < HISTORY_PAGE_SIZE) {
+                setHasMoreHistory(false)
+              }
+
+              if (mode === 'initial' && !historyLoadedRef.current) {
+                historyLoadedRef.current = true
+                setMessages(prev => {
+                  if (!prev.length) return hydrated
+                  return [...hydrated, ...prev]
+                })
+              } else if (mode === 'more' && hydrated.length) {
+                setMessages(prev => {
+                  const existingIndexes = new Set(prev.map((m) => m.historyIndex).filter((v): v is number => typeof v === 'number'))
+                  const deduped = hydrated.filter((m) => m.historyIndex === undefined || !existingIndexes.has(m.historyIndex))
+                  return [...deduped, ...prev]
+                })
+              }
             } catch {
+              setHistoryLoading(false)
               // ignore bad history payload
             }
             return
@@ -761,6 +820,24 @@ function AppContent({
                   </div>
                 )}
 
+                {hasMoreHistory && (
+                  <div className="flex justify-center">
+                    <button
+                      onClick={handleLoadMore}
+                      disabled={historyLoading}
+                      className={`
+                        px-4 py-2 rounded-full text-sm font-medium
+                        transition-all duration-200
+                        ${historyLoading
+                          ? 'bg-neutral-800 text-neutral-500 cursor-not-allowed'
+                          : 'bg-neutral-800 text-neutral-200 hover:bg-neutral-700'}
+                      `}
+                    >
+                      {historyLoading ? 'Loading…' : 'Load older messages'}
+                    </button>
+                  </div>
+                )}
+
                 {messages.map(msg => (
                   <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                     <div className={`max-w-[80%] rounded-lg ${
@@ -815,6 +892,24 @@ function AppContent({
               <div className="text-center text-neutral-500 py-20">
                 <p className="text-lg mb-2">Welcome to FarmFriend Terminal</p>
                 <p className="text-sm">Ask about today’s work, field notes, or schedules</p>
+              </div>
+            )}
+
+            {hasMoreHistory && (
+              <div className="flex justify-center">
+                <button
+                  onClick={handleLoadMore}
+                  disabled={historyLoading}
+                  className={`
+                    px-4 py-2 rounded-full text-sm font-medium
+                    transition-all duration-200
+                    ${historyLoading
+                      ? 'bg-neutral-800 text-neutral-500 cursor-not-allowed'
+                      : 'bg-neutral-800 text-neutral-200 hover:bg-neutral-700'}
+                  `}
+                >
+                  {historyLoading ? 'Loading…' : 'Load older messages'}
+                </button>
               </div>
             )}
 

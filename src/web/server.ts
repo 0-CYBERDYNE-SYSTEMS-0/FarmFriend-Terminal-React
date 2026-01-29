@@ -2,10 +2,12 @@ import http, { type IncomingMessage, type ServerResponse } from "node:http";
 import { URL, pathToFileURL } from "node:url";
 import WebSocket, { WebSocketServer } from "ws";
 import fs from "node:fs";
+import net from "node:net";
 import type { Socket } from "node:net";
 import path from "node:path";
 import os from "node:os";
 import Busboy from "busboy";
+import { spawn, type ChildProcess } from "node:child_process";
 
 import { findRepoRoot } from "../runtime/config/repoRoot.js";
 import { resolveConfig } from "../runtime/config/loadConfig.js";
@@ -31,7 +33,7 @@ type FileAttachment = {
 type WebClientMessage =
   | { type: "command"; data: { command: string; files?: FileAttachment[] } }
   | { type: "ping" }
-  | { type: "get_history" }
+  | { type: "get_history"; limit?: number; includeSystem?: boolean; includeTool?: boolean; beforeIndex?: number }
   | { type: "clear_session" };
 
 // Types for web server responses (existing protocol)
@@ -63,6 +65,14 @@ type DaemonServerMessage =
 
 const DAEMON_PORT = Number(process.env.FF_TERMINAL_PORT || 28888);
 const WEB_PORT = Number(process.env.FF_WEB_PORT || 8787);
+const DAEMON_HOST = process.env.FF_DAEMON_HOST || "127.0.0.1";
+const AUTO_START_DAEMON = (() => {
+  const raw = String(process.env.FF_WEB_AUTO_DAEMON || "").trim().toLowerCase();
+  if (!raw) return true;
+  return !["0", "false", "no", "off"].includes(raw);
+})();
+let daemonProcess: ChildProcess | null = null;
+let daemonStartPromise: Promise<void> | null = null;
 
 // File upload configuration
 const MAX_FILE_SIZE = 25 * 1024 * 1024; // 25MB
@@ -453,12 +463,99 @@ async function registryFetchText(pathName: string, searchParams?: Record<string,
   return await res.text();
 }
 
+function isPortOpen(port: number, host = DAEMON_HOST, timeoutMs = 1000): Promise<boolean> {
+  return new Promise((resolve) => {
+    const socket = net.createConnection({ port, host });
+    socket.setTimeout(timeoutMs);
+    const done = (ok: boolean) => {
+      socket.destroy();
+      resolve(ok);
+    };
+    socket.once("connect", () => done(true));
+    socket.once("error", () => done(false));
+    socket.once("timeout", () => done(false));
+  });
+}
+
+async function waitForPortOpen(params: { port: number; host?: string; timeoutMs?: number }): Promise<boolean> {
+  const timeoutMs = params.timeoutMs ?? 12000;
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    if (await isPortOpen(params.port, params.host ?? DAEMON_HOST, 1000)) return true;
+    await new Promise((r) => setTimeout(r, 200));
+  }
+  return false;
+}
+
+function resolveDaemonCommand(repoRoot: string): { command: string; args: string[] } {
+  const distDaemon = path.join(repoRoot, "dist", "daemon", "daemon.js");
+  if (fs.existsSync(distDaemon)) {
+    return { command: process.execPath, args: [distDaemon] };
+  }
+  const binExt = process.platform === "win32" ? ".cmd" : "";
+  const tsxPath = path.join(repoRoot, "node_modules", ".bin", `tsx${binExt}`);
+  if (fs.existsSync(tsxPath)) {
+    return { command: tsxPath, args: ["src/daemon/daemon.ts"] };
+  }
+  return { command: "tsx", args: ["src/daemon/daemon.ts"] };
+}
+
+async function ensureDaemonRunning(repoRoot: string): Promise<void> {
+  if (await isPortOpen(DAEMON_PORT, DAEMON_HOST)) return;
+  if (!AUTO_START_DAEMON) {
+    throw new Error(`Daemon not running at ${DAEMON_HOST}:${DAEMON_PORT}`);
+  }
+  if (daemonProcess && daemonProcess.exitCode !== null) {
+    daemonProcess = null;
+    daemonStartPromise = null;
+  }
+  if (!daemonStartPromise) {
+    daemonStartPromise = (async () => {
+      const { command, args } = resolveDaemonCommand(repoRoot);
+      daemonProcess = spawn(command, args, {
+        stdio: "inherit",
+        env: {
+          ...process.env,
+          FF_TERMINAL_PORT: String(DAEMON_PORT)
+        }
+      });
+      daemonProcess.on("exit", () => {
+        daemonProcess = null;
+        daemonStartPromise = null;
+      });
+      daemonProcess.on("error", () => {
+        daemonProcess = null;
+        daemonStartPromise = null;
+      });
+      const ready = await waitForPortOpen({ port: DAEMON_PORT, host: DAEMON_HOST });
+      if (!ready) {
+        daemonProcess = null;
+        daemonStartPromise = null;
+        throw new Error("Daemon failed to start in time.");
+      }
+    })();
+  }
+  await daemonStartPromise;
+  if (!(await isPortOpen(DAEMON_PORT, DAEMON_HOST))) {
+    daemonStartPromise = null;
+    throw new Error("Daemon not running after start attempt.");
+  }
+}
+
 function parseWebClientMessage(raw: string): WebClientMessage | null {
   try {
     const obj = JSON.parse(raw) as any;
     if (!obj || typeof obj !== "object") return null;
     if (obj.type === "ping") return { type: "ping" };
-    if (obj.type === "get_history") return { type: "get_history" };
+    if (obj.type === "get_history") {
+      const limitRaw = Number((obj as any).limit ?? 0);
+      const limit = Number.isFinite(limitRaw) ? limitRaw : undefined;
+      const includeSystem = Boolean((obj as any).includeSystem);
+      const includeTool = Boolean((obj as any).includeTool);
+      const beforeRaw = Number((obj as any).beforeIndex);
+      const beforeIndex = Number.isFinite(beforeRaw) ? beforeRaw : undefined;
+      return { type: "get_history", limit, includeSystem, includeTool, beforeIndex };
+    }
     if (obj.type === "clear_session") return { type: "clear_session" };
     if (obj.type === "command" && typeof obj.data?.command === "string") {
       const files = Array.isArray(obj.data.files) ? obj.data.files : undefined;
@@ -562,7 +659,7 @@ function sendWebMessage(ws: WebSocket, msg: WebServerMessage): void {
 // Daemon connection pool - reuse connections per session
 const daemonConnections = new Map<string, WebSocket>();
 
-function getDaemonConnection(sessionId: string): Promise<WebSocket> {
+function getDaemonConnection(sessionId: string, repoRoot: string): Promise<WebSocket> {
   return new Promise((resolve, reject) => {
     // Check if we already have a connection
     const existing = daemonConnections.get(sessionId);
@@ -572,7 +669,7 @@ function getDaemonConnection(sessionId: string): Promise<WebSocket> {
     }
 
     // Create new connection
-    const ws = new WebSocket(`ws://127.0.0.1:${DAEMON_PORT}`);
+    const ws = new WebSocket(`ws://${DAEMON_HOST}:${DAEMON_PORT}`);
 
     ws.on("open", () => {
       // Send hello to daemon
@@ -716,7 +813,8 @@ export async function startWebServer(): Promise<void> {
       try {
         const body = await readJsonBody(req);
         const sessionId = String(body?.sessionId || "").trim() || resolveMainSessionId(resolveConfig({ repoRoot }));
-        const daemonWs = await getDaemonConnection(sessionId);
+        await ensureDaemonRunning(repoRoot);
+        const daemonWs = await getDaemonConnection(sessionId, repoRoot);
         const command = url.pathname.endsWith("/compact") ? "/compact" : "/reset";
         daemonWs.send(JSON.stringify({
           type: "start_turn",
@@ -1269,9 +1367,151 @@ export async function startWebServer(): Promise<void> {
       });
     }
 
-    // Set up daemon connection first BEFORE handling web client messages
+    // Handle messages from web client early (before daemon connection) to avoid dropped history requests
+    webWs.on("message", async (buf: WebSocket.RawData) => {
+      const msg = parseWebClientMessage(String(buf));
+      if (!msg) {
+        sendWebMessage(webWs, {
+          type: "error",
+          content: "Invalid message",
+          session_id: sessionId,
+          timestamp: Date.now() / 1000
+        });
+        return;
+      }
+
+      if (msg.type === "ping") {
+        sendWebMessage(webWs, { type: "pong", session_id: sessionId, timestamp: Date.now() / 1000 });
+        return;
+      }
+
+      if (msg.type === "get_history") {
+        // Load history from session file
+        const { workspaceDir } = resolveRuntimeContext(repoRoot);
+        const sessionDir = path.join(workspaceDir, "sessions");
+        const session = loadSession(sessionId, sessionDir);
+        const limitRaw = Number(msg.limit ?? 0);
+        const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? Math.floor(limitRaw) : 0;
+        const includeSystem = msg.includeSystem === true;
+        const includeTool = msg.includeTool === true;
+        const beforeIndex = typeof msg.beforeIndex === "number" ? msg.beforeIndex : undefined;
+        const conversation = Array.isArray(session?.conversation) ? session!.conversation : [];
+        const filtered = conversation
+          .map((entry, index) => ({ entry, index }))
+          .filter(({ entry }) => {
+            if (entry.role === "user" || entry.role === "assistant") return true;
+            if (entry.role === "system") return includeSystem;
+            if (entry.role === "tool") return includeTool;
+            return false;
+          })
+          .filter(({ index }) => (typeof beforeIndex === "number" ? index < beforeIndex : true));
+        const sliced = limit > 0 ? filtered.slice(-limit) : filtered;
+        const history = sliced.map(({ entry, index }) => ({
+          role: entry.role,
+          content: entry.content,
+          timestamp: Date.parse(entry.created_at || "") || Date.now(),
+          index
+        }));
+        sendWebMessage(webWs, {
+          type: "history",
+          content: JSON.stringify(history),
+          session_id: sessionId,
+          timestamp: Date.now() / 1000
+        });
+        return;
+      }
+
+      if (msg.type === "clear_session") {
+        // Start a new turn with clear command
+        try {
+          await ensureDaemonRunning(repoRoot);
+          daemonWs = await getDaemonConnection(sessionId, repoRoot);
+          daemonWs.send(JSON.stringify({
+            type: "start_turn",
+            input: "/clear",
+            sessionId
+          } as DaemonClientMessage));
+        } catch (err) {
+          sendWebMessage(webWs, {
+            type: "error",
+            content: err instanceof Error ? err.message : String(err),
+            session_id: sessionId,
+            timestamp: Date.now() / 1000
+          });
+        }
+        return;
+      }
+
+      if (msg.type === "command") {
+        const command = msg.data.command.trim();
+        const files = msg.data.files;
+
+        if (!command && (!files || files.length === 0)) return;
+
+        try {
+          await ensureDaemonRunning(repoRoot);
+          daemonWs = await getDaemonConnection(sessionId, repoRoot);
+
+          sendWebMessage(webWs, {
+            type: "command_received",
+            content: `Executing: ${command}`,
+            session_id: sessionId,
+            timestamp: Date.now() / 1000
+          });
+
+          // Build content blocks for multimodal input
+          let daemonInput: string | any[];
+
+          if (files && files.length > 0) {
+            const contentBlocks: any[] = [];
+
+            // Add images as vision blocks
+            for (const file of files) {
+              if (file.type.startsWith('image/')) {
+                contentBlocks.push({
+                  type: "image_url",
+                  image_url: { url: file.data }
+                });
+              } else {
+                // Non-image files: inform AI but can't process
+                contentBlocks.push({
+                  type: "text",
+                  text: `[File attached: ${file.name}]`
+                });
+              }
+            }
+
+            // Add user's text if present
+            if (command) {
+              contentBlocks.push({ type: "text", text: command });
+            }
+
+            daemonInput = contentBlocks;
+          } else {
+            daemonInput = command;
+          }
+
+          daemonWs.send(JSON.stringify({
+            type: "start_turn",
+            input: daemonInput,
+            sessionId
+          } as DaemonClientMessage));
+        } catch (err) {
+          sendWebMessage(webWs, {
+            type: "error",
+            content: err instanceof Error ? err.message : String(err),
+            session_id: sessionId,
+            timestamp: Date.now() / 1000
+          });
+        }
+        return;
+      }
+    });
+
+    // Set up daemon connection (web client messages are handled already)
     try {
-      daemonWs = await getDaemonConnection(sessionId);
+      await ensureDaemonRunning(repoRoot);
+      daemonWs = await getDaemonConnection(sessionId, repoRoot);
 
       // Set up daemon message listener
       daemonWs.on("message", (data: Buffer) => {
@@ -1385,133 +1625,6 @@ export async function startWebServer(): Promise<void> {
       });
     }
 
-    // Handle messages from web client
-    webWs.on("message", async (buf: WebSocket.RawData) => {
-      const msg = parseWebClientMessage(String(buf));
-      if (!msg) {
-        sendWebMessage(webWs, {
-          type: "error",
-          content: "Invalid message",
-          session_id: sessionId,
-          timestamp: Date.now() / 1000
-        });
-        return;
-      }
-
-      if (msg.type === "ping") {
-        sendWebMessage(webWs, { type: "pong", session_id: sessionId, timestamp: Date.now() / 1000 });
-        return;
-      }
-
-      if (msg.type === "get_history") {
-        // Load history from session file
-        const { workspaceDir } = resolveRuntimeContext(repoRoot);
-        const sessionDir = path.join(workspaceDir, "sessions");
-        const session = loadSession(sessionId, sessionDir);
-        const limit = 200;
-        const raw = Array.isArray(session?.conversation) ? session.conversation.slice(-limit) : [];
-        const history = raw
-          .filter((msg) => msg.role === "user" || msg.role === "assistant")
-          .map((msg) => ({
-            role: msg.role,
-            content: msg.content,
-            timestamp: Date.parse(msg.created_at || "") || Date.now()
-          }));
-        sendWebMessage(webWs, {
-          type: "history",
-          content: JSON.stringify(history),
-          session_id: sessionId,
-          timestamp: Date.now() / 1000
-        });
-        return;
-      }
-
-      if (msg.type === "clear_session") {
-        // Start a new turn with clear command
-        try {
-          daemonWs = await getDaemonConnection(sessionId);
-          daemonWs.send(JSON.stringify({
-            type: "start_turn",
-            input: "/clear",
-            sessionId
-          } as DaemonClientMessage));
-        } catch (err) {
-          sendWebMessage(webWs, {
-            type: "error",
-            content: err instanceof Error ? err.message : String(err),
-            session_id: sessionId,
-            timestamp: Date.now() / 1000
-          });
-        }
-        return;
-      }
-
-      if (msg.type === "command") {
-        const command = msg.data.command.trim();
-        const files = msg.data.files;
-
-        if (!command && (!files || files.length === 0)) return;
-
-        try {
-          daemonWs = await getDaemonConnection(sessionId);
-
-          sendWebMessage(webWs, {
-            type: "command_received",
-            content: `Executing: ${command}`,
-            session_id: sessionId,
-            timestamp: Date.now() / 1000
-          });
-
-          // Build content blocks for multimodal input
-          let daemonInput: string | any[];
-
-          if (files && files.length > 0) {
-            const contentBlocks: any[] = [];
-
-            // Add images as vision blocks
-            for (const file of files) {
-              if (file.type.startsWith('image/')) {
-                contentBlocks.push({
-                  type: "image_url",
-                  image_url: { url: file.data }
-                });
-              } else {
-                // Non-image files: inform AI but can't process
-                contentBlocks.push({
-                  type: "text",
-                  text: `[File attached: ${file.name}]`
-                });
-              }
-            }
-
-            // Add user's text if present
-            if (command) {
-              contentBlocks.push({ type: "text", text: command });
-            }
-
-            daemonInput = contentBlocks;
-          } else {
-            daemonInput = command;
-          }
-
-          // Send to daemon
-          daemonWs.send(JSON.stringify({
-            type: "start_turn",
-            input: daemonInput,
-            sessionId
-          } as DaemonClientMessage));
-
-        } catch (err) {
-          sendWebMessage(webWs, {
-            type: "error",
-            content: err instanceof Error ? err.message : String(err),
-            session_id: sessionId,
-            timestamp: Date.now() / 1000
-          });
-        }
-      }
-    });
-
     webWs.on("close", () => {
       // Cancel any active turn
       if (currentTurnId && daemonWs && daemonWs.readyState === WebSocket.OPEN) {
@@ -1526,6 +1639,24 @@ export async function startWebServer(): Promise<void> {
   await new Promise<void>((resolve) => server.listen(WEB_PORT, "127.0.0.1", () => resolve()));
   // eslint-disable-next-line no-console
   console.log(`ff-terminal web server listening on http://127.0.0.1:${WEB_PORT} (proxy to daemon on port ${DAEMON_PORT})`);
+
+  const shutdown = () => {
+    if (daemonProcess && !daemonProcess.killed) {
+      try {
+        daemonProcess.kill();
+      } catch {
+        // ignore shutdown errors
+      }
+    }
+    try {
+      server.close();
+    } catch {
+      // ignore
+    }
+  };
+
+  process.on("SIGINT", shutdown);
+  process.on("SIGTERM", shutdown);
 }
 
 const argv1 = process.argv[1] || "";

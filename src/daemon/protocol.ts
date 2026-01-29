@@ -18,12 +18,19 @@ type SubagentProgress = {
   tokens: number;
 };
 
+type HistoryMessage = {
+  role: "system" | "developer" | "user" | "assistant" | "tool";
+  content: string;
+  created_at?: string;
+};
+
 export type ClientMessage =
   | { type: "hello"; client: "ink" | "web"; version?: string }
   | { type: "start_turn"; input: string | any[]; sessionId?: string }
   | { type: "cancel_turn"; turnId: string }
   | { type: "list_tools" }
   | { type: "list_sessions"; limit?: number; activeMinutes?: number; messageLimit?: number }
+  | { type: "get_history"; sessionId?: string; limit?: number; includeSystem?: boolean; includeTool?: boolean }
   | {
       type: "patch_session";
       sessionId?: string;
@@ -39,6 +46,7 @@ export type ServerMessage =
   | { type: "turn_finished"; turnId: string; ok: boolean; error?: string }
   | { type: "tools"; tools: string[] }
   | { type: "sessions_list"; sessions: any[] }
+  | { type: "history"; sessionId: string; messages: HistoryMessage[] }
   | {
       type: "session_patched";
       ok: boolean;
@@ -68,6 +76,7 @@ export function isClientMessage(value: unknown): value is ClientMessage {
   if (type === "cancel_turn") return typeof (value as any).turnId === "string";
   if (type === "list_tools") return true;
   if (type === "list_sessions") return true;
+  if (type === "get_history") return true;
   if (type === "patch_session") return true;
   return false;
 }

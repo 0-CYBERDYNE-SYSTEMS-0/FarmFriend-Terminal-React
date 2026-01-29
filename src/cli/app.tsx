@@ -2129,7 +2129,10 @@ function App(props: { port: number }) {
       if (!arr.length) return;
       const entries = arr.map((line) => ({ ...line, id: ++lineSeq.current }));
       const merged = [...linesRef.current, ...entries];
-      linesRef.current = merged.length > MAX_TRANSCRIPT_LINES ? merged.slice(-MAX_TRANSCRIPT_LINES) : merged;
+      linesRef.current =
+        MAX_TRANSCRIPT_LINES > 0 && merged.length > MAX_TRANSCRIPT_LINES
+          ? merged.slice(-MAX_TRANSCRIPT_LINES)
+          : merged;
       commitLines(opts?.immediate ?? false);
     },
     [commitLines]
