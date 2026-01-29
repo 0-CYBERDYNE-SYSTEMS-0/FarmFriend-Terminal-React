@@ -1265,6 +1265,7 @@ type FieldViewShared = {
   contractFiles: Array<{ name: string; exists: boolean }>
   statusPills: StatusPillData[]
   gatewayIndicator: GatewayIndicator
+  lastSuccessAt: number | null
 }
 
 type FieldViewProps = {
@@ -1412,7 +1413,9 @@ function FieldViewClassic({
   onModeChange: (mode: FieldViewMode) => void
   chatSharedState: FieldViewProps['chatSharedState']
 }) {
-  const { data, loading, channels, healthyCount, unhealthy, contractCoverage, statusPills } = shared
+  const { data, loading, channels, healthyCount, unhealthy, contractCoverage, statusPills, lastSuccessAt } = shared
+  const enabledChannels = channels.filter((c) => c.enabled)
+  const disabledCount = Math.max(0, channels.length - enabledChannels.length)
 
   return (
     <div className="min-h-screen fieldview-shell text-slate-900">
@@ -1842,7 +1845,6 @@ function FieldView({ showControl, onOpenControl, onOpenChat, mode, onModeChange,
   const enabledChannels = channels.filter((c) => c.enabled)
   const healthyCount = enabledChannels.filter((c) => c.healthy && c.running).length
   const unhealthy = enabledChannels.filter((c) => !c.healthy || !c.running)
-  const disabledCount = Math.max(0, channels.length - enabledChannels.length)
   const contractFiles = data?.contract?.files ?? []
   const contractCoverage = contractFiles.length
     ? Math.round((contractFiles.filter((f) => f.exists).length / contractFiles.length) * 100)
@@ -1901,6 +1903,7 @@ function FieldView({ showControl, onOpenControl, onOpenChat, mode, onModeChange,
     contractFiles,
     statusPills: [gatewayPill, automationPill, healthPill, contractPill],
     gatewayIndicator,
+    lastSuccessAt,
   }
 
   if (mode === 'mission') {
