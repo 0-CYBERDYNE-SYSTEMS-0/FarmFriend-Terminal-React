@@ -18,7 +18,7 @@ import { quickUpdateTool } from "./tools/implementations/quickUpdate.js";
 import { sessionSummaryTool } from "./tools/implementations/sessionSummary.js";
 import { sessionResetTool } from "./tools/implementations/sessionReset.js";
 import { memoryManagementTool } from "./tools/implementations/memoryManagement.js";
-import { sessionsHistoryTool, sessionsListTool, sessionsSendTool, sessionsSpawnTool } from "./tools/implementations/sessionsTools.js";
+import { sessionsHistoryTool, sessionsListTool, sessionsSendTool, sessionsSpawnTool, sessionsSpawnAsyncTool } from "./tools/implementations/sessionsTools.js";
 import { skillDocumentationTool, skillImportTool, skillLoaderTool } from "./tools/implementations/skills.js";
 import { subagentTool } from "./tools/implementations/subagentTool.js";
 import { tavilyCrawlTool, tavilyExtractTool, tavilyMapTool } from "./tools/implementations/tavilyAdvanced.js";
@@ -57,6 +57,7 @@ export function registerDefaultTools(registry: ToolRegistry, opts: { workspaceDi
   registry.register("sessions_history", async (args) => sessionsHistoryTool(args));
   registry.register("sessions_send", async (args, signal) => sessionsSendTool(args, signal));
   registry.register("sessions_spawn", async (args, signal) => sessionsSpawnTool(args, signal));
+  registry.register("sessions_spawn_async", async (args) => sessionsSpawnAsyncTool(args));
   registry.register("skill_loader", async (args) => skillLoaderTool(args));
   registry.register("skill_documentation", async (args) => skillDocumentationTool(args));
   registry.register("skill_import", async (args) => skillImportTool(args));

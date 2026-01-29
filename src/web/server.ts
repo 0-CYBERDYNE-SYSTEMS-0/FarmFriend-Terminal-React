@@ -61,6 +61,7 @@ type DaemonServerMessage =
   | { type: "turn_started"; sessionId: string; turnId: string }
   | { type: "chunk"; turnId: string; seq: number; chunk: string }
   | { type: "turn_finished"; turnId: string; ok: boolean; error?: string }
+  | { type: "async_message"; sessionId: string; content: string; label?: string }
   | { type: "tools"; tools: string[] };
 
 const DAEMON_PORT = Number(process.env.FF_TERMINAL_PORT || 28888);
@@ -1598,6 +1599,18 @@ export async function startWebServer(): Promise<void> {
             type: "turn_finished",
             session_id: sessionId,
             timestamp: Date.now() / 1000
+          });
+          return;
+        }
+
+        if (msg.type === "async_message") {
+          const label = msg.label ? `${msg.label}\n` : "";
+          sendWebMessage(webWs, {
+            type: "response",
+            content: `${label}${msg.content}`,
+            session_id: sessionId,
+            timestamp: Date.now() / 1000,
+            metadata: { async: true }
           });
           return;
         }

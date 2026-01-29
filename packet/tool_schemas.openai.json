@@ -1284,6 +1284,37 @@
   {
     "type": "function",
     "function": {
+      "name": "sessions_spawn_async",
+      "description": "Spawn a background agent run in a new session and announce results back to the current chat when complete.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "task": {
+            "type": "string",
+            "description": "Task to run in the background session"
+          },
+          "label": {
+            "type": "string",
+            "description": "Optional label included in the announce-back message"
+          },
+          "model": {
+            "type": "string",
+            "description": "Optional model override for the spawned run"
+          },
+          "announce_prefix": {
+            "type": "string",
+            "description": "Optional prefix added before the announce-back message"
+          }
+        },
+        "required": [
+          "task"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
       "name": "skill_apply",
       "description": "Write a drafted skill to disk and refresh the registry.",
       "parameters": {

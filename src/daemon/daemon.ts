@@ -25,6 +25,7 @@ import { resetSessionWithArchive, compactSessionWithSummary } from "../runtime/s
 import { listSessionIndex, getOrCreateSessionIdForKey, upsertSessionIndexEntry } from "../runtime/session/sessionIndex.js";
 import { patchSessionOverrides, getSessionOverrides } from "../runtime/session/sessionOverrides.js";
 import { loadSession } from "../runtime/session/sessionStore.js";
+import { drainAnnounceback } from "../runtime/announceback/queue.js";
 import { buildSystemPrompt } from "../runtime/prompts/systemPrompt.js";
 import { ALWAYS_ALLOWED_TOOLS } from "../runtime/hooks/builtin/skillAllowedToolsHook.js";
 import { loadPlanStore, getActivePlan } from "../runtime/planning/planStore.js";
@@ -241,6 +242,7 @@ export async function startDaemon(): Promise<void> {
 
   const server = http.createServer();
   const wss = new WebSocketServer({ server });
+  const connectionSessions = new Map<WebSocket, string>();
 
   const runtimeCfg = resolveConfig({ repoRoot });
   const sessionMode = resolveSessionMode(runtimeCfg);
@@ -275,6 +277,25 @@ export async function startDaemon(): Promise<void> {
   process.on("SIGTERM", async () => {
     process.exit(0);
   });
+
+  const deliverAsyncMessage = (ws: WebSocket, sessionId: string, content: string, label?: string) => {
+    if (ws.readyState !== WebSocket.OPEN) return;
+    send(ws, { type: "async_message", sessionId, content, label });
+  };
+
+  setInterval(() => {
+    const events = drainAnnounceback(workspaceDir, "daemon", 50);
+    if (events.length === 0) return;
+    for (const event of events) {
+      const targetSessionId = event.target.sessionId;
+      if (!targetSessionId) continue;
+      for (const [ws, sessionKey] of connectionSessions.entries()) {
+        if (sessionKey === targetSessionId) {
+          deliverAsyncMessage(ws, targetSessionId, event.message, event.label);
+        }
+      }
+    }
+  }, 2000);
 
   wss.on("connection", (ws) => {
     let sessionId: string | null = null;
@@ -404,6 +425,7 @@ export async function startDaemon(): Promise<void> {
         });
         // Update the session tracker and persist to workspace
         sessionId = resolvedSessionId;
+        connectionSessions.set(ws, resolvedSessionId);
         saveLastActiveSession(workspaceDir, resolvedSessionId);
 
         // eslint-disable-next-line no-console
@@ -506,6 +528,7 @@ export async function startDaemon(): Promise<void> {
               sessionId: resolvedSessionId,
               workspaceDir,
               repoRoot,
+              replyTarget: { kind: "daemon", sessionId: resolvedSessionId },
               emitSubagentEvent: (event: SubagentEvent) => {
                 // Convert subagent event to WebSocket message and send immediately
                 if (event.event === "start") {
@@ -575,6 +598,7 @@ export async function startDaemon(): Promise<void> {
     ws.on("close", () => {
       currentTurn?.controller.abort();
       currentTurn = null;
+      connectionSessions.delete(ws);
     });
   });
 

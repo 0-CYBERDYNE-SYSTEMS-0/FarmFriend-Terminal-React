@@ -16,6 +16,9 @@ import { newId } from "../shared/ids.js";
 import { ensureCanonicalStructure } from "../runtime/workspace/migration.js";
 import { loadTaskStore, saveTaskStore, taskStorePath } from "../runtime/scheduling/taskStore.js";
 import { getSchedulerBackend } from "../runtime/scheduling/backends/index.js";
+import { enqueueAnnounceback, type AnnouncebackRequest } from "../runtime/announceback/queue.js";
+import { appendSessionMessage } from "../runtime/session/sessionStore.js";
+import { upsertSessionIndexEntry } from "../runtime/session/sessionIndex.js";
 import fs from "node:fs";
 import path from "node:path";
 import { readConfig, writeConfig, getProfileByName, getCredential, deleteCredential, storeCredential } from "../runtime/profiles/storage.js";
@@ -762,6 +765,7 @@ async function run(): Promise<void> {
     applyToolAllowFlags(rest);
     const userPrompt = pickArg(rest, "--prompt") || "";
     const scheduledTaskRef = pickArg(rest, "--scheduled-task");
+    const announcebackRaw = pickArg(rest, "--announceback") || process.env.FF_ANNOUNCEBACK || "";
     const headless = hasFlag(rest, "--headless") || !hasFlag(rest, "--no-headless");
     const cliProfile = pickArg(rest, "--profile");
     const envProfile = process.env.FF_PROFILE || null;
@@ -791,6 +795,15 @@ async function run(): Promise<void> {
     let scheduledTaskId: string | null = null;
     let scheduledTaskProfile: string | undefined;
     let scheduledTaskModel: string | undefined;
+    let announceback: AnnouncebackRequest | null = null;
+
+    if (announcebackRaw) {
+      try {
+        announceback = JSON.parse(String(announcebackRaw)) as AnnouncebackRequest;
+      } catch {
+        announceback = null;
+      }
+    }
 
     if (scheduledTaskRef) {
       const store = loadTaskStore(workspaceDir);
@@ -1103,6 +1116,47 @@ async function run(): Promise<void> {
       error,
       duration_ms: Date.now() - runStartedAt
     });
+
+    if (announceback && announceback?.target?.kind) {
+      const base = assistantText.trim() || "✓ Done";
+      const prefix = announceback.prefix ? String(announceback.prefix).trim() : "";
+      const message = prefix ? `${prefix}\n\n${base}` : base;
+      const targetSessionId =
+        announceback.parentSessionId ||
+        (announceback.target.kind === "daemon" ? announceback.target.sessionId : undefined);
+
+      if (targetSessionId) {
+        const updated = appendSessionMessage(
+          targetSessionId,
+          {
+            role: "assistant",
+            content: message,
+            created_at: new Date().toISOString()
+          },
+          path.join(workspaceDir, "sessions")
+        );
+        upsertSessionIndexEntry({
+          workspaceDir,
+          sessionId: updated.session_id,
+          updatedAt: updated.updated_at,
+          lastActiveAt: updated.stats?.lastActiveAt,
+          createdAt: updated.stats?.createdAt,
+          totalMessages: updated.stats?.totalMessages,
+          totalTokens: updated.stats?.totalTokens,
+          overrides: updated.meta?.overrides as Record<string, unknown> | undefined
+        });
+      }
+
+      enqueueAnnounceback(workspaceDir, {
+        id: newId("announce"),
+        createdAt: new Date().toISOString(),
+        target: announceback.target,
+        message,
+        label: announceback.label,
+        parentSessionId: announceback.parentSessionId,
+        sourceSessionId: announceback.sourceSessionId || sessionId
+      });
+    }
 
     const autonomyRequest = extractAutonomyRequest(assistantText);
     if (autonomyRequest) {

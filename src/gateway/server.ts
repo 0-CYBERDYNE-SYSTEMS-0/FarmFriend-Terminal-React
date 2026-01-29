@@ -15,6 +15,7 @@ import { GatewayBridgeManager } from "./bridgeManager.js";
 import { WhatsAppBridge } from "./bridges/whatsappBridge.js";
 import { IMessageBridge } from "./bridges/imessageBridge.js";
 import { TelegramBridge } from "./bridges/telegramBridge.js";
+import { drainAnnounceback } from "../runtime/announceback/queue.js";
 import type { GatewayMethodResult, GatewayServerContext } from "./server-shared.js";
 import type { RequestFrame, ResponseFrame, EventFrame } from "./protocol/index.js";
 import { createBridgeSubscriptionManager } from "./bridgeSubscriptions.js";
@@ -83,6 +84,39 @@ export async function runGatewayServer(opts: GatewayServerOptions = {}): Promise
   const bridges = buildBridges(runtimeCfg as RuntimeConfig);
   for (const bridge of bridges) bridgeManager.register(bridge);
   await bridgeManager.start();
+
+  let announceProcessing = false;
+  setInterval(async () => {
+    if (announceProcessing) return;
+    announceProcessing = true;
+    try {
+      const events = drainAnnounceback(workspaceDir, "gateway", 50);
+      if (events.length === 0) return;
+      for (const event of events) {
+        const target = event.target;
+        if (target.kind !== "gateway") continue;
+        if (target.provider === "telegram") {
+          const bridge = bridgeManager.list().find((b) => b instanceof TelegramBridge) as TelegramBridge | undefined;
+          if (!bridge) continue;
+          try {
+            await bridge.sendOutboundMessage(target.chatId, event.message);
+          } catch {
+            // ignore delivery errors
+          }
+        } else if (target.provider === "whatsapp") {
+          const bridge = bridgeManager.list().find((b) => b instanceof WhatsAppBridge) as WhatsAppBridge | undefined;
+          if (!bridge) continue;
+          try {
+            await bridge.sendOutboundMessage(target.chatId, event.message);
+          } catch {
+            // ignore delivery errors
+          }
+        }
+      }
+    } finally {
+      announceProcessing = false;
+    }
+  }, 2000);
 
   const auth = resolveGatewayAuth({
     authConfig: resolveGatewayAuthConfig(runtimeCfg),

@@ -1,4 +1,5 @@
 import { AsyncLocalStorage } from "node:async_hooks";
+import type { AnnouncebackTarget } from "../announceback/queue.js";
 
 export type SubagentEvent = {
   event: "start" | "progress" | "complete";
@@ -17,6 +18,7 @@ export type ToolContext = {
   workspaceDir: string;
   repoRoot: string;
   emitSubagentEvent?: (event: SubagentEvent) => void;
+  replyTarget?: AnnouncebackTarget;
 };
 
 const als = new AsyncLocalStorage<ToolContext>();
@@ -28,4 +30,3 @@ export function getToolContext(): ToolContext | null {
 export async function withToolContext<T>(ctx: ToolContext, fn: () => Promise<T>): Promise<T> {
   return await als.run(ctx, fn);
 }
-

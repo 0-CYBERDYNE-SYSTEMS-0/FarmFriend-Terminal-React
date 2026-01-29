@@ -107,3 +107,14 @@ export function saveSession(session: SessionFile, sessionDir = defaultSessionDir
   session.stats.lastActiveAt = now;
   fs.writeFileSync(p, JSON.stringify(session, null, 2) + "\n", "utf8");
 }
+
+export function appendSessionMessage(
+  sessionId: string,
+  message: ConversationMessage,
+  sessionDir = defaultSessionDir()
+): SessionFile {
+  const session = loadSession(sessionId, sessionDir) || createSession(sessionId);
+  session.conversation.push(message);
+  saveSession(session, sessionDir);
+  return session;
+}

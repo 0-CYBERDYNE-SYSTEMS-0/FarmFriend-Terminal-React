@@ -86,7 +86,13 @@ export class WhatsAppMessageHandler {
           {
             sessionId,
             workspaceDir: this.workspaceDir,
-            repoRoot: this.repoRoot
+            repoRoot: this.repoRoot,
+            replyTarget: {
+              kind: "gateway",
+              provider: "whatsapp",
+              chatId: message.isGroup ? message.groupId || message.from : message.from,
+              chatType: message.isGroup ? "group" : "direct"
+            }
           },
           async () => {
             for await (const chunk of runAgentTurn({

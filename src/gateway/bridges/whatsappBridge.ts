@@ -76,4 +76,12 @@ export class WhatsAppBridge implements GatewayBridge {
         : { reason: "disabled" }
     };
   }
+
+  async sendOutboundMessage(chatId: string, text: string): Promise<void> {
+    const client = this.server?.getClient();
+    if (!client) {
+      throw new Error("WhatsApp bridge not connected");
+    }
+    await client.sendMessage(chatId, text);
+  }
 }

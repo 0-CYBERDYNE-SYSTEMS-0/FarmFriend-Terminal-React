@@ -167,6 +167,11 @@
       "category": "system"
     },
     {
+      "name": "sessions_spawn_async",
+      "description": "Spawn a background agent run and announce results back to the current chat when complete.",
+      "category": "system"
+    },
+    {
       "name": "skill_apply",
       "description": "Write a drafted skill to disk and refresh the registry.",
       "category": "system"

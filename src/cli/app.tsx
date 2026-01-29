@@ -39,6 +39,7 @@ type ServerMessage =
   | { type: "turn_started"; sessionId: string; turnId: string }
   | { type: "chunk"; turnId: string; seq: number; chunk: string }
   | { type: "turn_finished"; turnId: string; ok: boolean; error?: string }
+  | { type: "async_message"; sessionId: string; content: string; label?: string }
   | { type: "tools"; tools: string[] }
   | { type: "sessions_list"; sessions: any[] }
   | { type: "session_patched"; ok: boolean; sessionId?: string; sessionKey?: string; overrides?: Record<string, string | null>; error?: string }
@@ -2729,6 +2730,12 @@ ${fullContext}`;
           if (displayMode !== "clean") {
             pushLines({ kind: "system", text: `--- done (${msg.ok ? "ok" : "error"}) ---` });
           }
+          return;
+        }
+
+        if (msg.type === "async_message") {
+          const label = msg.label ? `${msg.label}\n` : "";
+          pushLines({ kind: "assistant", text: `${label}${msg.content}` });
           return;
         }
 

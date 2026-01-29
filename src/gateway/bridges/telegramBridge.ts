@@ -577,7 +577,13 @@ export class TelegramBridge implements GatewayBridge {
         {
           sessionId,
           workspaceDir: this.workspaceDir,
-          repoRoot: this.repoRoot
+          repoRoot: this.repoRoot,
+          replyTarget: {
+            kind: "gateway",
+            provider: "telegram",
+            chatId: String(msg.chat.id),
+            chatType
+          }
         },
         async () => {
           for await (const chunk of runAgentTurn({
@@ -620,6 +626,14 @@ export class TelegramBridge implements GatewayBridge {
     } catch (err) {
       this.lastError = err instanceof Error ? err.message : String(err);
     }
+  }
+
+  async sendOutboundMessage(chatId: string | number, text: string): Promise<void> {
+    const resolved = typeof chatId === "number" ? chatId : Number(chatId);
+    if (!Number.isFinite(resolved)) {
+      throw new Error("Invalid Telegram chat id");
+    }
+    await this.sendMessage(resolved, text);
   }
 
   private async sendChatAction(chatId: number, action: string): Promise<void> {

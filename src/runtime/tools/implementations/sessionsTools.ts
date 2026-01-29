@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { spawn } from "node:child_process";
 import { ToolRegistry } from "../registry.js";
 import { registerDefaultTools } from "../../registerDefaultTools.js";
 import { runAgentTurn } from "../../agentLoop.js";
@@ -9,6 +10,7 @@ import { resolveConfig } from "../../config/loadConfig.js";
 import { findRepoRoot } from "../../config/repoRoot.js";
 import { resolveMainSessionId } from "../../session/sessionPolicy.js";
 import { loadSession, type SessionFile } from "../../session/sessionStore.js";
+import type { AnnouncebackRequest } from "../../announceback/queue.js";
 import { listSessionIndex, upsertSessionIndexEntry } from "../../session/sessionIndex.js";
 
 type ListArgs = {
@@ -32,6 +34,13 @@ type SpawnArgs = {
   label?: string;
   model?: string;
   cleanup?: "delete" | "keep" | string;
+};
+
+type SpawnAsyncArgs = {
+  task?: string;
+  label?: string;
+  model?: string;
+  announce_prefix?: string;
 };
 
 function safeLoadSession(p: string): SessionFile | null {
@@ -177,6 +186,7 @@ export async function sessionsSendTool(argsRaw: unknown, signal: AbortSignal): P
   registry.unregister("sessions_history");
   registry.unregister("sessions_send");
   registry.unregister("sessions_spawn");
+  registry.unregister("sessions_spawn_async");
 
   let content = "";
   let error: string | null = null;
@@ -228,6 +238,7 @@ export async function sessionsSpawnTool(argsRaw: unknown, signal: AbortSignal): 
   registry.unregister("sessions_history");
   registry.unregister("sessions_send");
   registry.unregister("sessions_spawn");
+  registry.unregister("sessions_spawn_async");
   registry.unregister("subagent_tool");
 
   let content = "";
@@ -269,6 +280,56 @@ export async function sessionsSpawnTool(argsRaw: unknown, signal: AbortSignal): 
       label: args?.label,
       content: content.trim(),
       error: error || undefined
+    },
+    null,
+    2
+  );
+}
+
+export async function sessionsSpawnAsyncTool(argsRaw: unknown): Promise<string> {
+  const args = argsRaw as SpawnAsyncArgs;
+  const task = String(args?.task || "").trim();
+  if (!task) throw new Error("sessions_spawn_async: missing args.task");
+
+  const ctx = getToolContext();
+  const repoRoot = ctx?.repoRoot ?? findRepoRoot();
+  const workspaceDir = resolveWorkspaceDir(ctx?.workspaceDir ?? process.env.FF_WORKSPACE_DIR ?? undefined, { repoRoot });
+  const sessionId = `session_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+
+  const replyTarget = ctx?.replyTarget ?? (ctx?.sessionId ? { kind: "daemon", sessionId: ctx.sessionId } : undefined);
+  const announceback: AnnouncebackRequest | null = replyTarget
+    ? {
+        target: replyTarget,
+        label: args?.label,
+        prefix: args?.announce_prefix,
+        parentSessionId: ctx?.sessionId,
+        sourceSessionId: sessionId
+      }
+    : null;
+
+  const cli = path.join(repoRoot, "dist", "bin", "ff-terminal.js");
+  if (!fs.existsSync(cli)) {
+    throw new Error("sessions_spawn_async: missing build output (run npm run build)");
+  }
+
+  const env: Record<string, string> = { ...process.env } as Record<string, string>;
+  if (workspaceDir) env.FF_WORKSPACE_DIR = workspaceDir;
+  if (args?.model?.trim()) env.FF_MODEL = args.model.trim();
+  if (announceback) env.FF_ANNOUNCEBACK = JSON.stringify(announceback);
+
+  const child = spawn(process.execPath, [cli, "run", "--headless", "--prompt", task, "--session", sessionId], {
+    env,
+    stdio: "ignore",
+    detached: true
+  });
+  child.unref();
+
+  return JSON.stringify(
+    {
+      ok: true,
+      sessionId,
+      label: args?.label,
+      announceback: Boolean(announceback)
     },
     null,
     2

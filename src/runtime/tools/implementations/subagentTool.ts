@@ -29,6 +29,7 @@ export async function subagentTool(argsRaw: unknown, signal: AbortSignal): Promi
   registry.unregister("sessions_history");
   registry.unregister("sessions_send");
   registry.unregister("sessions_spawn");
+  registry.unregister("sessions_spawn_async");
 
   const sessionId = newId("subsession");
   const subagentId = newId("subagent");
