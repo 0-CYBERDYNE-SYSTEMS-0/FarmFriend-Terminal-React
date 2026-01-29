@@ -13,6 +13,7 @@ import { perplexitySearchTool } from "./tools/implementations/perplexitySearch.j
 import { browseWebTool } from "./tools/implementations/browseWeb.js";
 import { searchCodeTool, semanticSearchTool } from "./tools/implementations/searchCode.js";
 import { thinkTool } from "./tools/implementations/think.js";
+import { reasoningProtocolTool } from "./tools/implementations/reasoningProtocol.js";
 import { quickUpdateTool } from "./tools/implementations/quickUpdate.js";
 import { sessionSummaryTool } from "./tools/implementations/sessionSummary.js";
 import { sessionResetTool } from "./tools/implementations/sessionReset.js";
@@ -47,6 +48,7 @@ export function registerDefaultTools(registry: ToolRegistry, opts: { workspaceDi
 
   // Meta / UX tools referenced by the system prompt.
   registry.register("think", async (args) => thinkTool(args));
+  registry.register("reasoning_protocol", async () => reasoningProtocolTool());
   registry.register("quick_update", async (args) => quickUpdateTool(args));
   registry.register("session_summary", async (args) => sessionSummaryTool(args));
   registry.register("reset_session", async (args) => sessionResetTool(args));

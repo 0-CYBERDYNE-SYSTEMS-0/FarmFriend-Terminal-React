@@ -1,5 +1,5 @@
 {
-  "tool_count": 42,
+  "tool_count": 49,
   "tools": [
     {
       "name": "analyze_data",
@@ -223,7 +223,12 @@
     },
     {
       "name": "think",
-      "description": "Use this tool as a scratchpad to record reasoning, analyze problems, and maintain context during complex multi-step tasks. Helps prevent losing track of progress and improves decision-making quality.",
+      "description": "Optional scratchpad for complex or ambiguous tasks. Keep entries brief; do not show to the user.",
+      "category": "system"
+    },
+    {
+      "name": "reasoning_protocol",
+      "description": "Load the on-demand reasoning checklist. Use when a task is ambiguous, risky, or multi-step.",
       "category": "system"
     },
     {

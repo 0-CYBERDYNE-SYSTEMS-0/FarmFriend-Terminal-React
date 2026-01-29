@@ -1623,18 +1623,30 @@
     "type": "function",
     "function": {
       "name": "think",
-      "description": "Use this tool as a scratchpad to record reasoning, analyze problems, and maintain context during complex multi-step tasks. Helps prevent losing track of progress and improves decision-making quality.",
+      "description": "Optional scratchpad for complex or ambiguous tasks. Keep entries brief; do not show to the user.",
       "parameters": {
         "type": "object",
         "properties": {
           "thought": {
             "type": "string",
-            "description": "Your reasoning, analysis, or thought to record. Use this to: break down complex problems, analyze tool outputs, verify policy compliance, check progress against goals, or plan next steps."
+            "description": "Your brief reasoning or notes to record. Use for complex steps, tool output analysis, or planning."
           }
         },
         "required": [
           "thought"
         ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "reasoning_protocol",
+      "description": "Load the on-demand reasoning checklist. Use when a task is ambiguous, risky, or multi-step.",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
       }
     }
   },
