@@ -25,6 +25,7 @@ type ChatMessage = {
   timestamp: number
   toolName?: string
   historyIndex?: number
+  isFinal?: boolean
   attachments?: Array<{ name: string; type: string; size: number; data: string }>
 }
 
@@ -82,6 +83,8 @@ type ControlOverviewState = {
   data: ControlOverview | null
   loading: boolean
   error: string | null
+  stale: boolean
+  lastSuccessAt: number | null
 }
 
 type SchedulerTask = {
@@ -161,23 +164,46 @@ function formatNextRun(ts?: number | null): string {
   return date.toLocaleString()
 }
 
+function formatRelativeTime(ts?: number | null): string {
+  if (!ts) return 'unknown'
+  const delta = Date.now() - ts
+  if (delta < 45_000) return 'just now'
+  const minutes = Math.round(delta / 60_000)
+  if (minutes < 60) return `${minutes}m ago`
+  const hours = Math.round(minutes / 60)
+  if (hours < 24) return `${hours}h ago`
+  const days = Math.round(hours / 24)
+  return `${days}d ago`
+}
+
 function useControlOverview(refreshMs = 15000) {
   const [data, setData] = useState<ControlOverview | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const [stale, setStale] = useState(false)
+  const [lastSuccessAt, setLastSuccessAt] = useState<number | null>(null)
+  const dataRef = useRef<ControlOverview | null>(null)
+
+  useEffect(() => {
+    dataRef.current = data
+  }, [data])
 
   useEffect(() => {
     let active = true
     const load = async () => {
       try {
-        setLoading(true)
+        const hadData = dataRef.current !== null
+        if (!hadData) setLoading(true)
         const payload = await fetchJson<ControlOverview>('/api/control/overview')
         if (!active) return
         setData(payload)
         setError(null)
+        setStale(false)
+        setLastSuccessAt(Date.now())
       } catch (err) {
         if (!active) return
         setError(err instanceof Error ? err.message : String(err))
+        setStale(dataRef.current !== null)
       } finally {
         if (active) setLoading(false)
       }
@@ -191,26 +217,37 @@ function useControlOverview(refreshMs = 15000) {
     }
   }, [refreshMs])
 
-  return { data, error, loading }
+  return { data, error, loading, stale, lastSuccessAt }
 }
 
 function useControlData<T>(path: string, token: string, refreshMs = 20000, deps: unknown[] = []) {
   const [data, setData] = useState<T | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const [stale, setStale] = useState(false)
+  const [lastSuccessAt, setLastSuccessAt] = useState<number | null>(null)
+  const dataRef = useRef<T | null>(null)
+
+  useEffect(() => {
+    dataRef.current = data
+  }, [data])
 
   useEffect(() => {
     let active = true
     const load = async () => {
       try {
-        setLoading(true)
+        const hadData = dataRef.current !== null
+        if (!hadData) setLoading(true)
         const payload = await fetchJson<T>(path, token)
         if (!active) return
         setData(payload)
         setError(null)
+        setStale(false)
+        setLastSuccessAt(Date.now())
       } catch (err) {
         if (!active) return
         setError(err instanceof Error ? err.message : String(err))
+        setStale(dataRef.current !== null)
       } finally {
         if (active) setLoading(false)
       }
@@ -224,7 +261,7 @@ function useControlData<T>(path: string, token: string, refreshMs = 20000, deps:
     }
   }, [path, token, refreshMs, ...deps])
 
-  return { data, error, loading }
+  return { data, error, loading, stale, lastSuccessAt }
 }
 
 // Detect if content is an artifact (HTML, JSON, image, etc.)
@@ -257,27 +294,26 @@ function detectContentType(content: string): 'artifact' | 'markdown' | 'text' {
     return 'artifact'
   }
 
-  // Markdown detection (headers, code blocks, lists, etc.)
-  const markdownPatterns = [
-    /^#{1,6}\s+/m,           // Headers
-    /```[\s\S]*```/,          // Code blocks
-    /^\s*[-*+]\s+/m,          // Lists
-    /^\s*\d+\.\s+/m,          // Numbered lists
-    /\*\*.+?\*\*/,            // Bold
-    /\[.+?\]\(.+?\)/,         // Links
+  const markdownSignals = [
+    /```/m,
+    /^#{1,6}\s+\S/m,
+    /^\s*[-*+]\s+\S/m,
+    /^\s*\d+\.\s+\S/m,
+    /^\s*>\s+\S/m,
+    /\[[^\]]+\]\([^)]+\)/,
+    /!\[[^\]]*\]\([^)]+\)/,
+    /`[^`]+`/,
   ]
 
-  const hasMarkdown = markdownPatterns.some(pattern => pattern.test(content))
-  if (hasMarkdown) {
+  if (markdownSignals.some((pattern) => pattern.test(trimmed))) {
     return 'markdown'
   }
 
-  // Default to text
   return 'text'
 }
 
 // Message renderer component
-function MessageContent({ content, role }: { content: string; role: string }) {
+function MessageContent({ content, role, isFinal = true }: { content: string; role: string; isFinal?: boolean }) {
   const { theme } = useTheme();
 
   if (role === 'user') {
@@ -299,7 +335,7 @@ function MessageContent({ content, role }: { content: string; role: string }) {
     return <ArtifactPreview content={content} />
   }
 
-  if (contentType === 'markdown') {
+  if (contentType === 'markdown' && isFinal) {
     return <Markdown content={content} />
   }
 
@@ -336,6 +372,11 @@ function AppContent({
   const [isConnected, setIsConnected] = useState(false)
   const [isProcessing, setIsProcessing] = useState(false)
   const [assistantContent, setAssistantContent] = useState('')
+  const messagesRef = useRef<ChatMessage[]>([])
+  const [showJumpToBottom, setShowJumpToBottom] = useState(false)
+  const isNearBottomRef = useRef(true)
+  const suppressAutoScrollRef = useRef(false)
+  const assistantContentRef = useRef('')
   const lastChunkAtRef = useRef<number | null>(null)
   const turnStartedAtRef = useRef<number | null>(null)
   const [internalAttachments, setInternalAttachments] = useState<FileAttachment[]>([])
@@ -366,6 +407,10 @@ function AppContent({
   const attachments = sharedState?.attachments ?? internalAttachments
   const setAttachments = sharedState?.setAttachments ?? setInternalAttachments
 
+  useEffect(() => {
+    messagesRef.current = messages
+  }, [messages])
+
   // Detect mobile/tablet vs desktop for console layout
   useEffect(() => {
     const checkScreenSize = () => {
@@ -381,17 +426,87 @@ function AppContent({
   const scrollToBottom = useCallback(() => {
     const container = messagesContainerRef.current
     if (!container) return
-
     const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 150
-
     if (isNearBottom) {
       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
     }
   }, [])
 
   useEffect(() => {
-    scrollToBottom()
+    if (suppressAutoScrollRef.current) {
+      suppressAutoScrollRef.current = false
+      return
+    }
+    if (isNearBottomRef.current) {
+      scrollToBottom()
+    }
   }, [messages, assistantContent, scrollToBottom])
+
+  const scrollToBottomNow = useCallback(() => {
+    const container = messagesContainerRef.current
+    if (!container) return
+    const prefersReducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+    container.scrollTo({
+      top: container.scrollHeight,
+      behavior: prefersReducedMotion ? 'auto' : 'smooth',
+    })
+  }, [])
+
+  useEffect(() => {
+    const container = messagesContainerRef.current
+    if (!container) return
+
+    const handleScroll = () => {
+      const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 140
+      isNearBottomRef.current = isNearBottom
+      setShowJumpToBottom(!isNearBottom)
+    }
+
+    handleScroll()
+    container.addEventListener('scroll', handleScroll, { passive: true })
+    return () => {
+      container.removeEventListener('scroll', handleScroll)
+    }
+  }, [])
+
+  useEffect(() => {
+    const container = messagesContainerRef.current
+    if (!container) return
+    const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 140
+    setShowJumpToBottom(!isNearBottom)
+  }, [messages.length, assistantContent])
+
+  useEffect(() => {
+    const container = messagesContainerRef.current
+    if (!container) return
+    let timer: number | null = null
+
+    const activate = () => {
+      container.classList.add('scrollbar-active')
+      if (timer) window.clearTimeout(timer)
+      timer = window.setTimeout(() => {
+        container.classList.remove('scrollbar-active')
+      }, 1400)
+    }
+
+    const deactivate = () => {
+      if (timer) window.clearTimeout(timer)
+      container.classList.remove('scrollbar-active')
+    }
+
+    container.addEventListener('pointerdown', activate, { passive: true })
+    container.addEventListener('touchstart', activate, { passive: true })
+    container.addEventListener('mouseenter', activate)
+    container.addEventListener('mouseleave', deactivate)
+
+    return () => {
+      container.removeEventListener('pointerdown', activate)
+      container.removeEventListener('touchstart', activate)
+      container.removeEventListener('mouseenter', activate)
+      container.removeEventListener('mouseleave', deactivate)
+      if (timer) window.clearTimeout(timer)
+    }
+  }, [])
 
   const requestHistory = useCallback((mode: 'initial' | 'more') => {
     const ws = wsRef.current
@@ -492,15 +607,26 @@ function AppContent({
               if (mode === 'initial' && !historyLoadedRef.current) {
                 historyLoadedRef.current = true
                 setMessages(prev => {
-                  if (!prev.length) return hydrated
-                  return [...hydrated, ...prev]
+                  const shouldScroll = prev.length === 0 && hydrated.length > 0
+                  const next = prev.length ? [...hydrated, ...prev] : hydrated
+                  if (shouldScroll) {
+                    requestAnimationFrame(() => {
+                      const container = messagesContainerRef.current
+                      if (container) {
+                        container.scrollTop = container.scrollHeight
+                      }
+                    })
+                  }
+                  return next
                 })
+                suppressAutoScrollRef.current = true
               } else if (mode === 'more' && hydrated.length) {
                 setMessages(prev => {
                   const existingIndexes = new Set(prev.map((m) => m.historyIndex).filter((v): v is number => typeof v === 'number'))
                   const deduped = hydrated.filter((m) => m.historyIndex === undefined || !existingIndexes.has(m.historyIndex))
                   return [...deduped, ...prev]
                 })
+                suppressAutoScrollRef.current = true
               }
             } catch {
               setHistoryLoading(false)
@@ -549,7 +675,9 @@ function AppContent({
               }
 
               streamRafRef.current = requestAnimationFrame(() => {
-                setAssistantContent(streamBufferRef.current)
+                const next = streamBufferRef.current
+                assistantContentRef.current = next
+                setAssistantContent(next)
                 streamRafRef.current = null
               })
               break
@@ -599,17 +727,17 @@ function AppContent({
 
             case 'turn_finished':
               // Finalize any pending content using functional update to avoid stale closure
-              const finalContent = streamBufferRef.current
-              setAssistantContent(prevContent => {
-                const content = finalContent || prevContent
-                if (content && !messageAddedForTurn) {
-                  setMessages(messages => [...messages, {
-                    id: `${Date.now()}-assistant`,
-                    role: 'assistant',
-                    content: content,
-                    timestamp: msg.timestamp * 1000
-                  }])
-                  setMessageAddedForTurn(true)
+              const finalContent = assistantContentRef.current || streamBufferRef.current
+                setAssistantContent(prevContent => {
+                  const content = finalContent || prevContent
+                  if (content && !messageAddedForTurn) {
+                    setMessages(messages => [...messages, {
+                      id: `${Date.now()}-assistant`,
+                      role: 'assistant',
+                      content: content,
+                      timestamp: msg.timestamp * 1000
+                    }])
+                    setMessageAddedForTurn(true)
 
                   // Add complete response to console events
                   setConsoleEvents((prev) => [
@@ -621,10 +749,11 @@ function AppContent({
                       timestamp: Date.now()
                     }
                   ])
-                }
-                streamBufferRef.current = '' // Clear buffer
-                return ''  // Always clear assistantContent
-              })
+                  }
+                  streamBufferRef.current = '' // Clear buffer
+                  assistantContentRef.current = ''
+                  return ''  // Always clear assistantContent
+                })
               lastChunkAtRef.current = null
               turnStartedAtRef.current = null
               setIsProcessing(false)
@@ -686,6 +815,7 @@ function AppContent({
         setMessageAddedForTurn(true)
         lastChunkAtRef.current = null
         turnStartedAtRef.current = null
+        assistantContentRef.current = ''
       }
     }, 2000)
 
@@ -700,6 +830,7 @@ function AppContent({
     // Reset flag for new turn and clear stream buffer
     setMessageAddedForTurn(false)
     streamBufferRef.current = ''
+    assistantContentRef.current = ''
     setAssistantContent('')
 
     // Build message with attachments
@@ -806,7 +937,7 @@ function AppContent({
       )}
 
       {/* Messages */}
-      <div ref={messagesContainerRef} className={`flex-1 overflow-y-auto px-4 py-6 relative ${isMobile && consoleVisible ? 'mb-[calc(45vh+6rem)]' : ''}`}>
+      <div ref={messagesContainerRef} className={`chat-scroll flex-1 overflow-y-auto px-4 py-6 relative ${isMobile && consoleVisible ? 'mb-[calc(45vh+6rem)]' : ''}`}>
         {consoleVisible && !isMobile ? (
           // Desktop: Side-by-side layout
           <div className="flex h-full gap-4">
@@ -857,7 +988,7 @@ function AppContent({
                           <span>Thinking</span>
                         </div>
                       )}
-                      <MessageContent content={msg.content} role={msg.role} />
+                      <MessageContent content={msg.content} role={msg.role} isFinal={msg.isFinal ?? true} />
                     </div>
                   </div>
                 ))}
@@ -934,7 +1065,7 @@ function AppContent({
                       <span>Thinking</span>
                     </div>
                   )}
-                  <MessageContent content={msg.content} role={msg.role} />
+                  <MessageContent content={msg.content} role={msg.role} isFinal={msg.isFinal ?? true} />
                 </div>
               </div>
             ))}
@@ -984,6 +1115,17 @@ function AppContent({
             </div>
           </div>
         )}
+
+        {showJumpToBottom && (
+          <button
+            onClick={scrollToBottomNow}
+            className="absolute bottom-5 right-5 z-20 inline-flex items-center gap-2 rounded-full bg-neutral-800/90 text-neutral-100 text-xs font-semibold px-4 py-2 shadow-lg shadow-black/30 hover:bg-neutral-700 transition"
+            aria-label="Jump to latest messages"
+          >
+            <span>Latest</span>
+            <span aria-hidden>↓</span>
+          </button>
+        )}
       </div>
 
       {/* Input */}
@@ -1026,8 +1168,10 @@ function AppContent({
             </div>
           )}
 
-          <div className="flex items-end gap-3">
-            <FileUpload onFilesSelected={handleFilesSelected} disabled={!isConnected || isProcessing} />
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+            <div className="self-start sm:self-auto">
+              <FileUpload onFilesSelected={handleFilesSelected} disabled={!isConnected || isProcessing} />
+            </div>
             <textarea
               value={input}
               onChange={(e) => setInput(e.target.value)}
@@ -1040,7 +1184,7 @@ function AppContent({
             <button
               onClick={sendMessage}
               disabled={(!input.trim() && attachments.length === 0) || !isConnected || isProcessing}
-              className="px-4 py-3 bg-primary-600 hover:bg-primary-700 disabled:bg-neutral-700 disabled:text-neutral-500 rounded-lg text-sm font-medium transition-colors"
+              className="w-full sm:w-auto px-4 py-3 bg-primary-600 hover:bg-primary-700 disabled:bg-neutral-700 disabled:text-neutral-500 rounded-lg text-sm font-medium transition-colors"
             >
               {isProcessing ? (
                 <span className="flex items-center gap-2">
@@ -1081,23 +1225,28 @@ function statusDotClass(tone: GatewayIndicator['tone']) {
 function deriveGatewayIndicator(input: {
   loading?: boolean
   error?: string | null
+  stale?: boolean
+  lastSuccessAt?: number | null
   channels?: GatewayChannelStatus[] | null
 }): GatewayIndicator {
-  if (input.loading) {
-    return { tone: 'muted', label: 'Gateway', detail: 'checking' }
-  }
-  if (input.error) {
-    return { tone: 'bad', label: 'Gateway', detail: 'offline' }
-  }
   const channels = input.channels ?? []
   const enabled = channels.filter((c) => c.enabled)
+  const unhealthy = enabled.filter((c) => !c.healthy || !c.running)
+  const hasData = input.lastSuccessAt != null || channels.length > 0
+
+  if (unhealthy.length) {
+    return { tone: 'bad', label: 'Gateway', detail: `${enabled.length - unhealthy.length}/${enabled.length} healthy` }
+  }
+  if (input.error && enabled.length === 0) {
+    return { tone: 'bad', label: 'Gateway', detail: 'offline' }
+  }
   if (enabled.length === 0) {
-    return { tone: 'warn', label: 'Gateway', detail: 'no channels' }
+    return { tone: 'warn', label: 'Gateway', detail: hasData ? 'no channels' : 'checking' }
   }
-  const healthy = enabled.filter((c) => c.healthy && c.running)
-  if (healthy.length !== enabled.length) {
-    return { tone: 'bad', label: 'Gateway', detail: `${healthy.length}/${enabled.length} healthy` }
+  if (!hasData || input.loading) {
+    return { tone: 'warn', label: 'Gateway', detail: 'checking' }
   }
+
   return { tone: 'good', label: 'Gateway', detail: 'healthy' }
 }
 
@@ -1143,8 +1292,8 @@ const FIELDVIEW_MODES: Array<{ id: FieldViewMode; label: string }> = [
 
 function FieldModeToggle({ mode, onModeChange }: { mode: FieldViewMode; onModeChange: (mode: FieldViewMode) => void }) {
   return (
-    <div className="flex items-center gap-2 rounded-full bg-white/70 border border-emerald-200/60 px-2 py-1 text-[11px] font-semibold text-emerald-900 shadow-sm">
-      <span className="px-2 uppercase tracking-[0.28em] text-[10px] text-emerald-700">Mode</span>
+    <div className="flex flex-wrap items-center gap-2 rounded-full bg-white/70 border border-emerald-200/60 px-2 py-1 text-[11px] font-semibold text-emerald-900 shadow-sm">
+      <span className="hidden sm:inline px-2 uppercase tracking-[0.28em] text-[10px] text-emerald-700">Mode</span>
       {FIELDVIEW_MODES.map((option) => (
         <button
           key={option.id}
@@ -1191,10 +1340,57 @@ function StatusLight({
   const detailClass = variant === 'dark' ? 'text-slate-400' : 'text-emerald-700'
 
   return (
-    <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full border text-[11px] font-semibold ${base}`}>
+    <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full border text-[11px] font-semibold whitespace-nowrap ${base}`}>
       <span className={`h-2.5 w-2.5 rounded-full shadow ${statusDotClass(indicator.tone)}`} />
       <span className="uppercase tracking-[0.2em] text-[10px]">{indicator.label}</span>
       <span className={detailClass}>{indicator.detail}</span>
+    </div>
+  )
+}
+
+function FieldViewActions({
+  onOpenChat,
+  onOpenControl,
+  controlLocked,
+  variant,
+  compact = false,
+}: {
+  onOpenChat: () => void
+  onOpenControl: () => void
+  controlLocked: boolean
+  variant: 'field' | 'mission' | 'guided'
+  compact?: boolean
+}) {
+  const isMission = variant === 'mission'
+  const isGuided = variant === 'guided'
+
+  const chatClass = isMission
+    ? 'bg-slate-900 text-amber-100 hover:bg-slate-800'
+    : isGuided
+    ? 'bg-emerald-700 text-white hover:bg-emerald-800'
+    : 'bg-emerald-600 text-white hover:bg-emerald-700'
+
+  const controlClass = isMission
+    ? 'border border-slate-700 text-slate-900 hover:bg-white/40'
+    : 'border border-emerald-700/40 text-emerald-900 hover:bg-emerald-100'
+
+  const baseButton = `px-4 py-2 rounded-full text-sm font-semibold transition ${compact ? 'flex-1 justify-center text-center' : ''}`
+
+  return (
+    <div className={`flex flex-wrap items-center gap-3 ${compact ? 'w-full' : ''}`}>
+      <button
+        onClick={onOpenChat}
+        className={`${baseButton} ${chatClass}`}
+      >
+        Open Chat
+      </button>
+      <button
+        onClick={onOpenControl}
+        className={`${baseButton} ${controlClass} ${controlLocked ? 'opacity-80' : ''}`}
+        aria-label={controlLocked ? 'Control Barn (locked)' : 'Control Barn'}
+      >
+        {controlLocked ? 'Control Barn · Locked' : 'Control Barn'}
+      </button>
     </div>
   )
 }
@@ -1220,7 +1416,7 @@ function FieldViewClassic({
 
   return (
     <div className="min-h-screen fieldview-shell text-slate-900">
-      <header className="flex flex-col gap-4 px-6 py-5 md:flex-row md:items-center md:justify-between">
+      <header className="flex flex-col gap-4 px-4 py-5 md:flex-row md:items-center md:justify-between md:px-6">
         <div className="flex flex-col">
           <span className="text-xs uppercase tracking-[0.25em] text-emerald-700">FarmFriend FieldView</span>
           <h1 className="text-3xl md:text-4xl font-semibold fieldview-title">Today on the farm</h1>
@@ -1228,24 +1424,16 @@ function FieldViewClassic({
         <div className="flex flex-wrap items-center gap-3">
           <FieldModeToggle mode={mode} onModeChange={onModeChange} />
           <StatusLight indicator={shared.gatewayIndicator} />
-          <button
-            onClick={onOpenChat}
-            className="px-4 py-2 rounded-full bg-emerald-600 text-white text-sm font-semibold shadow-sm shadow-emerald-600/30 hover:bg-emerald-700 transition"
-          >
-            Open Chat
-          </button>
-          {showControl && (
-            <button
-              onClick={onOpenControl}
-              className="px-4 py-2 rounded-full border border-emerald-700/40 text-emerald-900 text-sm font-semibold hover:bg-emerald-100 transition"
-            >
-              Control Barn
-            </button>
-          )}
+          <FieldViewActions
+            onOpenChat={onOpenChat}
+            onOpenControl={onOpenControl}
+            controlLocked={!showControl}
+            variant="field"
+          />
         </div>
       </header>
 
-      <main className="px-6 pb-10">
+      <main className="px-4 pb-24 md:px-6 md:pb-10">
         <div className="mb-6 field-card">
           <div className="flex items-center justify-between">
             <h2 className="text-sm font-semibold text-emerald-900">Live status rail</h2>
@@ -1286,9 +1474,18 @@ function FieldViewClassic({
                 {!loading && (
                   <div className="mt-2 space-y-1 text-sm text-emerald-900/80">
                     <p>
-                      {healthyCount}/{channels.length || 0} channels healthy
+                      {healthyCount}/{enabledChannels.length || 0} channels healthy
                     </p>
                     {channels.length === 0 && <p className="text-emerald-700">No channels configured yet.</p>}
+                    {channels.length > 0 && enabledChannels.length === 0 && (
+                      <p className="text-emerald-700">All channels are disabled.</p>
+                    )}
+                    {disabledCount > 0 && enabledChannels.length > 0 && (
+                      <p className="text-emerald-700">{disabledCount} disabled</p>
+                    )}
+                    {lastSuccessAt && (
+                      <p className="text-emerald-700">Last update: {formatRelativeTime(lastSuccessAt)}</p>
+                    )}
                     {unhealthy.length > 0 && (
                       <ul className="text-xs text-rose-600 list-disc ml-4">
                         {unhealthy.map((channel) => (
@@ -1333,12 +1530,22 @@ function FieldViewClassic({
               </div>
               <span className="text-xs uppercase tracking-[0.2em] text-slate-400">{DEFAULT_SESSION}</span>
             </div>
-            <div className="mt-4 h-[70vh] min-h-[480px]">
+            <div className="mt-4 h-[52vh] min-h-[320px] sm:h-[60vh] sm:min-h-[360px] lg:h-[70vh] lg:min-h-[480px]">
               <AppContent layout="embedded" sharedState={chatSharedState} />
             </div>
           </section>
         </div>
       </main>
+
+      <div className="md:hidden fixed bottom-0 left-0 right-0 z-30 px-4 pt-3 pb-[calc(env(safe-area-inset-bottom)+12px)] bg-white/90 backdrop-blur border-t border-emerald-200/60">
+        <FieldViewActions
+          onOpenChat={onOpenChat}
+          onOpenControl={onOpenControl}
+          controlLocked={!showControl}
+          variant="field"
+          compact
+        />
+      </div>
     </div>
   )
 }
@@ -1363,7 +1570,7 @@ function FieldViewMission({
 
   return (
     <div className="min-h-screen mission-shell text-slate-900">
-      <header className="px-6 py-6 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+      <header className="px-4 py-6 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between lg:px-6">
         <div>
           <span className="text-xs uppercase tracking-[0.4em] text-slate-700">FarmFriend Mission Control</span>
           <h1 className="text-3xl md:text-4xl font-semibold mission-title">Operations horizon</h1>
@@ -1371,24 +1578,16 @@ function FieldViewMission({
         <div className="flex flex-wrap items-center gap-3">
           <FieldModeToggle mode={mode} onModeChange={onModeChange} />
           <StatusLight indicator={shared.gatewayIndicator} />
-          <button
-            onClick={onOpenChat}
-            className="px-4 py-2 rounded-full bg-slate-900 text-amber-100 text-sm font-semibold shadow-sm hover:bg-slate-800"
-          >
-            Open Chat
-          </button>
-          {showControl && (
-            <button
-              onClick={onOpenControl}
-              className="px-4 py-2 rounded-full border border-slate-700 text-slate-900 text-sm font-semibold hover:bg-white/40"
-            >
-              Control Barn
-            </button>
-          )}
+          <FieldViewActions
+            onOpenChat={onOpenChat}
+            onOpenControl={onOpenControl}
+            controlLocked={!showControl}
+            variant="mission"
+          />
         </div>
       </header>
 
-      <main className="px-6 pb-12">
+      <main className="px-4 pb-24 lg:px-6 lg:pb-12">
         <div className="mission-card">
           <div className="flex items-center justify-between">
             <h2 className="text-sm font-semibold text-slate-900">Live status strip</h2>
@@ -1480,6 +1679,16 @@ function FieldViewMission({
           </aside>
         </div>
       </main>
+
+      <div className="md:hidden fixed bottom-0 left-0 right-0 z-30 px-4 pt-3 pb-[calc(env(safe-area-inset-bottom)+12px)] bg-slate-900/90 backdrop-blur border-t border-slate-800">
+        <FieldViewActions
+          onOpenChat={onOpenChat}
+          onOpenControl={onOpenControl}
+          controlLocked={!showControl}
+          variant="mission"
+          compact
+        />
+      </div>
     </div>
   )
 }
@@ -1537,7 +1746,7 @@ function FieldViewGuided({
 
   return (
     <div className="min-h-screen guided-shell text-slate-900">
-      <header className="px-6 py-6 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+      <header className="px-4 py-6 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between lg:px-6">
         <div>
           <span className="text-xs uppercase tracking-[0.35em] text-emerald-700">FarmFriend Guided Day</span>
           <h1 className="text-3xl md:text-4xl font-semibold guided-title">Today’s flow</h1>
@@ -1545,24 +1754,16 @@ function FieldViewGuided({
         <div className="flex flex-wrap items-center gap-3">
           <FieldModeToggle mode={mode} onModeChange={onModeChange} />
           <StatusLight indicator={shared.gatewayIndicator} />
-          <button
-            onClick={onOpenChat}
-            className="px-4 py-2 rounded-full bg-emerald-700 text-white text-sm font-semibold shadow-sm"
-          >
-            Open Chat
-          </button>
-          {showControl && (
-            <button
-              onClick={onOpenControl}
-              className="px-4 py-2 rounded-full border border-emerald-700/40 text-emerald-900 text-sm font-semibold hover:bg-emerald-100"
-            >
-              Control Barn
-            </button>
-          )}
+          <FieldViewActions
+            onOpenChat={onOpenChat}
+            onOpenControl={onOpenControl}
+            controlLocked={!showControl}
+            variant="guided"
+          />
         </div>
       </header>
 
-      <main className="px-6 pb-12">
+      <main className="px-4 pb-24 lg:px-6 lg:pb-12">
         <div className="guided-card">
           <div className="flex items-center justify-between">
             <h2 className="text-sm font-semibold text-emerald-900">Daily readiness</h2>
@@ -1621,30 +1822,53 @@ function FieldViewGuided({
           </aside>
         </div>
       </main>
+
+      <div className="md:hidden fixed bottom-0 left-0 right-0 z-30 px-4 pt-3 pb-[calc(env(safe-area-inset-bottom)+12px)] bg-emerald-50/95 backdrop-blur border-t border-emerald-200/70">
+        <FieldViewActions
+          onOpenChat={onOpenChat}
+          onOpenControl={onOpenControl}
+          controlLocked={!showControl}
+          variant="guided"
+          compact
+        />
+      </div>
     </div>
   )
 }
 
 function FieldView({ showControl, onOpenControl, onOpenChat, mode, onModeChange, overview, chatSharedState }: FieldViewProps) {
-  const { data, loading, error } = overview
+  const { data, loading, error, stale, lastSuccessAt } = overview
   const channels = data?.gateway?.channels ?? []
   const enabledChannels = channels.filter((c) => c.enabled)
   const healthyCount = enabledChannels.filter((c) => c.healthy && c.running).length
   const unhealthy = enabledChannels.filter((c) => !c.healthy || !c.running)
+  const disabledCount = Math.max(0, channels.length - enabledChannels.length)
   const contractFiles = data?.contract?.files ?? []
   const contractCoverage = contractFiles.length
     ? Math.round((contractFiles.filter((f) => f.exists).length / contractFiles.length) * 100)
     : 0
 
-  const gatewayIndicator = deriveGatewayIndicator({ loading, error, channels })
+  const gatewayIndicator = deriveGatewayIndicator({
+    loading,
+    error,
+    channels,
+    stale,
+    lastSuccessAt
+  })
 
-  const gatewayPill: StatusPillData = loading
-    ? { label: 'Gateway', value: 'checking…', tone: 'muted' }
-    : enabledChannels.length === 0
-      ? { label: 'Gateway', value: 'no channels', tone: 'warn' }
-      : unhealthy.length
-        ? { label: 'Gateway', value: `${healthyCount}/${enabledChannels.length} healthy`, tone: 'bad' }
-        : { label: 'Gateway', value: `${healthyCount}/${enabledChannels.length} healthy`, tone: 'good' }
+  const gatewayValue = enabledChannels.length === 0
+    ? 'no channels'
+    : `${healthyCount}/${enabledChannels.length} healthy`
+
+  const gatewayPill: StatusPillData = unhealthy.length
+    ? { label: 'Gateway', value: gatewayValue, tone: 'bad' }
+    : error && enabledChannels.length === 0
+      ? { label: 'Gateway', value: 'offline', tone: 'bad' }
+      : enabledChannels.length === 0
+        ? { label: 'Gateway', value: 'no channels', tone: 'warn' }
+        : !data || (loading && !data)
+          ? { label: 'Gateway', value: 'checking…', tone: 'warn' }
+          : { label: 'Gateway', value: gatewayValue, tone: 'good' }
 
   const automationCount = data?.scheduler?.enabled_count ?? 0
   const automationPill: StatusPillData = {
@@ -2234,7 +2458,9 @@ function ControlBarn({ onClose }: { onClose: () => void }) {
   const gatewayIndicator = deriveGatewayIndicator({
     loading: gateway.loading,
     error: gateway.error,
-    channels: gateway.data?.channels
+    channels: gateway.data?.channels,
+    stale: gateway.stale,
+    lastSuccessAt: gateway.lastSuccessAt
   })
   const config = useControlData<{ path: string; authorized: boolean; config: any }>('/api/control/config', token, 0)
   const workspaceFiles = useControlData<{ files: WorkspaceFileEntry[] }>('/api/control/workspace/files', token, 20000)
@@ -2323,29 +2549,29 @@ function ControlBarn({ onClose }: { onClose: () => void }) {
 
   return (
     <div className="min-h-screen controlbarn-shell text-slate-100">
-      <header className="flex items-center justify-between px-6 py-5 border-b border-slate-800 bg-slate-950/70 backdrop-blur">
+      <header className="flex flex-col gap-4 px-4 py-5 border-b border-slate-800 bg-slate-950/70 backdrop-blur md:flex-row md:items-center md:justify-between md:px-6">
         <div>
           <p className="text-xs uppercase tracking-[0.3em] text-slate-400">Control Barn</p>
           <h1 className="text-3xl font-semibold">Admin configuration</h1>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <StatusLight indicator={gatewayIndicator} variant="dark" />
           <input
             value={token}
             onChange={(e) => setToken(e.target.value)}
             placeholder="Control token"
-            className="px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-sm text-slate-200"
+            className="w-full sm:w-56 px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-sm text-slate-200"
           />
           <button
             onClick={onClose}
-            className="px-4 py-2 rounded-full bg-slate-700 text-slate-100 text-sm font-semibold hover:bg-slate-600 transition"
+            className="w-full sm:w-auto px-4 py-2 rounded-full bg-slate-700 text-slate-100 text-sm font-semibold hover:bg-slate-600 transition"
           >
             Back to FieldView
           </button>
         </div>
       </header>
 
-      <main className="px-6 py-8 grid gap-6 lg:grid-cols-3">
+      <main className="px-4 py-8 grid gap-6 lg:grid-cols-3 md:px-6">
         <section className="control-card">
           <h2 className="text-sm font-semibold text-slate-200">Gateway</h2>
           <div className="mt-3 space-y-2 text-sm text-slate-300">
@@ -2577,7 +2803,9 @@ export default function App() {
   const appGatewayIndicator = deriveGatewayIndicator({
     loading: overview.loading,
     error: overview.error,
-    channels: overview.data?.gateway?.channels
+    channels: overview.data?.gateway?.channels,
+    stale: overview.stale,
+    lastSuccessAt: overview.lastSuccessAt
   })
 
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([])

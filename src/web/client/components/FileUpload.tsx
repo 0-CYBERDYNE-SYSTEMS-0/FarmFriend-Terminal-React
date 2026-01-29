@@ -132,7 +132,7 @@ export function FileUpload({ onFilesSelected, disabled = false }: FileUploadProp
         onDrop={handleDrop}
         disabled={disabled || uploading}
         className={`
-          p-2 rounded-lg transition-all duration-200
+          min-h-[44px] min-w-[44px] p-2 rounded-lg transition-all duration-200
           ${isDragging
             ? 'bg-primary-600 text-white scale-105'
             : 'bg-neutral-800 text-neutral-400 hover:bg-neutral-700 hover:text-neutral-200'

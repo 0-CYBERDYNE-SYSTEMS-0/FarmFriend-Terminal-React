@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { marked, type Tokens } from 'marked';
 import DOMPurify from 'dompurify';
 import { codeToHtml } from 'shiki';
@@ -51,10 +51,16 @@ marked.use({
 
 export function Markdown({ content, className = '' }: MarkdownProps) {
   const [html, setHtml] = useState('');
+  const prevContentRef = useRef<string>('');
+  const renderIdRef = useRef(0);
 
   useEffect(() => {
     const renderMarkdown = async () => {
+      if (content === prevContentRef.current) return;
+      prevContentRef.current = content;
+      const renderId = ++renderIdRef.current;
       const rawHtml = await marked.parse(content);
+      if (renderId !== renderIdRef.current) return;
       const cleanHtml = DOMPurify.sanitize(rawHtml, {
         ALLOWED_TAGS: [
           'p', 'br', 'strong', 'em', 'u', 's', 'code', 'pre',
@@ -69,6 +75,7 @@ export function Markdown({ content, className = '' }: MarkdownProps) {
         ALLOWED_ATTR: ['href', 'src', 'alt', 'title', 'class', 'id', 'style'],
         ALLOW_DATA_ATTR: false,
       });
+      if (renderId !== renderIdRef.current) return;
       setHtml(cleanHtml);
     };
     renderMarkdown();
