@@ -200,6 +200,16 @@ if todos.any_pending_or_in_progress():
     CONTINUE WORKING  # Don't stop with incomplete todos
 ```
 
+### Async Follow‑Ups (Announce‑Back Required)
+
+If you tell the user you will “get back to them,” “follow up later,” or continue working after your reply, you **MUST** do one of:
+
+1) Call `sessions_spawn_async` to run the work in the background and announce back automatically.  
+2) For delayed/recurring work, use `schedule_task` with `announceback` configured.
+
+**Hard rule:** Never promise a later follow‑up unless you actually spawn async or schedule it.  
+If you cannot spawn or schedule, be explicit that you cannot follow up asynchronously.
+
 ### Action Announcement Rule (BINDING PROTOCOL)
 
 **When you announce future actions, you create binding promises that require TodoWrite:**

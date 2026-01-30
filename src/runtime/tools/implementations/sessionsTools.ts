@@ -307,20 +307,27 @@ export async function sessionsSpawnAsyncTool(argsRaw: unknown): Promise<string> 
       }
     : null;
 
-  const cli = path.join(repoRoot, "dist", "bin", "ff-terminal.js");
-  if (!fs.existsSync(cli)) {
-    throw new Error("sessions_spawn_async: missing build output (run npm run build)");
-  }
+  const distCli = path.join(repoRoot, "dist", "bin", "ff-terminal.js");
+  const hasDist = fs.existsSync(distCli);
 
   const env: Record<string, string> = { ...process.env } as Record<string, string>;
   if (workspaceDir) env.FF_WORKSPACE_DIR = workspaceDir;
   if (args?.model?.trim()) env.FF_MODEL = args.model.trim();
   if (announceback) env.FF_ANNOUNCEBACK = JSON.stringify(announceback);
 
-  const child = spawn(process.execPath, [cli, "run", "--headless", "--prompt", task, "--session", sessionId], {
+  const cliArgs = hasDist
+    ? [distCli, "run", "--headless", "--prompt", task, "--session", sessionId]
+    : ["src/bin/ff-terminal.ts", "run", "--headless", "--prompt", task, "--session", sessionId];
+
+  const localTsx = path.join(repoRoot, "node_modules", ".bin", process.platform === "win32" ? "tsx.cmd" : "tsx");
+  const tsxCmd = fs.existsSync(localTsx) ? localTsx : "tsx";
+  const cliCmd = hasDist ? process.execPath : tsxCmd;
+
+  const child = spawn(cliCmd, cliArgs, {
     env,
     stdio: "ignore",
-    detached: true
+    detached: true,
+    shell: !hasDist
   });
   child.unref();
 
