@@ -1,7 +1,7 @@
 // Embedded chat component template
 // This handles WebSocket connection and message display
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { type ChatMessage, type FileAttachment } from '@/store/types'
 import { Markdown } from '@/components/ui/Markdown'
 
@@ -15,8 +15,11 @@ export function EmbeddedChat({ layout = 'embedded', sessionId = 'main' }: Embedd
   const [input, setInput] = useState('')
   const [isConnected, setIsConnected] = useState(false)
   const [isProcessing, setIsProcessing] = useState(false)
+  const [showJumpToBottom, setShowJumpToBottom] = useState(false)
   const wsRef = useRef<any>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const messagesContainerRef = useRef<HTMLDivElement>(null)
+  const isNearBottomRef = useRef(true)
 
   // WebSocket connection logic (template)
   useEffect(() => {
@@ -135,10 +138,48 @@ export function EmbeddedChat({ layout = 'embedded', sessionId = 'main' }: Embedd
     }
   }
 
-  // Auto-scroll to bottom
+  // Scroll detection
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    const container = messagesContainerRef.current
+    if (!container) return
+
+    const handleScroll = () => {
+      const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 140
+      isNearBottomRef.current = isNearBottom
+      setShowJumpToBottom(!isNearBottom)
+    }
+
+    handleScroll()
+    container.addEventListener('scroll', handleScroll, { passive: true })
+    return () => {
+      container.removeEventListener('scroll', handleScroll)
+    }
+  }, [])
+
+  // Update button visibility when messages change
+  useEffect(() => {
+    const container = messagesContainerRef.current
+    if (!container) return
+    const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 140
+    setShowJumpToBottom(!isNearBottom)
+  }, [messages.length])
+
+  // Auto-scroll to bottom only if user is near bottom
+  useEffect(() => {
+    if (isNearBottomRef.current) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    }
   }, [messages])
+
+  const scrollToBottomNow = useCallback(() => {
+    const container = messagesContainerRef.current
+    if (!container) return
+    const prefersReducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+    container.scrollTo({
+      top: container.scrollHeight,
+      behavior: prefersReducedMotion ? 'auto' : 'smooth',
+    })
+  }, [])
 
   const containerClass = layout === 'embedded' 
     ? 'h-[70vh] min-h-[480px]'
@@ -147,7 +188,7 @@ export function EmbeddedChat({ layout = 'embedded', sessionId = 'main' }: Embedd
   return (
     <div className={`bg-slate-900 rounded-lg ${containerClass} flex flex-col`}>
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      <div ref={messagesContainerRef} className="flex-1 overflow-y-auto p-4 space-y-4 relative">
         {messages.map((message) => (
           <div key={message.id} className="mb-4">
             <div className={`flex items-start gap-2 ${
@@ -191,6 +232,32 @@ export function EmbeddedChat({ layout = 'embedded', sessionId = 'main' }: Embedd
           </div>
         )}
         <div ref={messagesEndRef} />
+
+        {/* Jump to bottom button */}
+        {showJumpToBottom && (
+          <button
+            onClick={scrollToBottomNow}
+            className="fixed bottom-4 right-4 z-50 inline-flex items-center justify-center gap-1.5 rounded-full bg-emerald-500 text-white shadow-xl shadow-emerald-900/40 border border-emerald-300/50 hover:bg-emerald-400 hover:scale-105 active:scale-95 transition-all duration-200 px-3 py-2"
+            aria-label="Jump to latest messages"
+            title="Jump to latest messages"
+          >
+            <span className="text-xs font-semibold">Latest</span>
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <path d="m6 9 6 6 6-6" />
+            </svg>
+          </button>
+        )}
       </div>
 
       {/* Input */}
