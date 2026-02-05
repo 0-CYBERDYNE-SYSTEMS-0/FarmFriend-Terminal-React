@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Complete skill reference for all 40+ skills in FF Terminal">
+  <title>Complete Skill Reference - FF Terminal Skills</title>
+  <link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <h1>FF Terminal</h1>
+      </div>
+
+      <div class="sidebar-header-top">
+        <button class="theme-toggle" id="themeToggle" aria-label="Toggle dark mode">
+          <span class="theme-icon">🌙</span>
+        </button>
+        <button class="mobile-toggle" id="mobileToggle" aria-label="Toggle mobile menu">
+          <span class="hamburger"></span>
+        </button>
+      </div>
+
+      <div class="search-container">
+        <input type="text" class="search-input" placeholder="Search docs (Ctrl+K)" aria-label="Search documentation">
+      </div>
+
+      <nav class="sidebar-nav">
+        <div class="sidebar-section">
+          <h3>Getting Started</h3>
+          <a href="../index.html" class="sidebar-link">Overview</a>
+          <a href="../architecture/01-file-structure.html" class="sidebar-link">File Structure</a>
+          <a href="../development/01-environment-setup.html" class="sidebar-link">Environment Setup</a>
+        </div>
+        <div class="sidebar-section">
+          <h3>Architecture</h3>
+          <a href="../architecture/01-file-structure.html" class="sidebar-link">File Structure</a>
+          <a href="../architecture/02-dual-process-design.html" class="sidebar-link">Dual-Process Design</a>
+          <a href="../architecture/03-websocket-protocol.html" class="sidebar-link">WebSocket Protocol</a>
+          <a href="../architecture/04-execution-flow.html" class="sidebar-link">Execution Flow</a>
+          <a href="../architecture/05-provider-abstraction.html" class="sidebar-link">Provider Abstraction</a>
+          <a href="../architecture/06-session-management.html" class="sidebar-link">Session Management</a>
+          <a href="../architecture/07-workspace-system.html" class="sidebar-link">Workspace System</a>
+          <a href="../architecture/08-skill-architecture.html" class="sidebar-link">Skill Architecture</a>
+          <a href="../architecture/09-tool-registry.html" class="sidebar-link">Tool Registry</a>
+          <a href="../architecture/10-async-context.html" class="sidebar-link">Async Context</a>
+        </div>
+        <div class="sidebar-section">
+          <h3>API Reference</h3>
+          <a href="../api/01-tools-complete-reference.html" class="sidebar-link">Tools Reference</a>
+          <a href="../api/02-websocket-api.html" class="sidebar-link">WebSocket API</a>
+          <a href="../api/03-cli-commands.html" class="sidebar-link">CLI Commands</a>
+          <a href="../api/04-profile-configuration.html" class="sidebar-link">Profile Config</a>
+          <a href="../api/05-skill-loading-api.html" class="sidebar-link">Skill Loading API</a>
+          <a href="../api/06-tool-schemas.html" class="sidebar-link">Tool Schemas</a>
+          <a href="../api/07-error-codes.html" class="sidebar-link">Error Codes</a>
+        </div>
+        <div class="sidebar-section">
+          <h3>Development</h3>
+          <a href="../development/01-environment-setup.html" class="sidebar-link">Environment Setup</a>
+          <a href="../development/02-development-workflow.html" class="sidebar-link">Development Workflow</a>
+          <a href="../development/03-testing-guide.html" class="sidebar-link">Testing Guide</a>
+          <a href="../development/04-agent-testing-suite.html" class="sidebar-link">Agent Testing Suite</a>
+          <a href="../development/05-e2e-testing.html" class="sidebar-link">E2E Testing</a>
+          <a href="../development/06-debugging-guide.html" class="sidebar-link">Debugging Guide</a>
+          <a href="../development/07-troubleshooting.html" class="sidebar-link">Troubleshooting</a>
+          <a href="../development/08-contributing.html" class="sidebar-link">Contributing</a>
+        </div>
+        <div class="sidebar-section">
+          <h3>User Guide</h3>
+          <a href="../user-guide/01-getting-started.html" class="sidebar-link">Getting Started</a>
+          <a href="../user-guide/02-terminal-interface.html" class="sidebar-link">Terminal Interface</a>
+          <a href="../user-guide/03-web-interface.html" class="sidebar-link">Web Interface</a>
+          <a href="../user-guide/04-fieldview-interface.html" class="sidebar-link">FieldView Classic</a>
+          <a href="../user-guide/05-personas-agents.html" class="sidebar-link">Personas & Agents</a>
+          <a href="../user-guide/06-custom-commands.html" class="sidebar-link">Custom Commands</a>
+          <a href="../user-guide/07-planning-execution.html" class="sidebar-link">Planning & Execution</a>
+          <a href="../user-guide/08-autonomy-loop.html" class="sidebar-link">Autonomy Loop</a>
+          <a href="../user-guide/09-task-scheduling.html" class="sidebar-link">Task Scheduling</a>
+          <a href="../user-guide/10-hooks-system.html" class="sidebar-link">Hooks System</a>
+          <a href="../user-guide/11-whatsapp-integration.html" class="sidebar-link">WhatsApp Integration</a>
+          <a href="../user-guide/12-configuration-guide.html" class="sidebar-link">Configuration Guide</a>
+        </div>
+        <div class="sidebar-section">
+          <h3>Skills</h3>
+          <a href="../skills/01-skills-overview.html" class="sidebar-link">Skills Overview</a>
+          <a href="../skills/02-design-skills.html" class="sidebar-link">Design Skills</a>
+          <a href="../skills/03-development-skills.html" class="sidebar-link">Development Skills</a>
+          <a href="../skills/04-testing-quality-skills.html" class="sidebar-link">Testing & Quality Skills</a>
+          <a href="../skills/05-research-intelligence-skills.html" class="sidebar-link">Research & Intelligence</a>
+          <a href="../skills/06-media-content-skills.html" class="sidebar-link">Media & Content Skills</a>
+          <a href="../skills/07-automation-deployment-skills.html" class="sidebar-link">Automation & Deployment</a>
+          <a href="../skills/08-specialized-domain-skills.html" class="sidebar-link">Specialized Domain</a>
+          <a href="../skills/09-internal-tools-skills.html" class="sidebar-link">Internal Tools Skills</a>
+          <a href="../skills/10-creating-custom-skills.html" class="sidebar-link">Creating Custom Skills</a>
+          <a href="../skills/11-skill-reference-complete.html" class="sidebar-link">Complete Skill Reference</a>
+        </div>
+        <div class="sidebar-section">
+          <h3>Production</h3>
+          <a href="../production/01-global-installation.html" class="sidebar-link">Global Installation</a>
+          <a href="../production/02-docker-deployment.html" class="sidebar-link">Docker Deployment</a>
+          <a href="../production/03-process-management.html" class="sidebar-link">Process Management</a>
+          <a href="../production/04-port-configuration.html" class="sidebar-link">Port Configuration</a>
+          <a href="../production/05-log-management.html" class="sidebar-link">Log Management</a>
+          <a href="../production/06-environment-variables.html" class="sidebar-link">Environment Variables</a>
+          <a href="../production/07-scaling-guide.html" class="sidebar-link">Scaling Guide</a>
+          <a href="../production/08-security-hardening.html" class="sidebar-link">Security Hardening</a>
+        </div>
+      </nav>
+    </aside>
+    
+    <main class="main">
+      <div class="main-content">
+        <div class="page-header">
+          <h1>Complete Skill Reference</h1>
+          <p class="subtitle">All 40+ skills with detailed descriptions</p>
+        </div>
+        
+        <h2>All Skills</h2>
+        <table>
+          <tr>
+            <th>Skill</th>
+            <th>Category</th>
+            <th>Description</th>
+          </tr>
+          <tr>
+            <td>canvas-design</td>
+            <td>Design</td>
+            <td>Canvas-based design work</td>
+          </tr>
+          <tr>
+            <td>award_winning_designer</td>
+            <td>Design</td>
+            <td>Premium design consultation</td>
+          </tr>
+          <tr>
+            <td>theme-factory</td>
+            <td>Design</td>
+            <td>Theme creation and customization</td>
+          </tr>
+          <tr>
+            <td>brand-guidelines</td>
+            <td>Design</td>
+            <td>Brand identity development</td>
+          </tr>
+          <tr>
+            <td>frontend_design</td>
+            <td>Design</td>
+            <td>Frontend implementation</td>
+          </tr>
+          <tr>
+            <td>responsive_web_design</td>
+            <td>Design</td>
+            <td>Responsive layouts</td>
+          </tr>
+          <tr>
+            <td>component_library</td>
+            <td>Development</td>
+            <td>Component library generation</td>
+          </tr>
+          <tr>
+            <td>algorithmic-art</td>
+            <td>Development</td>
+            <td>Generative art</td>
+          </tr>
+          <tr>
+            <td>mcp-builder</td>
+            <td>Development</td>
+            <td>MCP server building</td>
+          </tr>
+          <tr>
+            <td>macos-spm-app-packaging</td>
+            <td>Development</td>
+            <td>Swift app packaging</td>
+          </tr>
+          <tr>
+            <td>web-artifacts-builder</td>
+            <td>Development</td>
+            <td>Web artifact creation</td>
+          </tr>
+          <tr>
+            <td>webapp-testing</td>
+            <td>Testing</td>
+            <td>Web app testing</td>
+          </tr>
+          <tr>
+            <td>code_first_responder</td>
+            <td>Testing</td>
+            <td>Bug investigation</td>
+          </tr>
+          <tr>
+            <td>cli-production-readiness-reviewer</td>
+            <td>Testing</td>
+            <td>Production readiness</td>
+          </tr>
+          <tr>
+            <td>rapid_research</td>
+            <td>Research</td>
+            <td>Web research</td>
+          </tr>
+          <tr>
+            <td>satellite-osint</td>
+            <td>Research</td>
+            <td>Satellite OSINT</td>
+          </tr>
+          <tr>
+            <td>hf_evaluation_manager</td>
+            <td>Research</td>
+            <td>HF model evaluation</td>
+          </tr>
+          <tr>
+            <td>remotion-expert</td>
+            <td>Media</td>
+            <td>Video creation</td>
+          </tr>
+          <tr>
+            <td>slack-gif-creator</td>
+            <td>Media</td>
+            <td>GIF creation</td>
+          </tr>
+          <tr>
+            <td>openaiImage</td>
+            <td>Media</td>
+            <td>Image generation</td>
+          </tr>
+          <tr>
+            <td>dreamhost-manager</td>
+            <td>Automation</td>
+            <td>Hosting management</td>
+          </tr>
+          <tr>
+            <td>discord-server</td>
+            <td>Automation</td>
+            <td>Discord management</td>
+          </tr>
+          <tr>
+            <td>telegram-bot-creator</td>
+            <td>Automation</td>
+            <td>Telegram bot creation</td>
+          </tr>
+          <tr>
+            <td>applescript_automation</td>
+            <td>Automation</td>
+            <td>macOS automation</td>
+          </tr>
+          <tr>
+            <td>shopify_ops</td>
+            <td>Domain</td>
+            <td>Shopify operations</td>
+          </tr>
+          <tr>
+            <td>hf_dataset_creator</td>
+            <td>Domain</td>
+            <td>Dataset creation</td>
+          </tr>
+          <tr>
+            <td>model_trainer</td>
+            <td>Domain</td>
+            <td>ML model training</td>
+          </tr>
+          <tr>
+            <td>hugging_face_paper_publisher</td>
+            <td>Domain</td>
+            <td>Paper publishing</td>
+          </tr>
+          <tr>
+            <td>skill-creator</td>
+            <td>Internal</td>
+            <td>Skill creation</td>
+          </tr>
+          <tr>
+            <td>internal-comms</td>
+            <td>Internal</td>
+            <td>Internal communications</td>
+          </tr>
+          <tr>
+            <td>run-other-cli-agents</td>
+            <td>Internal</td>
+            <td>Run other agents</td>
+          </tr>
+        </table>
+        
+        <footer class="footer">
+          <p><a href="../10-creating-custom-skills.html">← Creating Custom Skills</a> | <a href="../production/01-global-installation.html">Next: Production →</a></p>
+        </footer>
+      </div>
+    </main>
+  </div>
+  
+  <script src="../js/main.js"></script>
+</body>
+</html>

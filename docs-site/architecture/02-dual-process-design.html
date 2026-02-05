@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Dual-process architecture of FF Terminal - daemon and UI separation">
+  <title>Dual-Process Design - FF Terminal Architecture</title>
+  <link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+  <div class="site">
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <h1>FF Terminal</h1>
+      </div>
+
+      <div class="sidebar-header-top">
+        <button class="theme-toggle" id="themeToggle" aria-label="Toggle dark mode">
+          <span class="theme-icon">🌙</span>
+        </button>
+        <button class="mobile-toggle" id="mobileToggle" aria-label="Toggle mobile menu">
+          <span class="hamburger"></span>
+        </button>
+      </div>
+
+      <div class="search-container">
+        <input type="text" class="search-input" placeholder="Search docs (Ctrl+K)" aria-label="Search documentation">
+      </div>
+
+      <nav class="sidebar-nav">
+        <div class="sidebar-section">
+          <h3>Getting Started</h3>
+          <a href="../index.html" class="sidebar-link">Overview</a>
+          <a href="../architecture/01-file-structure.html" class="sidebar-link">File Structure</a>
+          <a href="../development/01-environment-setup.html" class="sidebar-link">Environment Setup</a>
+        </div>
+        <div class="sidebar-section">
+          <h3>Architecture</h3>
+          <a href="../architecture/01-file-structure.html" class="sidebar-link">File Structure</a>
+          <a href="../architecture/02-dual-process-design.html" class="sidebar-link">Dual-Process Design</a>
+          <a href="../architecture/03-websocket-protocol.html" class="sidebar-link">WebSocket Protocol</a>
+          <a href="../architecture/04-execution-flow.html" class="sidebar-link">Execution Flow</a>
+          <a href="../architecture/05-provider-abstraction.html" class="sidebar-link">Provider Abstraction</a>
+          <a href="../architecture/06-session-management.html" class="sidebar-link">Session Management</a>
+          <a href="../architecture/07-workspace-system.html" class="sidebar-link">Workspace System</a>
+          <a href="../architecture/08-skill-architecture.html" class="sidebar-link">Skill Architecture</a>
+          <a href="../architecture/09-tool-registry.html" class="sidebar-link">Tool Registry</a>
+          <a href="../architecture/10-async-context.html" class="sidebar-link">Async Context</a>
+        </div>
+        <div class="sidebar-section">
+          <h3>API Reference</h3>
+          <a href="../api/01-tools-complete-reference.html" class="sidebar-link">Tools Reference</a>
+          <a href="../api/02-websocket-api.html" class="sidebar-link">WebSocket API</a>
+          <a href="../api/03-cli-commands.html" class="sidebar-link">CLI Commands</a>
+          <a href="../api/04-profile-configuration.html" class="sidebar-link">Profile Config</a>
+          <a href="../api/05-skill-loading-api.html" class="sidebar-link">Skill Loading API</a>
+          <a href="../api/06-tool-schemas.html" class="sidebar-link">Tool Schemas</a>
+          <a href="../api/07-error-codes.html" class="sidebar-link">Error Codes</a>
+        </div>
+        <div class="sidebar-section">
+          <h3>Development</h3>
+          <a href="../development/01-environment-setup.html" class="sidebar-link">Environment Setup</a>
+          <a href="../development/02-development-workflow.html" class="sidebar-link">Development Workflow</a>
+          <a href="../development/03-testing-guide.html" class="sidebar-link">Testing Guide</a>
+          <a href="../development/04-agent-testing-suite.html" class="sidebar-link">Agent Testing Suite</a>
+          <a href="../development/05-e2e-testing.html" class="sidebar-link">E2E Testing</a>
+          <a href="../development/06-debugging-guide.html" class="sidebar-link">Debugging Guide</a>
+          <a href="../development/07-troubleshooting.html" class="sidebar-link">Troubleshooting</a>
+          <a href="../development/08-contributing.html" class="sidebar-link">Contributing</a>
+        </div>
+        <div class="sidebar-section">
+          <h3>User Guide</h3>
+          <a href="../user-guide/01-getting-started.html" class="sidebar-link">Getting Started</a>
+          <a href="../user-guide/02-terminal-interface.html" class="sidebar-link">Terminal Interface</a>
+          <a href="../user-guide/03-web-interface.html" class="sidebar-link">Web Interface</a>
+          <a href="../user-guide/04-fieldview-interface.html" class="sidebar-link">FieldView Classic</a>
+          <a href="../user-guide/05-personas-agents.html" class="sidebar-link">Personas & Agents</a>
+          <a href="../user-guide/06-custom-commands.html" class="sidebar-link">Custom Commands</a>
+          <a href="../user-guide/07-planning-execution.html" class="sidebar-link">Planning & Execution</a>
+          <a href="../user-guide/08-autonomy-loop.html" class="sidebar-link">Autonomy Loop</a>
+          <a href="../user-guide/09-task-scheduling.html" class="sidebar-link">Task Scheduling</a>
+          <a href="../user-guide/10-hooks-system.html" class="sidebar-link">Hooks System</a>
+          <a href="../user-guide/11-whatsapp-integration.html" class="sidebar-link">WhatsApp Integration</a>
+          <a href="../user-guide/12-configuration-guide.html" class="sidebar-link">Configuration Guide</a>
+        </div>
+        <div class="sidebar-section">
+          <h3>Skills</h3>
+          <a href="../skills/01-skills-overview.html" class="sidebar-link">Skills Overview</a>
+          <a href="../skills/02-design-skills.html" class="sidebar-link">Design Skills</a>
+          <a href="../skills/03-development-skills.html" class="sidebar-link">Development Skills</a>
+          <a href="../skills/04-testing-quality-skills.html" class="sidebar-link">Testing & Quality Skills</a>
+          <a href="../skills/05-research-intelligence-skills.html" class="sidebar-link">Research & Intelligence</a>
+          <a href="../skills/06-media-content-skills.html" class="sidebar-link">Media & Content Skills</a>
+          <a href="../skills/07-automation-deployment-skills.html" class="sidebar-link">Automation & Deployment</a>
+          <a href="../skills/08-specialized-domain-skills.html" class="sidebar-link">Specialized Domain</a>
+          <a href="../skills/09-internal-tools-skills.html" class="sidebar-link">Internal Tools Skills</a>
+          <a href="../skills/10-creating-custom-skills.html" class="sidebar-link">Creating Custom Skills</a>
+          <a href="../skills/11-skill-reference-complete.html" class="sidebar-link">Complete Skill Reference</a>
+        </div>
+        <div class="sidebar-section">
+          <h3>Production</h3>
+          <a href="../production/01-global-installation.html" class="sidebar-link">Global Installation</a>
+          <a href="../production/02-docker-deployment.html" class="sidebar-link">Docker Deployment</a>
+          <a href="../production/03-process-management.html" class="sidebar-link">Process Management</a>
+          <a href="../production/04-port-configuration.html" class="sidebar-link">Port Configuration</a>
+          <a href="../production/05-log-management.html" class="sidebar-link">Log Management</a>
+          <a href="../production/06-environment-variables.html" class="sidebar-link">Environment Variables</a>
+          <a href="../production/07-scaling-guide.html" class="sidebar-link">Scaling Guide</a>
+          <a href="../production/08-security-hardening.html" class="sidebar-link">Security Hardening</a>
+        </div>
+      </nav>
+    </aside>
+    
+    <main class="main">
+      <div class="main-content">
+        <div class="breadcrumbs">
+          <a href="../index.html">Home</a>
+          <span class="separator">/</span>
+          <a href="../02-dual-process-design.html">Dual-Process Design</a>
+        </div>
+        
+        <div class="page-header">
+          <h1>Dual-Process Design</h1>
+          <p class="subtitle">Separation of daemon and UI for stability and flexibility</p>
+        </div>
+        
+        <h2>Overview</h2>
+        <p>FF Terminal uses a dual-process architecture where a long-running background daemon handles all heavy operations (tool execution, AI inference, state management) while the frontend processes (CLI, web) serve as lightweight clients that communicate via WebSocket.</p>
+        
+        <h2>Architecture Diagram</h2>
+        <div class="card">
+          <h3>Component Overview</h3>
+          <ul>
+            <li><strong>Daemon Process:</strong> Runs in background, handles all state and execution</li>
+            <li><strong>CLI Process:</strong> Terminal interface, connects to daemon via WebSocket</li>
+            <li><strong>Web Process:</strong> Browser interface, connects to daemon via WebSocket</li>
+            <li><strong>WebSocket Server:</strong> Bidirectional communication layer</li>
+          </ul>
+        </div>
+        
+        <h2>Process Responsibilities</h2>
+        
+        <h3>Daemon Process</h3>
+        <ul>
+          <li>Manages agent state and context</li>
+          <li>Executes tools and skills</li>
+          <li>Handles AI provider communication</li>
+          <li>Maintains session persistence</li>
+          <li>Runs autonomy loops</li>
+          <li>Manages workspace isolation</li>
+        </ul>
+        
+        <h3>CLI Process</h3>
+        <ul>
+          <li>Renders terminal UI</li>
+          <li>Handles user input</li>
+          <li>Displays agent output</li>
+          <li>Sends commands to daemon</li>
+          <li>Displays streaming responses</li>
+        </ul>
+        
+        <h3>Web Process</h3>
+        <ul>
+          <li>Provides browser-based UI</li>
+          <li>Real-time chat interface</li>
+          <li>Interactive tool execution</li>
+          <li>Session history visualization</li>
+          <li>Settings and configuration</li>
+        </ul>
+        
+        <h2>Benefits</h2>
+        <ul>
+          <li><strong>Stability:</strong> Daemon crash doesn't affect UI, can reconnect automatically</li>
+          <li><strong>Flexibility:</strong> Multiple UI clients can connect to same daemon</li>
+          <li><strong>Performance:</strong> UI remains responsive during heavy computations</li>
+          <li><strong>Scalability:</strong> Can run daemon on remote server, client locally</li>
+          <li><strong>Testing:</strong> Easier to test daemon and UI independently</li>
+        </ul>
+        
+        <h2>Communication Flow</h2>
+        <div class="code-block-header">
+          <span class="lang">typescript</span>
+          <button class="copy-btn">Copy</button>
+        </div>
+        <pre><code>// Client → Daemon
+{
+  "type": "tool_execution",
+  "tool": "read_file",
+  "args": { "path": "./src/index.ts" }
+}
+
+// Daemon → Client (streaming)
+{
+  "type": "chunk",
+  "content": "import { Agent } from './agent';"
+}
+
+// Daemon → Client (complete)
+{
+  "type": "complete",
+  "result": { ... }
+}</code></pre>
+        
+        <h2>Startup Sequence</h2>
+        <ol>
+          <li>Daemon starts on configured port (default: 28888)</li>
+          <li>Daemon loads skills and initializes tool registry</li>
+          <li>CLI/web client connects to daemon via WebSocket</li>
+          <li>Session is established with unique UUID</li>
+          <li>Client sends first command</li>
+          <li>Daemon processes and streams response</li>
+        </ol>
+        
+        <h2>Graceful Shutdown</h2>
+        <p>The daemon supports graceful shutdown on SIGTERM/SIGINT:</p>
+        <ul>
+          <li>Stop accepting new connections</li>
+          <li>Complete in-progress tool executions</li>
+          <li>Save session state to disk</li>
+          <li>Close all WebSocket connections</li>
+          <li>Exit with status code 0</li>
+        </ul>
+        
+        <footer class="footer">
+          <p><a href="../01-file-structure.html">← File Structure</a> | <a href="../03-websocket-protocol.html">Next: WebSocket Protocol →</a></p>
+        </footer>
+      </div>
+    </main>
+  </div>
+  
+  <script src="../js/main.js"></script>
+</body>
+</html>

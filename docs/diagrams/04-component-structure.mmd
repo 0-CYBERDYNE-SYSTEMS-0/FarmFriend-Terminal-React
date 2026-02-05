@@ -1,0 +1,357 @@
+# Component Structure Diagram
+
+**Detailed component hierarchy and module relationships in FF Terminal**
+
+```mermaid
+flowchart TB
+    subgraph Root["ff-terminal-ts/"]
+        subgraph Src["src/"]
+            
+            subgraph Bin["bin/"]
+                ff_terminal["ff-terminal.ts\n(CLI entry point)"]
+            end
+            
+            subgraph CLI["cli/"]
+                app["app.tsx\n(Ink React interface)"]
+                subgraph TTS["tts/"]
+                    tts_client["tts.ts\n(TTS client)"]
+                    audio_player["audio-player.tsx\n(Audio queue)"]
+                end
+                components["components/\n(React components)"]
+            end
+            
+            subgraph Daemon["daemon/"]
+                daemon["daemon.ts\n(WebSocket server)"]
+                protocol["protocol.ts\n(Message types)"]
+                ws_handler["ws-handler.ts\n(WebSocket handling)"]
+            end
+            
+            subgraph Runtime["runtime/"]
+                agentLoop["agentLoop.ts\n(Multi-turn loop)"]
+                
+                subgraph Config["config/"]
+                    config["config.ts\n(Main config)"]
+                    mounts["mounts.ts\n(Mount management)"]
+                end
+                
+                subgraph Profiles["profiles/"]
+                    storage["storage.ts\n(Profile persistence)"]
+                    credentials["credentials.ts\n(Keychain/OS storage)"]
+                end
+                
+                subgraph Tools["tools/"]
+                    registry["registry.ts\n(Tool registry)"]
+                    toolSchemas["toolSchemas.ts\n(Schema definitions)"]
+                    executeTools["executeTools.ts\n(Tool executor)"]
+                    
+                    subgraph Impl["implementations/"]
+                        fileOps["readFile, writeFile, editFile..."]
+                        search["grep, glob, searchCode, astGrep..."]
+                        exec["runCommand, subagentTool..."]
+                        web["browseWeb, tavilySearch, perplexitySearch..."]
+                        media["mediaTools, openaiImage..."]
+                        macos["macosControl..."]
+                    end
+                end
+                
+                subgraph Planning["planning/"]
+                    plan_extract["plan-extract.ts\n(Plan extraction)"]
+                    plan_execute["plan-execute.ts\n(Step execution)"]
+                end
+                
+                subgraph Scheduling["scheduling/"]
+                    scheduler["scheduler.ts\n(RRULE scheduler)"]
+                    task_runner["task-runner.ts\n(Task execution)"]
+                end
+                
+                subgraph Autonomy["autonomy/"]
+                    autonomy_loop["autonomy-loop.ts\n(Autonomous agent)"]
+                    oracle["oracle.ts\n(Oracle escalation)"]
+                    stall_detect["stall-detect.ts\n(Stall detection)"]
+                end
+                
+                subgraph Hooks["hooks/"]
+                    plan_hook["plan-validation.ts\n(Plan validation)"]
+                    todo_hook["todo-check.ts\n(Todo enforcement)"]
+                    skill_hook["skill-restrict.ts\n(Skill restrictions)"]
+                end
+                
+                subgraph Session["session/"]
+                    session_store["session-store.ts\n(Session storage)"]
+                    session_history["session-history.ts\n(History management)"]
+                end
+            end
+            
+            subgraph Web["web/"]
+                server["server.ts\n(WebSocket + HTTP)"]
+                
+                subgraph Client["client/"]
+                    client_index["index.tsx\n(React entry)"]
+                    client_app["App.tsx\n(Main app)"]
+                    components["components/\n(React components)"]
+                    hooks["hooks/\n(Custom hooks)"]
+                end
+                
+                subgraph Fieldview["fieldview/"]
+                    fv_index["index.tsx\n(React entry)"]
+                    fv_app["App.tsx\n(FieldView app)"]
+                    terminal["Terminal.tsx\n(Terminal UI)"]
+                end
+            end
+            
+            subgraph Types["types/"]
+                shared_types["shared-types.ts\n(Shared interfaces)"]
+                tool_types["tool-types.ts\n(Tool definitions)"]
+            end
+            
+            subgraph Shared["shared/"]
+                utils["utils.ts\n(Utility functions)"]
+                constants["constants.ts\n(Constants)"]
+            end
+            
+            subgraph Acp["acp/"]
+                acp["acp.ts\n(Anthropic Claude Protocol)"]
+            end
+        end
+        
+        subgraph Packet["packet/"]
+            default_config["default_config.json"]
+            tool_schemas["tool_schemas.openai.json"]
+        end
+        
+        subgraph Skills["skills/"]
+            skill_manifest["skill manifest\n(SKILL.md files)"]
+            skill_impl["skill implementations/"]
+        end
+        
+        subgraph Docs["docs/"]
+            reference["reference/\n(Reference docs)"]
+            diagrams["diagrams/\n(Mermaid diagrams)"]
+        end
+    end
+
+    %% Relationships
+    ff_terminal --> daemon
+    ff_terminal --> app
+    ff_terminal --> server
+    
+    app --> tts_client
+    app --> components
+    
+    daemon --> ws_handler
+    daemon --> protocol
+    
+    ws_handler --> agentLoop
+    agentLoop --> executeTools
+    agentLoop --> registry
+    
+    executeTools --> fileOps
+    executeTools --> search
+    executeTools --> exec
+    executeTools --> web
+    executeTools --> media
+    
+    agentLoop --> planning
+    agentLoop --> hooks
+    agentLoop --> session
+    
+    planning --> plan_extract
+    planning --> plan_execute
+    
+    hooks --> plan_hook
+    hooks --> todo_hook
+    hooks --> skill_hook
+    
+    server --> client
+    server --> fieldview
+    
+    %% Styling
+    classDef entry fill:#E3F2FD,stroke:#1976D2,stroke-width:2px
+    classDef core fill:#E8F5E9,stroke:#388E3C,stroke-width:2px
+    classDef runtime fill:#FFF3E0,stroke:#F57C00,stroke-width:2px
+    classDef tools fill:#F3E5F5,stroke:#7B1FA2,stroke-width:2px
+    classDef web fill:#FFEBEE,stroke:#C62828,stroke-width:2px
+    classDef config fill:#ECEFF1,stroke:#607D8B,stroke-width:2px
+
+    class ff_terminal entry
+    class daemon,server,app core
+    class agentLoop,planning,autonomy,hooks,scheduling,session runtime
+    class fileOps,search,exec,web,media,macos tools
+    class client,fieldview web
+    class config,profiles,mounts,credentials config
+```
+
+## Module Descriptions
+
+### CLI Entry Point
+
+| File | Responsibility |
+|------|----------------|
+| `src/bin/ff-terminal.ts` | Main CLI router, parses commands, delegates to appropriate handler |
+
+### Terminal UI (Ink)
+
+| File | Responsibility |
+|------|----------------|
+| `src/cli/app.tsx` | Main Ink React interface, WebSocket client, state management |
+| `src/cli/tts/tts.ts` | Text-to-speech integration |
+| `src/cli/tts/audio-player.tsx` | Audio playback queue management |
+| `src/cli/components/` | Reusable React components for terminal UI |
+
+### AI Daemon
+
+| File | Responsibility |
+|------|----------------|
+| `src/daemon/daemon.ts` | WebSocket server, handles client connections |
+| `src/daemon/protocol.ts` | Message type definitions |
+| `src/daemon/ws-handler.ts` | WebSocket message handling |
+
+### Runtime Core
+
+| File | Responsibility |
+|------|----------------|
+| `src/runtime/agentLoop.ts` | Multi-turn conversation loop (max 500 turns) |
+| `src/runtime/config/config.ts` | Main configuration loading |
+| `src/runtime/config/mounts.ts` | Mount configuration management |
+| `src/runtime/profiles/storage.ts` | Profile persistence to filesystem |
+| `src/runtime/profiles/credentials.ts` | OS keychain credential storage |
+
+### Tool System
+
+| File | Responsibility |
+|------|----------------|
+| `src/runtime/tools/registry.ts` | Tool registry and discovery |
+| `src/runtime/tools/toolSchemas.ts` | OpenAI-style tool schema definitions |
+| `src/runtime/tools/executeTools.ts` | Tool execution orchestration |
+| `src/runtime/tools/implementations/` | Individual tool implementations |
+
+### Tool Implementations
+
+| Category | Tools |
+|----------|-------|
+| **File Operations** | readFile, writeFile, editFile, multiEditFile |
+| **Search** | grep, glob, searchCode, astGrep |
+| **Execution** | runCommand, subagentTool, agentsWorkflow, commandsWorkflow, skillsWorkflow |
+| **Web & Research** | browseWeb, tavilySearch, perplexitySearch, tavilyAdvanced |
+| **Media** | mediaTools, openaiImage |
+| **System** | macosControl, think, templates |
+| **Data** | analyzeData, notebookEdit |
+| **Management** | manageTask, askOracle, sessionSummary |
+| **Automation** | workflowAutomation, quickUpdate |
+
+### Planning System
+
+| File | Responsibility |
+|------|----------------|
+| `src/runtime/planning/plan-extract.ts` | Extract plan from natural language |
+| `src/runtime/planning/plan-execute.ts` | Execute plan step-by-step with validation |
+
+### Scheduling System
+
+| File | Responsibility |
+|------|----------------|
+| `src/runtime/scheduling/scheduler.ts` | RRULE-based task scheduling |
+| `src/runtime/scheduling/task-runner.ts` | Execute scheduled tasks |
+
+### Autonomy System
+
+| File | Responsibility |
+|------|----------------|
+| `src/runtime/autonomy/autonomy-loop.ts` | Long-running autonomous agent loop |
+| `src/runtime/autonomy/oracle.ts` | Oracle escalation for critical decisions |
+| `src/runtime/autonomy/stall-detect.ts` | Detect when agent is stalled |
+
+### Hooks System
+
+| File | Responsibility |
+|------|----------------|
+| `src/runtime/hooks/plan-validation.ts` | Validate plans before execution |
+| `src/runtime/hooks/todo-check.ts` | Enforce todo completion before finishing |
+| `src/runtime/hooks/skill-restrict.ts` | Validate skill usage permissions |
+
+### Session Management
+
+| File | Responsibility |
+|------|----------------|
+| `src/runtime/session/session-store.ts` | Session storage and retrieval |
+| `src/runtime/session/session-history.ts` | Conversation history management |
+
+### Web Interfaces
+
+| File | Responsibility |
+|------|----------------|
+| `src/web/server.ts` | Combined WebSocket + HTTP server |
+| `src/web/client/` | Original React web client |
+| `src/web/fieldview/` | FieldView Classic terminal UI |
+
+### Shared Components
+
+| File | Responsibility |
+|------|----------------|
+| `src/types/shared-types.ts` | Shared TypeScript interfaces |
+| `src/types/tool-types.ts` | Tool-specific type definitions |
+| `src/shared/utils.ts` | Utility functions |
+| `src/shared/constants.ts` | Application constants |
+| `src/acp/acp.ts` | Anthropic Claude Protocol support |
+
+### Configuration Files
+
+| File | Responsibility |
+|------|----------------|
+| `packet/default_config.json` | Embedded default configuration |
+| `packet/tool_schemas.openai.json` | OpenAI-format tool schemas |
+| `tsconfig.json` | TypeScript compiler configuration |
+
+## Dependency Graph
+
+```
+                    ┌─────────────────┐
+                    │  ff-terminal.ts │
+                    │   (CLI Router)  │
+                    └────────┬────────┘
+                             │
+         ┌───────────────────┼───────────────────┐
+         │                   │                   │
+         ▼                   ▼                   ▼
+┌────────────────┐  ┌────────────────┐  ┌────────────────┐
+│     app.tsx    │  │   daemon.ts    │  │   server.ts    │
+│ (Ink Terminal) │  │ (WebSocket)    │  │ (Web + WS)     │
+└────────┬───────┘  └────────────────┘  └────────────────┘
+         │                                         │
+         ▼                                         ▼
+┌─────────────────────────────────────────────────────────────┐
+│                     runtime/                                │
+│  ┌───────────┐  ┌─────────┐  ┌─────────┐  ┌──────────────┐ │
+│  │ agentLoop │─►│  tools  │─►│ hooks   │─►│   session    │ │
+│  └───────────┘  └─────────┘  └─────────┘  └──────────────┘ │
+│       │             │              │                        │
+│       ▼             ▼              ▼                        │
+│  ┌───────────┐  ┌─────────┐  ┌─────────┐                   │
+│  │ planning  │  │ execute │  │ validate│                   │
+│  └───────────┘  └─────────┘  └─────────┘                   │
+└─────────────────────────────────────────────────────────────┘
+```
+
+## File Count Summary
+
+| Category | Files/Modules |
+|----------|--------------|
+| CLI Entry | 1 |
+| Terminal UI | 5+ |
+| Daemon | 3+ |
+| Runtime Core | 5+ |
+| Tools | 35+ implementations |
+| Planning | 2+ |
+| Scheduling | 2+ |
+| Autonomy | 3+ |
+| Hooks | 3+ |
+| Session | 2+ |
+| Web Server | 1 |
+| Web Client | 10+ components |
+| FieldView | 5+ components |
+| Types | 5+ type files |
+| Skills | 40+ skills |
+
+---
+
+**Last Updated:** February 2, 2026

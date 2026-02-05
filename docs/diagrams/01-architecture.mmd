@@ -1,0 +1,226 @@
+# Architecture Diagram
+
+**System architecture showing the dual-process model and component interactions**
+
+```mermaid
+flowchart TB
+    subgraph User["User Interface Layer"]
+        Ink["Ink Terminal UI\n(React + Ink)"]
+        Web["Web Client\n(React + Vite)"]
+        FieldView["FieldView Classic\n(Terminal UI)"]
+    end
+
+    subgraph Daemon["AI Daemon Layer\nPort 28888"]
+        WS["WebSocket Server"]
+        
+        subgraph Runtime["Runtime Core"]
+            AgentLoop["Agent Loop\n(max 500 turns)"]
+            Provider["Provider Abstraction\n(6+ providers)"]
+            Context["AsyncLocalStorage\nContext Manager"]
+        end
+        
+        subgraph Session["Session Management"]
+            SessionStore["Session Store\n(JSON-based)"]
+            History["Conversation History\n(UUID sessions)"]
+        end
+        
+        subgraph Hooks["Hooks System"]
+            Validator["Plan Validation"]
+            TodoCheck["Todo Enforcement"]
+            SkillRestrict["Skill Restrictions"]
+        end
+    end
+
+    subgraph Tools["Tool Registry\n(35+ tools)"]
+        subgraph FileOps["File Operations"]
+            readFile["readFile"]
+            writeFile["writeFile"]
+            editFile["editFile"]
+        end
+        
+        subgraph Search["Search & Analysis"]
+            grep["grep"]
+            searchCode["searchCode"]
+            glob["glob"]
+            astGrep["astGrep"]
+        end
+        
+        subgraph Execution["Execution"]
+            runCommand["runCommand"]
+            subagentTool["subagentTool"]
+        end
+        
+        subgraph Web["Web & Research"]
+            browseWeb["browseWeb"]
+            tavilySearch["tavilySearch"]
+            perplexitySearch["perplexitySearch"]
+        end
+        
+        subgraph Media["Media & Content"]
+            mediaTools["mediaTools"]
+            openaiImage["openaiImage"]
+        end
+    end
+
+    subgraph Skills["Skill Ecosystem\n(40+ skills)"]
+        subgraph Design["Design Skills"]
+            canvas["canvas-design"]
+            theme["theme-factory"]
+            frontend["frontend_design"]
+        end
+        
+        subgraph Dev["Development Skills"]
+            component["component_library"]
+            mcp["mcp-builder"]
+            remotion["remotion-expert"]
+        end
+        
+        subgraph Automation["Automation Skills"]
+            discord["discord-server"]
+            telegram["telegram-bot-creator"]
+            dreamhost["dreamhost-manager"]
+        end
+        
+        subgraph Domain["Specialized Domains"]
+            shopify["shopify_ops"]
+            hf["hf_dataset_creator"]
+            model["model_trainer"]
+        end
+    end
+
+    subgraph Providers["AI Providers"]
+        OpenRouter["OpenRouter"]
+        Anthropic["Anthropic Claude"]
+        Zai["Z.ai"]
+        MiniMax["MiniMax"]
+        LMStudio["LM Studio\n(Local)"]
+        OpenAI["OpenAI-compatible"]
+    end
+
+    subgraph Workspace["Workspace\n(Global/Local)"]
+        Commands["commands/\n(Custom slash commands)"]
+        Agents["agents/\n(Agent configurations)"]
+        Projects["projects/\n(Project contexts)"]
+        Memory["memory_core/\n(Session summaries)"]
+        Logs["logs/\n(JSONL logs)"]
+    end
+
+    %% UI to Daemon connections
+    Ink <-->|"WebSocket\n(port 28888)"| WS
+    Web <-->|"WebSocket\n(port 28888)"| WS
+    FieldView <-->|"WebSocket\n(port 28888)"| WS
+
+    %% Daemon internal connections
+    WS --> AgentLoop
+    AgentLoop --> Provider
+    AgentLoop --> Context
+    AgentLoop --> SessionStore
+    AgentLoop --> Validator
+    SessionStore --> History
+    
+    %% Tool execution
+    AgentLoop -->|"Tool Calls"| readFile
+    AgentLoop -->|"Tool Calls"| writeFile
+    AgentLoop -->|"Tool Calls"| grep
+    AgentLoop -->|"Tool Calls"| runCommand
+    AgentLoop -->|"Tool Calls"| subagentTool
+    
+    %% Skill loading
+    AgentLoop -->|"Skill Requests"| Skills
+    
+    %% Provider connections
+    Provider <--> OpenRouter
+    Provider <--> Anthropic
+    Provider <--> Zai
+    Provider <--> MiniMax
+    Provider <--> LMStudio
+    Provider <--> OpenAI
+    
+    %% Workspace access
+    readFile --> Projects
+    writeFile --> Projects
+    Commands --> Workspace
+    Agents --> Workspace
+    SessionStore --> Memory
+    AgentLoop --> Logs
+
+    %% Styling
+    classDef ui fill:#E3F2FD,stroke:#1976D2,stroke-width:2px
+    classDef daemon fill:#FFF3E0,stroke:#F57C00,stroke-width:2px
+    classDef tools fill:#E8F5E9,stroke:#388E3C,stroke-width:2px
+    classDef skills fill:#F3E5F5,stroke:#7B1FA2,stroke-width:2px
+    classDef providers fill:#FCE4EC,stroke:#C2185B,stroke-width:2px
+    classDef workspace fill:#ECEFF1,stroke:#607D8B,stroke-width:2px
+
+    class Ink,Web,FieldView ui
+    class WS,AgentLoop,Provider,Context,SessionStore,History,Hooks daemon
+    class readFile,writeFile,editFile,grep,searchCode,glob,astGrep,runCommand,subagentTool,browseWeb,tavilySearch,perplexitySearch,mediaTools,openaiImage tools
+    class canvas,theme,frontend,component,mcp,remotion,discord,telegram,dreamhost,shopify,hf,model skills
+    class OpenRouter,Anthropic,Zai,MiniMax,LMStudio,OpenAI providers
+    class Commands,Agents,Projects,Memory,Logs workspace
+```
+
+## Architecture Overview
+
+### Dual-Process Model
+
+FF Terminal employs a unique **dual-process architecture** that separates the AI runtime from the user interface:
+
+1. **AI Daemon** (WebSocket server on port 28888)
+   - Independent process that survives UI crashes
+   - Handles all AI operations and tool execution
+   - Manages sessions and conversation history
+   - Supports autonomous operation for long-running tasks
+
+2. **User Interface** (multiple options)
+   - **Ink Terminal** - React-based terminal UI with real-time streaming
+   - **Web Client** - Full-featured web interface (port 8787)
+   - **FieldView Classic** - Terminal-aesthetic web interface (port 8788)
+
+### Key Design Principles
+
+| Principle | Implementation |
+|-----------|---------------|
+| **Crash Resilience** | Daemon runs independently; UI crashes don't lose session state |
+| **Real-Time Communication** | WebSocket with delta encoding for streaming responses |
+| **Thread Safety** | AsyncLocalStorage for context propagation across tool calls |
+| **Session Continuity** | JSON-based conversation history with UUID session IDs |
+| **Workspace Isolation** | Global vs local workspace modes with automatic port allocation |
+
+### Communication Flow
+
+```
+User Input → UI (Ink/Web/FieldView)
+           ↓ (WebSocket)
+         Daemon (port 28888)
+           ↓
+         Agent Loop
+           ↓ (tool calls)
+         Tool Registry
+           ↓ (execute)
+         Tools/Skills
+           ↓ (results)
+         Agent Loop
+           ↓ (streaming)
+         Daemon
+           ↓ (WebSocket)
+         UI Display
+```
+
+### Component Responsibilities
+
+| Component | Responsibility |
+|-----------|---------------|
+| **Ink Terminal** | Interactive CLI with color support, real-time streaming, keyboard shortcuts |
+| **Web Client** | Full web UI with file upload, artifact preview, session management |
+| **FieldView Classic** | Terminal-like web interface with smart scroll and mobile support |
+| **WebSocket Server** | Bidirectional communication with delta encoding, auto-reconnect |
+| **Agent Loop** | Multi-turn conversation management (max 500 turns per session) |
+| **Provider Layer** | Abstraction for 6+ AI providers with unified API |
+| **Tool Registry** | 35+ tools with OpenAI-style schemas, parallel execution support |
+| **Skill System** | 40+ production skills across 8 categories |
+| **Hooks System** | Plan validation, todo enforcement, skill restrictions |
+
+---
+
+**Last Updated:** February 2, 2026

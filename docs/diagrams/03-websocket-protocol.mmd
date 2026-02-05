@@ -1,0 +1,352 @@
+# WebSocket Protocol Diagram
+
+**Detailed WebSocket message formats for daemon ↔ UI communication**
+
+```mermaid
+flowchart TD
+    subgraph ClientToDaemon["Client → Daemon Messages"]
+        subgraph Hello["Connection Init"]
+            C_Hello["hello\n{client, version?}"]
+        end
+        
+        subgraph Turn["Turn Management"]
+            C_Start["start_turn\n{input, sessionId?}"]
+            C_Cancel["cancel_turn\n{turnId}"]
+        end
+        
+        subgraph Query["Queries"]
+            C_ListTools["list_tools"]
+            C_GetSession["get_session\n{sessionId}"]
+        end
+        
+        subgraph Control["Control"]
+            C_Pause["pause"]
+            C_Resume["resume"]
+            C_Reset["reset"]
+        end
+    end
+
+    subgraph DaemonToClient["Daemon → Client Messages"]
+        subgraph D_Hello["Connection Ack"]
+            D_Hello["hello\n{daemonVersion}"]
+        end
+        
+        subgraph TurnEvents["Turn Events"]
+            D_TurnStart["turn_started\n{sessionId, turnId}"]
+            D_Chunk["chunk\n{turnId, seq, chunk}"]
+            D_TurnEnd["turn_finished\n{turnId, ok, error?}"]
+        end
+        
+        subgraph QueryResp["Query Responses"]
+            D_Tools["tools\n{tools}"]
+            D_Session["session\n{sessionId, history}"]
+        end
+        
+        subgraph Status["Status"]
+            D_Connected["connected\n{sessionId}"]
+            D_Error["error\n{message}"]
+        end
+    end
+
+    subgraph ChunkTypes["Chunk Types"]
+        CT_Content["content\nResponse text"]
+        CT_Thinking["thinking\nReasoning process"]
+        CT_ThinkingXML["thinking_xml\nXML-structured thinking"]
+        CT_ToolCall["tool_call\nTool execution request"]
+        CT_Error["error\nError message"]
+        CT_Status["status\nStatus update"]
+        CT_Complete["task_completed\nCompletion signal"]
+    end
+
+    %% Styling
+    classDef client fill:#E3F2FD,stroke:#1976D2,stroke-width:2px
+    classDef daemon fill:#E8F5E9,stroke:#388E3C,stroke-width:2px
+    classDef chunk fill:#FFF3E0,stroke:#F57C00,stroke-width:2px
+
+    class C_Hello,C_Start,C_Cancel,C_ListTools,C_GetSession,C_Pause,C_Resume,C_Reset client
+    class D_Hello,D_TurnStart,D_Chunk,D_TurnEnd,D_Tools,D_Session,D_Connected,D_Error daemon
+    class CT_Content,CT_Thinking,CT_ThinkingXML,CT_ToolCall,CT_Error,CT_Status,CT_Complete chunk
+```
+
+## Message Specifications
+
+### Client → Daemon Messages
+
+#### hello - Connection Initialization
+
+```typescript
+// Client sends
+{
+  type: "hello",
+  client: "ink" | "web" | "fieldview",
+  version?: string  // Optional version info
+}
+
+// Daemon responds
+{
+  type: "hello",
+  daemonVersion: string  // e.g., "1.0.0"
+}
+```
+
+#### start_turn - Start Conversation Turn
+
+```typescript
+{
+  type: "start_turn",
+  input: string,        // User message
+  sessionId?: string,   // Optional session ID (UUID)
+  mode?: string         // Optional mode override
+}
+```
+
+#### cancel_turn - Cancel Active Turn
+
+```typescript
+{
+  type: "cancel_turn",
+  turnId: string  // Turn to cancel
+}
+```
+
+#### list_tools - List Available Tools
+
+```typescript
+{
+  type: "list_tools"
+}
+
+// Response
+{
+  type: "tools",
+  tools: string[]  // Array of tool names
+}
+```
+
+### Daemon → Client Messages
+
+#### turn_started - Turn Began
+
+```typescript
+{
+  type: "turn_started",
+  sessionId: string,
+  turnId: string
+}
+```
+
+#### chunk - Streaming Content
+
+```typescript
+{
+  type: "chunk",
+  turnId: string,
+  seq: number,       // Sequence number (0, 1, 2, ...)
+  chunk: ChunkData   // See chunk types below
+}
+
+interface ChunkData {
+  type: "content" | "thinking" | "thinking_xml" | "tool_call" | "error" | "status" | "task_completed";
+  content?: string;
+  data?: any;
+}
+```
+
+#### turn_finished - Turn Completed
+
+```typescript
+{
+  type: "turn_finished",
+  turnId: string,
+  ok: boolean,
+  error?: string,
+  summary?: string  // Optional session summary
+}
+```
+
+## Chunk Type Details
+
+### content - Response Text
+
+```typescript
+{
+  type: "chunk",
+  turnId: "abc-123",
+  seq: 0,
+  chunk: {
+    type: "content",
+    content: "Here's the analysis you requested..."
+  }
+}
+```
+
+### thinking - Reasoning Process
+
+```typescript
+{
+  type: "chunk",
+  turnId: "abc-123",
+  seq: 1,
+  chunk: {
+    type: "thinking",
+    content: "Let me analyze the requirements first..."
+  }
+}
+```
+
+### thinking_xml - Structured Thinking
+
+```typescript
+{
+  type: "chunk",
+  turnId: "abc-123",
+  seq: 2,
+  chunk: {
+    type: "thinking_xml",
+    content: "<thinking>\n  <step>1. Parse request</step>\n  <step>2. Identify tools</step>\n</thinking>"
+  }
+}
+```
+
+### tool_call - Tool Execution Request
+
+```typescript
+{
+  type: "chunk",
+  turnId: "abc-123",
+  seq: 3,
+  chunk: {
+    type: "tool_call",
+    data: {
+      name: "readFile",
+      parameters: {
+        path: "/path/to/file.txt"
+      }
+    }
+  }
+}
+```
+
+### error - Error Message
+
+```typescript
+{
+  type: "chunk",
+  turnId: "abc-123",
+  seq: 4,
+  chunk: {
+    type: "error",
+    content: "File not found: /path/to/file.txt"
+  }
+}
+```
+
+### status - Status Update
+
+```typescript
+{
+  type: "chunk",
+  turnId: "abc-123",
+  seq: 5,
+  chunk: {
+    type: "status",
+    content: "Reading file (1/3)..."
+  }
+}
+```
+
+### task_completed - Task Complete
+
+```typescript
+{
+  type: "chunk",
+  turnId: "abc-123",
+  seq: 6,
+  chunk: {
+    type: "task_completed",
+    data: {
+      ok: true,
+      summary: "Task completed successfully"
+    }
+  }
+}
+```
+
+## Connection Lifecycle
+
+```mermaid
+sequenceDiagram
+    participant U as UI (Ink/Web)
+    participant D as Daemon
+    
+    U->>D: WebSocket Connection
+    D->>U: open event
+    
+    U->>D: {"type": "hello", "client": "ink"}
+    D->>U: {"type": "hello", "daemonVersion": "1.0.0"}
+    
+    U->>D: {"type": "start_turn", "input": "Hello"}
+    D->>U: {"type": "turn_started", "sessionId": "sess-123", "turnId": "turn-1"}
+    
+    loop Streaming
+        D->>U: {"type": "chunk", "chunk": {"type": "content", ...}}
+        D->>U: {"type": "chunk", "chunk": {"type": "thinking", ...}}
+    end
+    
+    D->>U: {"type": "turn_finished", "ok": true}
+    
+    Note over U,D: Repeat for subsequent turns
+    
+    U->>D: {"type": "cancel_turn", "turnId": "turn-5"}
+    
+    U->>D: close event
+    D->>U: close event
+```
+
+## Auto-Reconnect Logic
+
+```typescript
+class WebSocketClient {
+    private reconnectDelay = 750;
+    private maxRetries = 10;
+    
+    connect() {
+        this.ws = new WebSocket(`ws://localhost:${FF_TERMINAL_PORT}`);
+        
+        this.ws.onclose = () => {
+            this.scheduleReconnect();
+        };
+        
+        this.ws.onerror = (error) => {
+            console.error('WebSocket error:', error);
+        };
+    }
+    
+    scheduleReconnect() {
+        setTimeout(() => {
+            this.connect();
+        }, this.reconnectDelay);
+    }
+}
+```
+
+## Port Configuration
+
+| Component | Default Port | Variable |
+|-----------|-------------|----------|
+| Daemon | 28888 | `FF_TERMINAL_PORT` |
+| Web Client | 8787 | `FF_WEB_PORT` |
+| FieldView | 8788 | `FF_FIELDVIEW_PORT` |
+
+## Error Handling
+
+| Error Code | Description | Action |
+|------------|-------------|--------|
+| `ECONNREFUSED` | Daemon not running | Auto-reconnect |
+| `ETIMEDOUT` | Request timeout | Retry or show error |
+| `EINVALID` | Invalid message format | Log error, ignore |
+| `EUNAUTHORIZED` | Missing auth | Show auth prompt |
+
+---
+
+**Last Updated:** February 2, 2026
