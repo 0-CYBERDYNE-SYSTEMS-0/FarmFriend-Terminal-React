@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="File structure and organization of FF Terminal project">
+  <title>File Structure - FF Terminal Architecture</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+  <div class="site">
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <h1>FF Terminal</h1>
+      </div>
+
+      <div class="sidebar-header-top">
+        <button class="theme-toggle" id="themeToggle" aria-label="Toggle dark mode">
+          <span class="theme-icon">🌙</span>
+        </button>
+        <button class="mobile-toggle" id="mobileToggle" aria-label="Toggle mobile menu">
+          <span class="hamburger"></span>
+        </button>
+      </div>
+
+      <div class="search-container">
+        <input type="text" class="search-input" placeholder="Search docs (Ctrl+K)" aria-label="Search documentation">
+      </div>
+
+      <nav class="sidebar-nav">
+        <div class="sidebar-section">
+          <h3>Getting Started</h3>
+          <a href="../index.html" class="sidebar-link">Overview</a>
+          <a href="../architecture/01-file-structure.html" class="sidebar-link">File Structure</a>
+          <a href="../development/01-environment-setup.html" class="sidebar-link">Environment Setup</a>
+        </div>
+        <div class="sidebar-section">
+          <h3>Architecture</h3>
+          <a href="../architecture/01-file-structure.html" class="sidebar-link">File Structure</a>
+          <a href="../architecture/02-dual-process-design.html" class="sidebar-link">Dual-Process Design</a>
+          <a href="../architecture/03-websocket-protocol.html" class="sidebar-link">WebSocket Protocol</a>
+          <a href="../architecture/04-execution-flow.html" class="sidebar-link">Execution Flow</a>
+          <a href="../architecture/05-provider-abstraction.html" class="sidebar-link">Provider Abstraction</a>
+          <a href="../architecture/06-session-management.html" class="sidebar-link">Session Management</a>
+          <a href="../architecture/07-workspace-system.html" class="sidebar-link">Workspace System</a>
+          <a href="../architecture/08-skill-architecture.html" class="sidebar-link">Skill Architecture</a>
+          <a href="../architecture/09-tool-registry.html" class="sidebar-link">Tool Registry</a>
+          <a href="../architecture/10-async-context.html" class="sidebar-link">Async Context</a>
+        </div>
+        <div class="sidebar-section">
+          <h3>API Reference</h3>
+          <a href="../api/01-tools-complete-reference.html" class="sidebar-link">Tools Reference</a>
+          <a href="../api/02-websocket-api.html" class="sidebar-link">WebSocket API</a>
+          <a href="../api/03-cli-commands.html" class="sidebar-link">CLI Commands</a>
+          <a href="../api/04-profile-configuration.html" class="sidebar-link">Profile Config</a>
+          <a href="../api/05-skill-loading-api.html" class="sidebar-link">Skill Loading API</a>
+          <a href="../api/06-tool-schemas.html" class="sidebar-link">Tool Schemas</a>
+          <a href="../api/07-error-codes.html" class="sidebar-link">Error Codes</a>
+        </div>
+        <div class="sidebar-section">
+          <h3>Development</h3>
+          <a href="../development/01-environment-setup.html" class="sidebar-link">Environment Setup</a>
+          <a href="../development/02-development-workflow.html" class="sidebar-link">Development Workflow</a>
+          <a href="../development/03-testing-guide.html" class="sidebar-link">Testing Guide</a>
+          <a href="../development/04-agent-testing-suite.html" class="sidebar-link">Agent Testing Suite</a>
+          <a href="../development/05-e2e-testing.html" class="sidebar-link">E2E Testing</a>
+          <a href="../development/06-debugging-guide.html" class="sidebar-link">Debugging Guide</a>
+          <a href="../development/07-troubleshooting.html" class="sidebar-link">Troubleshooting</a>
+          <a href="../development/08-contributing.html" class="sidebar-link">Contributing</a>
+        </div>
+        <div class="sidebar-section">
+          <h3>User Guide</h3>
+          <a href="../user-guide/01-getting-started.html" class="sidebar-link">Getting Started</a>
+          <a href="../user-guide/02-terminal-interface.html" class="sidebar-link">Terminal Interface</a>
+          <a href="../user-guide/03-web-interface.html" class="sidebar-link">Web Interface</a>
+          <a href="../user-guide/04-fieldview-interface.html" class="sidebar-link">FieldView Classic</a>
+          <a href="../user-guide/05-personas-agents.html" class="sidebar-link">Personas & Agents</a>
+          <a href="../user-guide/06-custom-commands.html" class="sidebar-link">Custom Commands</a>
+          <a href="../user-guide/07-planning-execution.html" class="sidebar-link">Planning & Execution</a>
+          <a href="../user-guide/08-autonomy-loop.html" class="sidebar-link">Autonomy Loop</a>
+          <a href="../user-guide/09-task-scheduling.html" class="sidebar-link">Task Scheduling</a>
+          <a href="../user-guide/10-hooks-system.html" class="sidebar-link">Hooks System</a>
+          <a href="../user-guide/11-whatsapp-integration.html" class="sidebar-link">WhatsApp Integration</a>
+          <a href="../user-guide/12-configuration-guide.html" class="sidebar-link">Configuration Guide</a>
+        </div>
+        <div class="sidebar-section">
+          <h3>Skills</h3>
+          <a href="../skills/01-skills-overview.html" class="sidebar-link">Skills Overview</a>
+          <a href="../skills/02-design-skills.html" class="sidebar-link">Design Skills</a>
+          <a href="../skills/03-development-skills.html" class="sidebar-link">Development Skills</a>
+          <a href="../skills/04-testing-quality-skills.html" class="sidebar-link">Testing & Quality Skills</a>
+          <a href="../skills/05-research-intelligence-skills.html" class="sidebar-link">Research & Intelligence</a>
+          <a href="../skills/06-media-content-skills.html" class="sidebar-link">Media & Content Skills</a>
+          <a href="../skills/07-automation-deployment-skills.html" class="sidebar-link">Automation & Deployment</a>
+          <a href="../skills/08-specialized-domain-skills.html" class="sidebar-link">Specialized Domain</a>
+          <a href="../skills/09-internal-tools-skills.html" class="sidebar-link">Internal Tools Skills</a>
+          <a href="../skills/10-creating-custom-skills.html" class="sidebar-link">Creating Custom Skills</a>
+          <a href="../skills/11-skill-reference-complete.html" class="sidebar-link">Complete Skill Reference</a>
+        </div>
+        <div class="sidebar-section">
+          <h3>Production</h3>
+          <a href="../production/01-global-installation.html" class="sidebar-link">Global Installation</a>
+          <a href="../production/02-docker-deployment.html" class="sidebar-link">Docker Deployment</a>
+          <a href="../production/03-process-management.html" class="sidebar-link">Process Management</a>
+          <a href="../production/04-port-configuration.html" class="sidebar-link">Port Configuration</a>
+          <a href="../production/05-log-management.html" class="sidebar-link">Log Management</a>
+          <a href="../production/06-environment-variables.html" class="sidebar-link">Environment Variables</a>
+          <a href="../production/07-scaling-guide.html" class="sidebar-link">Scaling Guide</a>
+          <a href="../production/08-security-hardening.html" class="sidebar-link">Security Hardening</a>
+        </div>
+      </nav>
+    </aside>
+    
+    <main class="main">
+      <div class="main-content">
+        <div class="breadcrumbs">
+          <a href="../index.html">Home</a>
+          <span class="separator">/</span>
+          <a href="../01-file-structure.html">File Structure</a>
+        </div>
+        
+        <div class="page-header">
+          <h1>File Structure</h1>
+          <p class="subtitle">Project organization and directory layout</p>
+        </div>
+        
+        <div class="toc">
+          <h2>On This Page</h2>
+          <ul></ul>
+        </div>
+        
+        <h2>Overview</h2>
+        <p>FF Terminal is organized into a modular structure that separates concerns between the daemon, CLI, web interface, and shared utilities.</p>
+        
+        <h2>Root Directory</h2>
+        <div class="code-block-header">
+          <span class="lang">text</span>
+          <button class="copy-btn">Copy</button>
+        </div>
+        <pre><code>ff-terminal-ts/
+├── src/
+│   ├── daemon/           # Background daemon process
+│   ├── cli/              # Command-line interface
+│   ├── web/              # Web interface
+│   ├── shared/           # Shared utilities
+│   └── types/            # TypeScript type definitions
+├── skills/               # Skill definitions (40+ skills)
+├── profiles/             # User profile configurations
+├── logs/                 # Application logs
+├── docs/                 # Documentation (markdown)
+├── tests/                # Test suites
+└── package.json          # Dependencies and scripts</code></pre>
+        
+        <h2>Daemon Module</h2>
+        <p>The daemon is the core process that handles all tool execution and agent operations.</p>
+        
+        <div class="code-block-header">
+          <span class="lang">text</span>
+          <button class="copy-btn">Copy</button>
+        </div>
+        <pre><code>src/daemon/
+├── daemon.ts            # Main daemon entry point
+├── server.ts             # WebSocket server
+├── agent/
+│   ├── agent.ts          # Agent orchestration logic
+│   ├── context.ts        # AsyncLocalStorage context
+│   └── loop.ts           # Autonomy loop implementation
+├── tools/
+│   ├── registry.ts       # Tool registration and discovery
+│   ├── executor.ts       # Tool execution engine
+│   └── schemas/          # Tool JSON schemas
+├── providers/
+│   ├── base.ts           # Abstract provider interface
+│   ├── openai.ts         # OpenAI provider
+│   ├── openrouter.ts     # OpenRouter provider
+│   ├── gemini.ts         # Google Gemini provider
+│   └── ...
+├── sessions/
+│   ├── manager.ts        # Session management
+│   └── storage.ts        # JSON-based storage
+└── skills/
+    ├── loader.ts         # Skill loading logic
+    └── executor.ts       # Skill execution</code></pre>
+        
+        <h2>CLI Module</h2>
+        <p>The CLI provides a terminal-based interface to interact with the daemon via WebSocket.</p>
+        
+        <div class="code-block-header">
+          <span class="lang">text</span>
+          <button class="copy-btn">Copy</button>
+        </div>
+        <pre><code>src/cli/
+├── cli.ts                # CLI entry point
+├── client.ts             # WebSocket client
+├── ui/
+│   ├── renderer.ts       # Terminal output rendering
+│   ├── input.ts          # User input handling
+│   └── menus.ts          # Interactive menus
+├── commands/
+│   ├── chat.ts           # Chat command
+│   ├── tool.ts           # Tool execution command
+│   ├── skill.ts          # Skill commands
+│   └── ...
+└── utils/
+    ├── formatting.ts     # Output formatting
+    └── validation.ts     # Input validation</code></pre>
+        
+        <h2>Web Module</h2>
+        <p>The web interface provides a browser-based UI for interacting with FF Terminal.</p>
+        
+        <div class="code-block-header">
+          <span class="lang">text</span>
+          <button class="copy-btn">Copy</button>
+        </div>
+        <pre><code>src/web/
+├── server.ts             # Express/HTTP server
+├── client/
+│   ├── index.html        # Main HTML page
+│   ├── main.tsx          # React application
+│   └── websocket.ts      # WebSocket client
+├── components/
+│   ├── Chat.tsx          # Chat interface
+│   ├── Terminal.tsx      # Terminal display
+│   └── Sidebar.tsx       # Navigation
+└── api/
+    ├── routes.ts         # API endpoints
+    └── middleware.ts     # Express middleware</code></pre>
+        
+        <h2>Shared Utilities</h2>
+        <p>Shared code used across daemon, CLI, and web interface.</p>
+        
+        <div class="code-block-header">
+          <span class="lang">text</span>
+          <button class="copy-btn">Copy</button>
+        </div>
+        <pre><code>src/shared/
+├── config.ts             # Configuration management
+├── logger.ts             # Logging utilities
+├── errors.ts             # Error classes
+├── validation.ts         # Validation schemas
+└── constants.ts          # Application constants</code></pre>
+        
+        <h2>Skills Directory</h2>
+        <p>Each skill is a self-contained module with its own SKILL.md, code, and tests.</p>
+        
+        <div class="code-block-header">
+          <span class="lang">text</span>
+          <button class="copy-btn">Copy</button>
+        </div>
+        <pre><code>skills/
+├── design/
+│   ├── canvas-design/
+│   ├── award_winning_designer/
+│   └── ...
+├── development/
+│   ├── component_library/
+│   ├── algorithmic-art/
+│   └── ...
+├── media/
+│   ├── remotion-expert/
+│   ├── slack-gif-creator/
+│   └── ...
+└── ...
+
+Each skill:
+├── SKILL.md              # Skill documentation
+├── index.ts              # Skill implementation
+├── test/                 # Skill tests
+└── tools/                # Skill-specific tools</code></pre>
+        
+        <h2>Key Design Decisions</h2>
+        <ul>
+          <li><strong>Separation of Concerns:</strong> Daemon handles execution, CLI/web handle UI</li>
+          <li><strong>Modular Skills:</strong> Each skill is independent and can be loaded/unloaded</li>
+          <li><strong>Type Safety:</strong> TypeScript throughout with strict type checking</li>
+          <li><strong>Shared Code:</strong> Common utilities extracted to <code>src/shared/</code></li>
+          <li><strong>Test Isolation:</strong> Tests co-located with source code</li>
+        </ul>
+        
+        <footer class="footer">
+          <p><a href="../02-dual-process-design.html">Next: Dual-Process Design →</a></p>
+        </footer>
+      </div>
+    </main>
+  </div>
+  
+  <script src="../js/main.js"></script>
+</body>
+</html>

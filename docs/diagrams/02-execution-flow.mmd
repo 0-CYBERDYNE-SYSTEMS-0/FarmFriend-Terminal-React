@@ -1,0 +1,263 @@
+# Execution Flow Diagram
+
+**Detailed flow of request processing from user input to tool execution and response**
+
+```mermaid
+flowchart TD
+    subgraph Input["User Input Flow"]
+        User["User Input"]
+        Parse["Parse Command/Message"]
+        Validate["Validate Mode"]
+        Encode["Encode for Transfer"]
+    end
+
+    subgraph WS["WebSocket Communication"]
+        Send["Send Message"]
+        Recv["Receive Chunks"]
+        Buffer["Buffer & Assemble"]
+        Display["Display Output"]
+    end
+
+    subgraph Daemon["Daemon Processing"]
+        subgraph Agent["Agent Loop"]
+            Receive["Receive Turn"]
+            Context["Build Context"]
+            Model["Call AI Model"]
+            ParseResponse["Parse Response"]
+            Check["Check for Tools"]
+        end
+        
+        subgraph Decision["Decision Point"]
+            NoTools{"No Tools?"}
+            YesTools{"Has Tools?"}
+            Execute["Execute Tools"]
+            Collect["Collect Results"]
+            Continue["Continue Loop"]
+        end
+        
+        subgraph Output["Output Processing"]
+            Stream["Stream Response"]
+            Format["Format Chunks"]
+            Emit["Emit Events"]
+        end
+    end
+
+    subgraph Tools["Tool Execution"]
+        subgraph Selection["Tool Selection"]
+            ParseSchema["Parse Tool Schema"]
+            Match["Match Parameters"]
+            ValidateInput["Validate Input"]
+        end
+        
+        subgraph Execution["Tool Execution"]
+            Setup["Setup Context"]
+            ExecuteTool["Execute Tool"]
+            Capture["Capture Output"]
+            ErrorCheck{"Error?"}
+            HandleError["Handle Error"]
+        end
+        
+        subgraph Results["Result Processing"]
+            FormatResult["Format Result"]
+            ValidateResult["Validate Result"]
+            Return["Return Result"]
+        end
+    end
+
+    subgraph Completion["Completion Flow"]
+        Finish["Finish Turn"]
+        Summary["Generate Summary"]
+        Save["Save to History"]
+        Signal["Signal UI"]
+    end
+
+    %% Input flow
+    User --> Parse
+    Parse -->|"Command?"| Validate
+    Validate -->|"Valid"| Encode
+    Encode --> Send
+
+    %% WebSocket
+    Send -->|"WS Message"| Recv
+    
+    %% Daemon processing
+    Recv --> Receive
+    Receive --> Context
+    Context --> Model
+    Model --> ParseResponse
+    ParseResponse --> Check
+    
+    %% Decision tree
+    Check --> NoTools
+    Check --> YesTools
+    
+    NoTools -->|"Final response"| Stream
+    YesTools --> Execute
+    
+    Execute --> Setup
+    Setup --> ExecuteTool
+    ExecuteTool --> Capture
+    Capture --> ErrorCheck
+    
+    ErrorCheck -->|"Error"| HandleError
+    ErrorCheck -->|"Success"| FormatResult
+    
+    HandleError --> FormatResult
+    FormatResult --> ValidateResult
+    ValidateResult --> Return
+    
+    Return --> Continue
+    Continue --> Model
+    
+    %% Output processing
+    Stream --> Format
+    Format --> Emit
+    Emit --> Buffer
+    
+    %% Completion
+    Buffer -->|"chunks"| Display
+    Display --> Finish
+    Finish --> Summary
+    Summary --> Save
+    Save --> Signal
+    Signal -->|"turn_finished"| Buffer
+    
+    %% Styling
+    classDef input fill:#E3F2FD,stroke:#1976D2,stroke-width:2px
+    classDef ws fill:#FFF3E0,stroke:#F57C00,stroke-width:2px
+    classDef daemon fill:#E8F5E9,stroke:#388E3C,stroke-width:2px
+    classDef decision fill:#FFEBEE,stroke:#C62828,stroke-width:2px
+    classDef tools fill:#F3E5F5,stroke:#7B1FA2,stroke-width:2px
+    classDef completion fill:#ECEFF1,stroke:#607D8B,stroke-width:2px
+
+    class User,Parse,Validate,Encode input
+    class Send,Recv,Buffer,Display ws
+    class Receive,Context,Model,ParseResponse,Check,Stream,Format,Emit daemon
+    class NoTools,YesTools,Execute,Setup,ExecuteTool,Capture,ErrorCheck,HandleError,FormatResult,ValidateResult,Return,Continue decision
+    class ParseSchema,Match,ValidateInput,ReturnResult tools
+    class Finish,Summary,Save,Signal completion
+```
+
+## Execution Flow Details
+
+### Phase 1: Input Processing
+
+| Step | Description |
+|------|-------------|
+| **User Input** | Raw input from terminal, web, or API |
+| **Parse** | Detect commands (/help, /mode, etc.) vs messages |
+| **Validate** | Check operation mode restrictions (read_only, planning) |
+| **Encode** | Package for WebSocket transfer |
+
+### Phase 2: WebSocket Communication
+
+| Step | Description |
+|------|-------------|
+| **Send** | Transmit message to daemon via WebSocket |
+| **Receive Chunks** | Handle streaming response chunks |
+| **Buffer & Assemble** | Combine delta-encoded chunks |
+| **Display** | Render assembled output to user |
+
+### Phase 3: Agent Loop
+
+```typescript
+// Simplified agent loop flow
+const MAX_TURNS = 500;
+
+async function agentLoop(input: string, sessionId: string) {
+    const context = buildContext(sessionId, input);
+    
+    for (let turn = 0; turn < MAX_TURNS; turn++) {
+        const response = await callModel(context);
+        
+        if (response.hasTools()) {
+            const results = await executeTools(response.tools);
+            context.add(results);
+        } else {
+            // No tools = final response
+            await streamResponse(response.content);
+            await saveToHistory(sessionId, response);
+            break;
+        }
+    }
+}
+```
+
+### Phase 4: Tool Execution
+
+| Step | Description |
+|------|-------------|
+| **Parse Schema** | Extract tool parameters from OpenAI-style schema |
+| **Match Parameters** | Map user request to tool inputs |
+| **Validate Input** | Type checking and constraints |
+| **Execute Tool** | Run tool with validated inputs |
+| **Handle Error** | Catch and format errors |
+| **Format Result** | Convert output to LLM-readable format |
+
+### Phase 5: Completion
+
+| Step | Description |
+|------|-------------|
+| **Finish Turn** | Mark turn as complete |
+| **Generate Summary** | Create session summary (if needed) |
+| **Save to History** | Persist conversation to JSON |
+| **Signal UI** | Send turn_finished event |
+
+## Chunk Types
+
+The daemon emits different chunk types during streaming:
+
+| Chunk Type | Description | Example |
+|------------|-------------|---------|
+| `content` | Response text | "Here's the analysis..." |
+| `thinking` | Reasoning process | "First I need to..." |
+| `thinking_xml` | Structured thinking | `<thinking>...</thinking>` |
+| `tool_call` | Tool execution request | `{name: "readFile", ...}` |
+| `error` | Error message | "File not found" |
+| `status` | Status update | "Reading file..." |
+| `task_completed` | Task complete signal | `{ok: true}` |
+
+## Mode Behavior
+
+| Mode | Tool Execution | Response Style |
+|------|---------------|----------------|
+| `auto` | Execute immediately | Streaming response |
+| `confirm` | Await user approval | Show tool call first |
+| `read_only` | No write tools | Read-only responses |
+| `planning` | No tools at all | Plan only, no execution |
+
+## Parallel Execution
+
+FF Terminal supports parallel tool execution:
+
+```typescript
+// Max parallel calls configured via FF_MAX_PARALLEL_CALLS
+const MAX_PARALLEL = 10;
+
+async function executeToolsParallel(tools: ToolCall[]) {
+    const results = [];
+    const batches = chunk(tools, MAX_PARALLEL);
+    
+    for (const batch of batches) {
+        const promises = batch.map(t => executeTool(t));
+        const batchResults = await Promise.all(promises);
+        results.push(...batchResults);
+    }
+    
+    return results;
+}
+```
+
+## Error Handling
+
+| Error Type | Handling |
+|------------|----------|
+| **Tool Not Found** | Return error chunk, continue loop |
+| **Invalid Parameters** | Return error, retry with corrected params |
+| **Tool Execution Failed** | Capture error, return to model for retry |
+| **Model API Error** | Retry with backoff, escalate if persistent |
+| **Timeout** | Cancel tool, return timeout error |
+
+---
+
+**Last Updated:** February 2, 2026
